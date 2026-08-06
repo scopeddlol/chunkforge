@@ -1,0 +1,114 @@
+import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import { makeStyles, tokens, Input, Button } from '@fluentui/react-components'
+import { Send24Regular } from '@fluentui/react-icons'
+import type { LogLineEvent } from '@shared/types'
+
+const MAX_LINES = 2000
+
+const useStyles = makeStyles({
+  root: {
+    display: 'flex',
+    flexDirection: 'column',
+    flexGrow: 1,
+    minHeight: 0,
+    gap: '10px'
+  },
+  logPanel: {
+    flexGrow: 1,
+    overflowY: 'auto',
+    backgroundColor: '#101012',
+    borderRadius: tokens.borderRadiusLarge,
+    padding: '12px 14px',
+    fontFamily: "Cascadia Code, Consolas, 'Courier New', monospace",
+    fontSize: '12.5px',
+    lineHeight: '19px',
+    color: '#D8D8DA'
+  },
+  line: {
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word'
+  },
+  stderr: {
+    color: '#F2A87C'
+  },
+  system: {
+    color: '#8A8886',
+    fontStyle: 'italic'
+  },
+  inputRow: {
+    display: 'flex',
+    gap: '8px'
+  },
+  input: {
+    flexGrow: 1
+  }
+})
+
+interface ConsoleViewProps {
+  instanceId: string
+  canSendCommands: boolean
+}
+
+export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): JSX.Element {
+  const styles = useStyles()
+  const [lines, setLines] = useState<LogLineEvent[]>([])
+  const [command, setCommand] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setLines([])
+    return window.chunkforge.servers.onLog((event) => {
+      if (event.instanceId !== instanceId) return
+      setLines((prev) => {
+        const next = [...prev, event]
+        return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
+      })
+    })
+  }, [instanceId])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [lines])
+
+  function submitCommand(): void {
+    const trimmed = command.trim()
+    if (!trimmed) return
+    window.chunkforge.servers.sendCommand(instanceId, trimmed)
+    setCommand('')
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
+    if (e.key === 'Enter') submitCommand()
+  }
+
+  return (
+    <div className={styles.root}>
+      <div className={styles.logPanel} ref={scrollRef}>
+        {lines.map((line, index) => (
+          <div
+            key={index}
+            className={`${styles.line} ${line.stream === 'stderr' ? styles.stderr : ''} ${
+              line.stream === 'system' ? styles.system : ''
+            }`}
+          >
+            {line.line.replace(/\n+$/, '')}
+          </div>
+        ))}
+      </div>
+      <div className={styles.inputRow}>
+        <Input
+          className={styles.input}
+          placeholder={canSendCommands ? 'Type a command…' : 'Server must be running to send commands'}
+          value={command}
+          disabled={!canSendCommands}
+          onChange={(_, data) => setCommand(data.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <Button icon={<Send24Regular />} disabled={!canSendCommands} onClick={submitCommand}>
+          Send
+        </Button>
+      </div>
+    </div>
+  )
+}

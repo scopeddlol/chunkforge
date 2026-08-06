@@ -1,0 +1,102 @@
+import type { JSX } from 'react'
+import { makeStyles, tokens, Text, Title3, Badge, mergeClasses } from '@fluentui/react-components'
+import type { ServerType } from '@shared/types'
+import type { WizardState } from '../wizardState'
+
+const useStyles = makeStyles({
+  root: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px'
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '12px'
+  },
+  card: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    padding: '16px',
+    borderRadius: tokens.borderRadiusLarge,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground2,
+    cursor: 'pointer',
+    textAlign: 'left',
+    transitionProperty: 'border-color, background-color',
+    transitionDuration: tokens.durationFaster,
+    ':hover': {
+      border: `1px solid ${tokens.colorNeutralStroke1}`
+    }
+  },
+  cardSelected: {
+    border: `1px solid ${tokens.colorBrandStroke1}`,
+    backgroundColor: tokens.colorBrandBackground2
+  },
+  cardDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+    ':hover': {
+      border: `1px solid ${tokens.colorNeutralStroke2}`
+    }
+  },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  blurb: {
+    color: tokens.colorNeutralForeground3
+  }
+})
+
+const options: { type: ServerType; label: string; blurb: string; available: boolean }[] = [
+  { type: 'paper', label: 'Paper', blurb: 'High-performance, plugin-friendly. Recommended default.', available: true },
+  { type: 'vanilla', label: 'Vanilla', blurb: "Mojang's unmodified server.", available: true },
+  { type: 'purpur', label: 'Purpur', blurb: 'Paper fork with extra gameplay knobs.', available: false },
+  { type: 'spigot', label: 'Spigot', blurb: 'Classic plugin server, built from source.', available: false },
+  { type: 'forge', label: 'Forge', blurb: 'The original Minecraft modding platform.', available: false },
+  { type: 'fabric', label: 'Fabric', blurb: 'Lightweight, fast-updating mod loader.', available: false }
+]
+
+interface ServerTypeStepProps {
+  state: WizardState
+  onChange: (patch: Partial<WizardState>) => void
+}
+
+export function ServerTypeStep({ state, onChange }: ServerTypeStepProps): JSX.Element {
+  const styles = useStyles()
+
+  return (
+    <div className={styles.root}>
+      <Title3>What kind of server?</Title3>
+      <div className={styles.grid}>
+        {options.map((option) => {
+          const selected = state.serverType === option.type
+          return (
+            <button
+              key={option.type}
+              type="button"
+              disabled={!option.available}
+              className={mergeClasses(
+                styles.card,
+                selected && styles.cardSelected,
+                !option.available && styles.cardDisabled
+              )}
+              onClick={() => onChange({ serverType: option.type, minecraftVersion: '' })}
+            >
+              <div className={styles.cardHeader}>
+                <Text weight="semibold">{option.label}</Text>
+                {!option.available && <Badge appearance="tint" color="informative">Coming soon</Badge>}
+              </div>
+              <Text size={200} className={styles.blurb}>
+                {option.blurb}
+              </Text>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

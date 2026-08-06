@@ -1,6 +1,8 @@
 import { app, shell, BrowserWindow, nativeTheme, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { ensureChunkforgeDirs } from './services/paths'
+import { registerServerIpcHandlers } from './ipc/servers'
 
 function createMainWindow(): BrowserWindow {
   const isWin11 = process.platform === 'win32'
@@ -43,14 +45,16 @@ function createMainWindow(): BrowserWindow {
   return mainWindow
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.chunkforge.app')
+  await ensureChunkforgeDirs()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   const mainWindow = createMainWindow()
+  registerServerIpcHandlers(mainWindow)
 
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
   ipcMain.handle('window:maximizeToggle', () =>
