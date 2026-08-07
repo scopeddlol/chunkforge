@@ -1,9 +1,17 @@
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
-import type { CreateInstanceConfig, InstanceSummary } from '../../shared/types'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { rm, writeFile } from 'fs/promises'
+import { join } from 'path'
+import type { CreateInstanceConfig, InstanceMetadata, InstanceSummary } from '../../shared/types'
 import { instanceManager } from '../services/instanceManager'
 import { listVersions } from '../services/jarAcquisition'
 import { instancesRoot } from '../services/paths'
-import { listInstanceMetadata, loadInstanceMetadata, saveInstanceMetadata } from '../store/instancesStore'
+import { renderServerProperties } from '../services/serverProperties'
+import {
+  listInstanceMetadata,
+  loadInstanceMetadata,
+  removeInstanceFromIndex,
+  saveInstanceMetadata
+} from '../store/instancesStore'
 
 function toSummary(metadata: Awaited<ReturnType<typeof listInstanceMetadata>>[number]): InstanceSummary {
   const { path: _path, javaPath: _javaPath, minRamMb: _minRamMb, port: _port, toggles: _toggles, eulaAccepted: _eulaAccepted, ...summary } =
@@ -54,6 +62,36 @@ export function registerServerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle('servers:getDefaultInstancesRoot', () => instancesRoot())
+
+  ipcMain.handle('servers:openFolder', async (_, id: string) => {
+    const metadata = await loadInstanceMetadata(id)
+    await shell.openPath(metadata.path)
+  })
+
+  ipcMain.handle('servers:delete', async (_, id: string, deleteFiles: boolean) => {
+    await instanceManager.stopInstance(id).catch(() => undefined)
+    const metadata = await loadInstanceMetadata(id)
+    if (deleteFiles) await rm(metadata.path, { recursive: true, force: true })
+    await removeInstanceFromIndex(id)
+  })
+
+  ipcMain.handle('servers:updateSettings', async (_, id: string, patch: Partial<InstanceMetadata>) => {
+    const metadata = await loadInstanceMetadata(id)
+    // Only fields that are safe to edit after creation.
+    const next: InstanceMetadata = {
+      ...metadata,
+      name: patch.name ?? metadata.name,
+      port: patch.port ?? metadata.port,
+      minRamMb: patch.minRamMb ?? metadata.minRamMb,
+      maxRamMb: patch.maxRamMb ?? metadata.maxRamMb,
+      accentColor: patch.accentColor ?? metadata.accentColor,
+      ramAllocatedMb: patch.maxRamMb ?? metadata.maxRamMb,
+      toggles: patch.toggles ?? metadata.toggles
+    }
+    await saveInstanceMetadata(next)
+    await writeFile(join(next.path, 'server.properties'), renderServerProperties(next.port, next.toggles), 'utf-8')
+    return next
+  })
 
   ipcMain.handle('servers:pickInstallLocation', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

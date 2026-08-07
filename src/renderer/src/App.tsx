@@ -1,6 +1,6 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useCallback, useEffect, useState, type JSX } from 'react'
 import { FluentProvider, makeStyles } from '@fluentui/react-components'
-import type { InstanceMetadata } from '@shared/types'
+import type { InstanceMetadata, ThemePreference } from '@shared/types'
 import { chunkforgeDarkTheme, chunkforgeLightTheme } from './theme/chunkforgeTheme'
 import { TitleBar } from './components/TitleBar'
 import { NavRail, type NavKey } from './components/NavRail'
@@ -25,28 +25,36 @@ const useStyles = makeStyles({
   }
 })
 
-function usePreferredTheme(): 'light' | 'dark' {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+/** Resolves the effective theme from the saved preference plus the OS setting. */
+function useResolvedTheme(): 'light' | 'dark' {
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('dark')
+  const [preference, setPreference] = useState<ThemePreference>('system')
 
   useEffect(() => {
-    window.chunkforge.theme.getSystemTheme().then(setTheme)
-    return window.chunkforge.theme.onSystemThemeChanged(setTheme)
+    window.chunkforge.theme.getSystemTheme().then(setSystemTheme)
+    return window.chunkforge.theme.onSystemThemeChanged(setSystemTheme)
   }, [])
 
-  return theme
+  useEffect(() => {
+    window.chunkforge.settings.get().then((settings) => setPreference(settings.themePreference))
+  }, [])
+
+  return preference === 'system' ? systemTheme : preference
 }
 
 type Overlay = { kind: 'wizard' } | { kind: 'instance'; instanceId: string } | null
 
 export function App(): JSX.Element {
   const styles = useStyles()
-  const systemTheme = usePreferredTheme()
+  const resolvedTheme = useResolvedTheme()
   const [activeNav, setActiveNav] = useState<NavKey>('dashboard')
   const [overlay, setOverlay] = useState<Overlay>(null)
+  const [pluginScopeId, setPluginScopeId] = useState<string | null>(null)
   const refreshInstances = useInstancesStore((s) => s.refresh)
 
   function handleSelectNav(key: NavKey): void {
     setOverlay(null)
+    if (key !== 'plugins') setPluginScopeId(null)
     setActiveNav(key)
   }
 
@@ -55,9 +63,15 @@ export function App(): JSX.Element {
     setOverlay({ kind: 'instance', instanceId: metadata.id })
   }
 
+  const handleBrowsePlugins = useCallback((instanceId: string) => {
+    setPluginScopeId(instanceId)
+    setOverlay(null)
+    setActiveNav('plugins')
+  }, [])
+
   return (
     <FluentProvider
-      theme={systemTheme === 'dark' ? chunkforgeDarkTheme : chunkforgeLightTheme}
+      theme={resolvedTheme === 'dark' ? chunkforgeDarkTheme : chunkforgeLightTheme}
       className={styles.shell}
     >
       <TitleBar />
@@ -68,7 +82,11 @@ export function App(): JSX.Element {
           <SetupWizard onClose={() => setOverlay(null)} onCreated={handleInstanceCreated} />
         )}
         {overlay?.kind === 'instance' && (
-          <InstancePage instanceId={overlay.instanceId} onBack={() => setOverlay(null)} />
+          <InstancePage
+            instanceId={overlay.instanceId}
+            onBack={() => setOverlay(null)}
+            onBrowsePlugins={handleBrowsePlugins}
+          />
         )}
 
         {!overlay && activeNav === 'dashboard' && (
@@ -77,7 +95,7 @@ export function App(): JSX.Element {
             onOpenInstance={(id) => setOverlay({ kind: 'instance', instanceId: id })}
           />
         )}
-        {!overlay && activeNav === 'plugins' && <PluginBrowserPage />}
+        {!overlay && activeNav === 'plugins' && <PluginBrowserPage scopedInstanceId={pluginScopeId} />}
         {!overlay && activeNav === 'settings' && <SettingsPage />}
       </div>
     </FluentProvider>

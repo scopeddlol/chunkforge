@@ -61,9 +61,20 @@ export async function detectInstalledJava(): Promise<DetectedJava[]> {
     for (const p of await scanDirForJavaHomes(dir)) candidatePaths.add(p)
   }
 
+  // Chunkforge-managed runtimes nest one level deeper than system installs:
+  // Runtimes/jdk-<major>/<extracted-jdk-dir>/bin/java.exe. Scan both depths so
+  // an already-downloaded runtime is reused instead of fetched again.
   const runtimesDir = runtimesRoot()
   if (existsSync(runtimesDir)) {
     for (const p of await scanDirForJavaHomes(runtimesDir)) candidatePaths.add(p)
+    try {
+      for (const entry of await readdir(runtimesDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        for (const p of await scanDirForJavaHomes(join(runtimesDir, entry.name))) candidatePaths.add(p)
+      }
+    } catch {
+      // Unreadable runtimes dir just means no managed runtimes to reuse.
+    }
   }
 
   if (process.env.JAVA_HOME) {

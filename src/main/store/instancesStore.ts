@@ -40,6 +40,11 @@ async function upsertIndexEntry(entry: IndexEntry): Promise<void> {
   await writeIndex(next)
 }
 
+export async function removeInstanceFromIndex(id: string): Promise<void> {
+  const entries = await readIndex()
+  await writeIndex(entries.filter((e) => e.id !== id))
+}
+
 export function slugifyInstanceName(name: string): string {
   const slug = name
     .toLowerCase()

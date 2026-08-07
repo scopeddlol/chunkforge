@@ -1,10 +1,27 @@
 import { useEffect, useState, type JSX } from 'react'
-import { makeStyles, tokens, Text, Title2, Button, Spinner } from '@fluentui/react-components'
-import { ArrowLeft24Regular, Play24Filled, Stop24Filled } from '@fluentui/react-icons'
+import {
+  makeStyles,
+  tokens,
+  Text,
+  Title2,
+  Button,
+  Spinner,
+  TabList,
+  Tab,
+  Badge
+} from '@fluentui/react-components'
+import {
+  ArrowLeft20Regular,
+  Play20Filled,
+  Stop20Filled,
+  FolderOpen20Regular
+} from '@fluentui/react-icons'
 import type { InstanceMetadata, InstanceStatus } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
 import { ConsoleView } from '../../components/ConsoleView'
 import { useInstancesStore } from '../../state/instancesStore'
+import { InstalledPluginsTab } from './InstalledPluginsTab'
+import { InstanceSettingsTab } from './InstanceSettingsTab'
 
 const useStyles = makeStyles({
   root: {
@@ -12,49 +29,41 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
-    padding: '20px 36px 28px'
+    padding: '18px 36px 24px'
   },
-  topRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '10px'
-  },
+  backRow: { marginBottom: '8px' },
   header: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: '18px'
+    gap: '16px',
+    marginBottom: '14px'
   },
-  titleBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px'
-  },
-  meta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    color: tokens.colorNeutralForeground3
-  },
-  loading: {
-    flexGrow: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  }
+  titleBlock: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 },
+  titleRow: { display: 'flex', alignItems: 'center', gap: '10px' },
+  accentBar: { width: '4px', height: '26px', borderRadius: '2px', flexShrink: 0 },
+  meta: { display: 'flex', alignItems: 'center', gap: '12px', color: tokens.colorNeutralForeground3 },
+  headerActions: { display: 'flex', gap: '8px', flexShrink: 0 },
+  tabs: { marginBottom: '14px' },
+  tabPanel: { flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
+  loading: { flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }
 })
+
+type TabKey = 'console' | 'plugins' | 'settings'
 
 interface InstancePageProps {
   instanceId: string
   onBack: () => void
+  onBrowsePlugins: (instanceId: string) => void
 }
 
-export function InstancePage({ instanceId, onBack }: InstancePageProps): JSX.Element {
+export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePageProps): JSX.Element {
   const styles = useStyles()
   const [metadata, setMetadata] = useState<InstanceMetadata | null>(null)
   const [status, setStatus] = useState<InstanceStatus>('stopped')
+  const [tab, setTab] = useState<TabKey>('console')
   const applyStatus = useInstancesStore((s) => s.applyStatus)
+  const refreshInstances = useInstancesStore((s) => s.refresh)
 
   useEffect(() => {
     let cancelled = false
@@ -92,38 +101,83 @@ export function InstancePage({ instanceId, onBack }: InstancePageProps): JSX.Ele
 
   return (
     <div className={styles.root}>
-      <div className={styles.topRow}>
-        <Button appearance="subtle" icon={<ArrowLeft24Regular />} onClick={onBack}>
+      <div className={styles.backRow}>
+        <Button appearance="subtle" icon={<ArrowLeft20Regular />} onClick={onBack}>
           Servers
         </Button>
       </div>
 
       <div className={styles.header}>
         <div className={styles.titleBlock}>
-          <Title2>{metadata.name}</Title2>
+          <div className={styles.titleRow}>
+            <span className={styles.accentBar} style={{ backgroundColor: metadata.accentColor }} />
+            <Title2>{metadata.name}</Title2>
+          </div>
           <div className={styles.meta}>
-            <Text size={200}>
-              {metadata.serverType} {metadata.minecraftVersion} · port {metadata.port}
-            </Text>
+            <Badge appearance="tint" color="informative">
+              {metadata.serverType} {metadata.minecraftVersion}
+            </Badge>
+            <Text size={200}>port {metadata.port}</Text>
+            <Text size={200}>{(metadata.maxRamMb / 1024).toFixed(1)} GB max</Text>
             <StatusDot status={status} />
           </div>
         </div>
 
-        <Button
-          appearance="primary"
-          disabled={isBusy}
-          icon={isRunning ? <Stop24Filled /> : <Play24Filled />}
-          onClick={() =>
-            isRunning
-              ? window.chunkforge.servers.stop(instanceId)
-              : window.chunkforge.servers.start(instanceId)
-          }
-        >
-          {isRunning ? 'Stop Server' : 'Start Server'}
-        </Button>
+        <div className={styles.headerActions}>
+          <Button
+            appearance="subtle"
+            icon={<FolderOpen20Regular />}
+            title="Open server folder"
+            onClick={() => window.chunkforge.servers.openFolder(metadata.id)}
+          />
+          <Button
+            appearance="primary"
+            disabled={isBusy}
+            icon={isRunning ? <Stop20Filled /> : <Play20Filled />}
+            onClick={() =>
+              isRunning
+                ? window.chunkforge.servers.stop(instanceId)
+                : window.chunkforge.servers.start(instanceId)
+            }
+          >
+            {isRunning ? 'Stop Server' : isBusy ? 'Working…' : 'Start Server'}
+          </Button>
+        </div>
       </div>
 
-      <ConsoleView instanceId={instanceId} canSendCommands={isRunning} />
+      <TabList
+        className={styles.tabs}
+        selectedValue={tab}
+        onTabSelect={(_, data) => setTab(data.value as TabKey)}
+      >
+        <Tab value="console">Console</Tab>
+        <Tab value="plugins">Plugins</Tab>
+        <Tab value="settings">Settings</Tab>
+      </TabList>
+
+      <div className={styles.tabPanel}>
+        {tab === 'console' && <ConsoleView instanceId={instanceId} canSendCommands={isRunning} />}
+        {tab === 'plugins' && (
+          <InstalledPluginsTab
+            instanceId={instanceId}
+            serverRunning={isRunning}
+            onBrowse={() => onBrowsePlugins(instanceId)}
+          />
+        )}
+        {tab === 'settings' && (
+          <InstanceSettingsTab
+            metadata={metadata}
+            onSaved={(updated) => {
+              setMetadata(updated)
+              refreshInstances()
+            }}
+            onDeleted={() => {
+              refreshInstances()
+              onBack()
+            }}
+          />
+        )}
+      </div>
     </div>
   )
 }

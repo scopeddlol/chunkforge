@@ -12,7 +12,7 @@ import type {
 } from '../../shared/types'
 import { ensureJavaRuntime } from './javaManager'
 import { downloadServerJar } from './jarAcquisition'
-import { requiredJavaMajor } from './minecraftVersions'
+import { resolveServerRequirements } from './minecraftVersions'
 import { renderEula, renderServerProperties } from './serverProperties'
 import { resolveInstanceDir, saveInstanceMetadata, slugifyInstanceName } from '../store/instancesStore'
 
@@ -49,13 +49,14 @@ class InstanceManager extends EventEmitter {
     this.emitProgress({ instanceId: id, stage: 'preparing', message: 'Setting up server folder…', percent: null })
     await mkdir(dir, { recursive: true })
 
-    const majorJava = requiredJavaMajor(config.minecraftVersion)
     this.emitProgress({
       instanceId: id,
       stage: 'resolving-java',
-      message: `Checking for Java ${majorJava}…`,
+      message: 'Checking Java requirements…',
       percent: null
     })
+    const requirements = await resolveServerRequirements(config.serverType, config.minecraftVersion)
+    const majorJava = requirements.javaMajor
 
     const javaPath = await ensureJavaRuntime(majorJava, (progress) => {
       if (progress.stage === 'downloading') {
@@ -64,6 +65,13 @@ class InstanceManager extends EventEmitter {
           stage: 'downloading-java',
           message: `Downloading Java ${majorJava} runtime…`,
           percent: progress.percent
+        })
+      } else if (progress.stage === 'extracting') {
+        this.emitProgress({
+          instanceId: id,
+          stage: 'downloading-java',
+          message: `Installing Java ${majorJava} runtime…`,
+          percent: null
         })
       }
     })
@@ -104,7 +112,9 @@ class InstanceManager extends EventEmitter {
       maxRamMb: config.maxRamMb,
       eulaAccepted: true,
       path: dir,
-      toggles: config.toggles
+      toggles: config.toggles,
+      javaMajor: majorJava,
+      jvmFlags: requirements.jvmFlags
     }
     await saveInstanceMetadata(metadata)
 
@@ -112,17 +122,65 @@ class InstanceManager extends EventEmitter {
     return metadata
   }
 
-  async startInstance(metadata: InstanceMetadata): Promise<void> {
-    if (this.running.has(metadata.id)) return
-    if (!metadata.javaPath) throw new Error('No Java runtime resolved for this instance')
+  /**
+   * Re-resolves the Java runtime and JVM flags before launch. Requirements are
+   * read live from the upstream project, so an instance created against an
+   * outdated guess repairs itself instead of failing with a class-version error.
+   */
+  private async healJavaRuntime(metadata: InstanceMetadata): Promise<InstanceMetadata> {
+    let javaMajor = metadata.javaMajor
+    let jvmFlags = metadata.jvmFlags
 
-    this.emitStatus(metadata.id, 'starting')
+    if (javaMajor === undefined || jvmFlags === undefined) {
+      const requirements = await resolveServerRequirements(metadata.serverType, metadata.minecraftVersion)
+      javaMajor = requirements.javaMajor
+      jvmFlags = requirements.jvmFlags
+    }
 
-    const child = spawn(
-      metadata.javaPath,
-      [`-Xms${metadata.minRamMb}M`, `-Xmx${metadata.maxRamMb}M`, '-jar', 'server.jar', 'nogui'],
-      { cwd: metadata.path }
-    )
+    const javaPath = await ensureJavaRuntime(javaMajor, (progress) => {
+      if (progress.stage === 'downloading') {
+        this.emitLog(metadata.id, 'system', `Downloading Java ${javaMajor} runtime… ${progress.percent ?? 0}%\n`)
+      }
+    })
+
+    if (javaPath === metadata.javaPath && javaMajor === metadata.javaMajor && jvmFlags === metadata.jvmFlags) {
+      return metadata
+    }
+
+    const healed: InstanceMetadata = { ...metadata, javaPath, javaMajor, jvmFlags }
+    await saveInstanceMetadata(healed)
+    return healed
+  }
+
+  async startInstance(input: InstanceMetadata): Promise<void> {
+    if (this.running.has(input.id)) return
+
+    this.emitStatus(input.id, 'starting')
+
+    let metadata: InstanceMetadata
+    try {
+      metadata = await this.healJavaRuntime(input)
+    } catch (err) {
+      this.emitLog(input.id, 'system', `Failed to prepare Java runtime: ${(err as Error).message}\n`)
+      this.emitStatus(input.id, 'crashed')
+      return
+    }
+
+    if (!metadata.javaPath) {
+      this.emitLog(metadata.id, 'system', 'No Java runtime resolved for this instance\n')
+      this.emitStatus(metadata.id, 'crashed')
+      return
+    }
+
+    const args = [
+      `-Xms${metadata.minRamMb}M`,
+      `-Xmx${metadata.maxRamMb}M`,
+      ...(metadata.jvmFlags ?? []),
+      '-jar',
+      'server.jar',
+      'nogui'
+    ]
+    const child = spawn(metadata.javaPath, args, { cwd: metadata.path })
 
     const entry: RunningProcess = { child, expectedStop: false }
     this.running.set(metadata.id, entry)

@@ -18,6 +18,10 @@ export interface InstanceSummary {
 export interface InstanceMetadata extends InstanceSummary {
   port: number
   javaPath: string | null
+  /** Java major version this server requires, per the upstream project's own metadata. */
+  javaMajor?: number
+  /** Server-recommended JVM tuning flags (Paper publishes these). */
+  jvmFlags?: string[]
   minRamMb: number
   maxRamMb: number
   eulaAccepted: boolean
@@ -98,6 +102,13 @@ export interface StatusChangedEvent {
 
 export type PluginSource = 'modrinth' | 'hangar' | 'spiget' | 'curseforge'
 
+export const pluginSourceLabels: Record<PluginSource, string> = {
+  modrinth: 'Modrinth',
+  hangar: 'Hangar',
+  spiget: 'SpigotMC',
+  curseforge: 'CurseForge'
+}
+
 export interface PluginSearchResult {
   source: PluginSource
   id: string
@@ -107,4 +118,63 @@ export interface PluginSearchResult {
   downloads: number
   author: string
   sourceUrl: string
+  categories: string[]
+}
+
+export interface PluginVersion {
+  id: string
+  name: string
+  versionNumber: string
+  gameVersions: string[]
+  loaders: string[]
+  /** Null when the source only links out (e.g. Hangar entries hosted on GitHub). */
+  downloadUrl: string | null
+  externalUrl: string | null
+  filename: string | null
+  sha1: string | null
+}
+
+export interface InstalledPlugin {
+  filename: string
+  sizeBytes: number
+  enabled: boolean
+}
+
+export interface PluginSearchQuery {
+  query: string
+  sources: PluginSource[]
+  gameVersion?: string
+  limit?: number
+}
+
+export interface PluginSearchResponse {
+  results: PluginSearchResult[]
+  /** Per-source failures, so one dead source doesn't hide the rest. */
+  errors: { source: PluginSource; message: string }[]
+}
+
+export type ThemePreference = 'system' | 'dark' | 'light'
+
+export interface AppSettings {
+  themePreference: ThemePreference
+  curseForgeApiKey: string
+  defaultInstallLocation: string | null
+  defaultMinRamMb: number
+  defaultMaxRamMb: number
+  defaultPort: number
+  enabledPluginSources: PluginSource[]
+  confirmBeforeStop: boolean
+  consoleScrollbackLines: number
+}
+
+export const defaultAppSettings: AppSettings = {
+  themePreference: 'system',
+  curseForgeApiKey: '',
+  defaultInstallLocation: null,
+  defaultMinRamMb: 2048,
+  defaultMaxRamMb: 4096,
+  defaultPort: 25565,
+  enabledPluginSources: ['modrinth', 'hangar', 'spiget', 'curseforge'],
+  confirmBeforeStop: true,
+  consoleScrollbackLines: 2000
 }

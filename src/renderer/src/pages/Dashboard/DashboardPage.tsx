@@ -65,11 +65,18 @@ interface DashboardPageProps {
 
 export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPageProps): JSX.Element {
   const styles = useStyles()
-  const { instances, loaded, refresh } = useInstancesStore()
+  const { instances, loaded, refresh, applyStatus } = useInstancesStore()
 
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // Cards stay live while the user sits on the dashboard.
+  useEffect(() => {
+    return window.chunkforge.servers.onStatusChanged((event) =>
+      applyStatus(event.instanceId, event.status)
+    )
+  }, [applyStatus])
 
   function handleStart(id: string): void {
     window.chunkforge.servers.start(id)

@@ -3,6 +3,9 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { ensureChunkforgeDirs } from './services/paths'
 import { registerServerIpcHandlers } from './ipc/servers'
+import { registerPluginIpcHandlers } from './ipc/plugins'
+import { registerSettingsIpcHandlers } from './ipc/settings'
+import { loadSettings } from './store/settingsStore'
 
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -47,6 +50,7 @@ function createMainWindow(): BrowserWindow {
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.chunkforge.app')
   await ensureChunkforgeDirs()
+  await loadSettings()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -54,6 +58,8 @@ app.whenReady().then(async () => {
 
   const mainWindow = createMainWindow()
   registerServerIpcHandlers(mainWindow)
+  registerPluginIpcHandlers()
+  registerSettingsIpcHandlers(mainWindow)
 
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
   ipcMain.handle('window:maximizeToggle', () =>
