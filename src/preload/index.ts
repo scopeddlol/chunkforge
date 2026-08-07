@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
   BackupEntry,
+  BackupSchedule,
   BackupUploadProgress,
   CreateInstanceConfig,
   FileHubStatus,
@@ -70,7 +71,10 @@ const servers = {
   delete: (id: string, deleteFiles: boolean): Promise<void> =>
     ipcRenderer.invoke('servers:delete', id, deleteFiles),
   updateSettings: (id: string, patch: Partial<InstanceMetadata>): Promise<InstanceMetadata> =>
-    ipcRenderer.invoke('servers:updateSettings', id, patch)
+    ipcRenderer.invoke('servers:updateSettings', id, patch),
+  getIcon: (id: string): Promise<string | null> => ipcRenderer.invoke('servers:getIcon', id),
+  pickIcon: (id: string): Promise<string | null> => ipcRenderer.invoke('servers:pickIcon', id),
+  clearIcon: (id: string): Promise<void> => ipcRenderer.invoke('servers:clearIcon', id)
 }
 
 const plugins = {
@@ -131,7 +135,13 @@ const backups = {
   restore: (instanceId: string, filename: string): Promise<void> =>
     ipcRenderer.invoke('backups:restore', instanceId, filename),
   delete: (instanceId: string, filename: string): Promise<void> =>
-    ipcRenderer.invoke('backups:delete', instanceId, filename)
+    ipcRenderer.invoke('backups:delete', instanceId, filename),
+  getSchedule: (instanceId: string): Promise<BackupSchedule> =>
+    ipcRenderer.invoke('backups:getSchedule', instanceId),
+  setSchedule: (instanceId: string, schedule: BackupSchedule): Promise<BackupSchedule> =>
+    ipcRenderer.invoke('backups:setSchedule', instanceId, schedule),
+  onAutoCreated: (callback: (event: { instanceId: string; filename: string }) => void): (() => void) =>
+    subscribe('backups:auto-created', callback)
 }
 
 const filehub = {

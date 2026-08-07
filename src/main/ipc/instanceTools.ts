@@ -1,6 +1,12 @@
-import { ipcMain, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { existsSync } from 'fs'
+import { readFile, rm, writeFile } from 'fs/promises'
+import { join } from 'path'
+import sharp from 'sharp'
+import { defaultBackupSchedule, type BackupSchedule } from '../../shared/types'
 import { instanceManager } from '../services/instanceManager'
-import { loadInstanceMetadata } from '../store/instancesStore'
+import { backupScheduler } from '../services/backupScheduler'
+import { loadInstanceMetadata, saveInstanceMetadata } from '../store/instancesStore'
 import { listPlayers } from '../services/playersService'
 import {
   createDirectory,
@@ -76,4 +82,44 @@ export function registerInstanceToolIpcHandlers(mainWindow: BrowserWindow): void
   ipcMain.handle('backups:delete', async (_, id: string, filename: string) =>
     deleteBackup(await instancePath(id), filename)
   )
+
+  ipcMain.handle('backups:getSchedule', async (_, id: string) => {
+    const metadata = await loadInstanceMetadata(id)
+    return metadata.backupSchedule ?? defaultBackupSchedule
+  })
+
+  ipcMain.handle('backups:setSchedule', async (_, id: string, schedule: BackupSchedule) => {
+    const metadata = await loadInstanceMetadata(id)
+    await saveInstanceMetadata({ ...metadata, backupSchedule: schedule })
+    backupScheduler.reset(id)
+    return schedule
+  })
+
+  // --- Server icon ---
+  // Minecraft reads server-icon.png from the server root, so Chunkforge uses
+  // that same file as the list thumbnail instead of inventing its own.
+  ipcMain.handle('servers:getIcon', async (_, id: string) => {
+    const iconPath = join(await instancePath(id), 'server-icon.png')
+    if (!existsSync(iconPath)) return null
+    const data = await readFile(iconPath)
+    return `data:image/png;base64,${data.toString('base64')}`
+  })
+
+  ipcMain.handle('servers:pickIcon', async (_, id: string) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose a server icon',
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    // Minecraft requires exactly 64x64 PNG.
+    const resized = await sharp(result.filePaths[0]).resize(64, 64, { fit: 'cover' }).png().toBuffer()
+    await writeFile(join(await instancePath(id), 'server-icon.png'), resized)
+    return `data:image/png;base64,${resized.toString('base64')}`
+  })
+
+  ipcMain.handle('servers:clearIcon', async (_, id: string) => {
+    await rm(join(await instancePath(id), 'server-icon.png'), { force: true })
+  })
 }

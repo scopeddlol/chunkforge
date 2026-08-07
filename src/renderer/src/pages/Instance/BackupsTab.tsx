@@ -12,7 +12,10 @@ import {
   DialogBody,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Switch,
+  SpinButton,
+  Field
 } from '@fluentui/react-components'
 import {
   ArrowSync20Regular,
@@ -21,12 +24,16 @@ import {
   DatabaseArrowUp20Regular,
   CloudArrowUp20Regular
 } from '@fluentui/react-icons'
-import type { BackupEntry } from '@shared/types'
+import type { BackupEntry, BackupSchedule } from '@shared/types'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: 0 },
   toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' },
   hint: { color: tokens.colorNeutralForeground3 },
+  schedulePanel: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '14px 16px', borderRadius: tokens.borderRadiusLarge, border: `1px solid ${tokens.colorNeutralStroke2}`, backgroundColor: tokens.colorNeutralBackground1 },
+  scheduleHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
+  scheduleFields: { display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' },
+  scheduleField: { minWidth: '130px' },
   list: { display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flexGrow: 1, minHeight: 0 },
   row: {
     display: 'flex',
@@ -71,6 +78,7 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
   const [fileHubReady, setFileHubReady] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
   const [uploadPercent, setUploadPercent] = useState(0)
+  const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
 
   const load = useCallback(() => {
     window.chunkforge.backups
@@ -83,7 +91,20 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
 
   useEffect(() => {
     window.chunkforge.filehub.status().then((status) => setFileHubReady(status.connected))
-  }, [])
+    window.chunkforge.backups.getSchedule(instanceId).then(setSchedule)
+  }, [instanceId])
+
+  // Scheduled runs happen in the main process, so the list refreshes on notice.
+  useEffect(() => {
+    return window.chunkforge.backups.onAutoCreated((event) => {
+      if (event.instanceId === instanceId) load()
+    })
+  }, [instanceId, load])
+
+  async function saveSchedule(next: BackupSchedule): Promise<void> {
+    setSchedule(next)
+    await window.chunkforge.backups.setSchedule(instanceId, next)
+  }
 
   useEffect(() => {
     return window.chunkforge.filehub.onUploadProgress((event) => {
@@ -152,6 +173,58 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
         <MessageBar intent="error">
           <MessageBarBody>{error}</MessageBarBody>
         </MessageBar>
+      )}
+
+      {schedule && (
+        <div className={styles.schedulePanel}>
+          <div className={styles.scheduleHeader}>
+            <Switch
+              label="Automatic backups"
+              checked={schedule.enabled}
+              onChange={(_, d) => saveSchedule({ ...schedule, enabled: d.checked })}
+            />
+            {schedule.enabled && (
+              <Text size={200} className={styles.hint}>
+                Every {schedule.intervalHours}h · keeping {schedule.keepCount || 'all'}
+              </Text>
+            )}
+          </div>
+
+          {schedule.enabled && (
+            <div className={styles.scheduleFields}>
+              <Field label="Every (hours)" className={styles.scheduleField}>
+                <SpinButton
+                  size="small"
+                  min={1}
+                  max={168}
+                  value={schedule.intervalHours}
+                  onChange={(_, d) => {
+                    const next = d.value ?? (Number(d.displayValue) || schedule.intervalHours)
+                    saveSchedule({ ...schedule, intervalHours: next })
+                  }}
+                />
+              </Field>
+              <Field label="Keep last (0 = all)" className={styles.scheduleField}>
+                <SpinButton
+                  size="small"
+                  min={0}
+                  max={100}
+                  value={schedule.keepCount}
+                  onChange={(_, d) => {
+                    const next = d.value ?? (Number(d.displayValue) || 0)
+                    saveSchedule({ ...schedule, keepCount: next })
+                  }}
+                />
+              </Field>
+              <Switch
+                label="Upload to FileHub"
+                disabled={!fileHubReady}
+                checked={schedule.uploadToFileHub}
+                onChange={(_, d) => saveSchedule({ ...schedule, uploadToFileHub: d.checked })}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       <div className={styles.toolbar}>

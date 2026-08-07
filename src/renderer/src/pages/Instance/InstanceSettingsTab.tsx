@@ -21,6 +21,8 @@ import {
 } from '@fluentui/react-components'
 import { FolderOpen20Regular, Save20Regular, Delete20Regular } from '@fluentui/react-icons'
 import type { InstanceMetadata, InstanceToggles } from '@shared/types'
+import { IconPanel } from './IconPanel'
+import { StartupPanel } from './StartupPanel'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '18px', overflowY: 'auto', paddingBottom: '20px' },
@@ -195,6 +197,10 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
           </Button>
         </div>
       </div>
+
+      <IconPanel metadata={metadata} onChanged={() => onSaved(metadata)} />
+
+      <StartupPanel metadata={metadata} onSaved={onSaved} />
 
       <div className={styles.panel}>
         <Text weight="semibold" className={styles.sectionTitle}>

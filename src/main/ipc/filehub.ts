@@ -3,7 +3,8 @@ import { join } from 'path'
 import type { BackupUploadProgress, FileHubStatus } from '../../shared/types'
 import { FileHubClient, FileHubError } from '../services/filehubClient'
 import { getSettings, saveSettings } from '../store/settingsStore'
-import { loadInstanceMetadata } from '../store/instancesStore'
+import { loadInstanceMetadata, saveInstanceMetadata } from '../store/instancesStore'
+import { backupScheduler } from '../services/backupScheduler'
 
 function clientFromSettings(): FileHubClient | null {
   const { fileHub } = getSettings()
@@ -71,28 +72,59 @@ export function registerFileHubIpcHandlers(mainWindow: BrowserWindow): void {
     return client.listFolders()
   })
 
-  ipcMain.handle('filehub:uploadBackup', async (_, instanceId: string, filename: string) => {
-    const client = clientFromSettings()
-    const { fileHub } = getSettings()
-    if (!client || !fileHub.sessionCookie) throw new Error('Sign in to FileHub first (Settings → FileHub)')
+  ipcMain.handle('filehub:uploadBackup', (_, instanceId: string, filename: string) =>
+    uploadBackup(mainWindow, instanceId, filename)
+  )
 
-    const metadata = await loadInstanceMetadata(instanceId)
-    const archivePath = join(metadata.path, 'chunkforge-backups', filename)
-
-    const emit = (progress: BackupUploadProgress): void => {
-      mainWindow.webContents.send('filehub:upload-progress', progress)
-    }
-
-    try {
-      await client.uploadFile(archivePath, {
-        parentId: fileHub.folderId,
-        onProgress: (percent) => emit({ instanceId, filename, percent, done: false, error: null })
-      })
-      emit({ instanceId, filename, percent: 100, done: true, error: null })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Upload failed'
-      emit({ instanceId, filename, percent: 0, done: true, error: message })
-      throw new Error(message)
-    }
+  // Scheduled backups reuse the same upload path as the manual button.
+  backupScheduler.on('upload-requested', ({ instanceId, filename }) => {
+    void uploadBackup(mainWindow, instanceId, filename).catch(() => undefined)
   })
+  backupScheduler.on('backup-created', (event) =>
+    mainWindow.webContents.send('backups:auto-created', event)
+  )
+  backupScheduler.on('backup-failed', (event) =>
+    mainWindow.webContents.send('backups:auto-failed', event)
+  )
+  backupScheduler.start()
+}
+
+/**
+ * Uploads a backup, filing it under a FileHub folder named after the server so
+ * archives from different servers don't pile up together. The folder id is
+ * remembered on the instance to avoid re-resolving it every time.
+ */
+async function uploadBackup(
+  mainWindow: BrowserWindow,
+  instanceId: string,
+  filename: string
+): Promise<void> {
+  const client = clientFromSettings()
+  const { fileHub } = getSettings()
+  if (!client || !fileHub.sessionCookie) throw new Error('Sign in to FileHub first (Settings → FileHub)')
+
+  const metadata = await loadInstanceMetadata(instanceId)
+  const archivePath = join(metadata.path, 'chunkforge-backups', filename)
+
+  const emit = (progress: BackupUploadProgress): void => {
+    mainWindow.webContents.send('filehub:upload-progress', progress)
+  }
+
+  try {
+    let folderId = metadata.fileHubFolderId ?? null
+    if (!folderId) {
+      folderId = await client.ensureFolder(metadata.name, fileHub.folderId)
+      await saveInstanceMetadata({ ...metadata, fileHubFolderId: folderId })
+    }
+
+    await client.uploadFile(archivePath, {
+      parentId: folderId,
+      onProgress: (percent) => emit({ instanceId, filename, percent, done: false, error: null })
+    })
+    emit({ instanceId, filename, percent: 100, done: true, error: null })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Upload failed'
+    emit({ instanceId, filename, percent: 0, done: true, error: message })
+    throw new Error(message)
+  }
 }

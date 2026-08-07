@@ -50,6 +50,9 @@ export interface InstanceMetadata extends InstanceSummary {
    * an @args-file launch rather than a plain -jar.
    */
   launchArgs?: string[]
+  backupSchedule?: BackupSchedule
+  /** FileHub folder created for this server's backups. */
+  fileHubFolderId?: string | null
   minRamMb: number
   maxRamMb: number
   eulaAccepted: boolean
@@ -182,6 +185,22 @@ export interface BackupEntry {
   filename: string
   sizeBytes: number
   createdAt: number
+}
+
+export interface BackupSchedule {
+  enabled: boolean
+  intervalHours: number
+  /** Oldest backups beyond this count are pruned. 0 keeps everything. */
+  keepCount: number
+  uploadToFileHub: boolean
+  lastRunAt?: number
+}
+
+export const defaultBackupSchedule: BackupSchedule = {
+  enabled: false,
+  intervalHours: 6,
+  keepCount: 5,
+  uploadToFileHub: false
 }
 
 export type PluginSource = 'modrinth' | 'hangar' | 'spiget' | 'curseforge'

@@ -36,6 +36,7 @@ interface CompleteResponse {
 export interface FileHubFolder {
   id: string
   name: string
+  parentId?: string | null
 }
 
 export class FileHubClient {
@@ -133,6 +134,29 @@ export class FileHubClient {
   async listFolders(): Promise<FileHubFolder[]> {
     const data = await this.api<{ folders?: FileHubFolder[] }>('/api/folders')
     return data.folders ?? []
+  }
+
+  async createFolder(name: string, parentId: string | null): Promise<string> {
+    const data = await this.api<{ folder?: FileHubFolder; id?: string }>('/api/folders', {
+      method: 'POST',
+      body: { name, parentId }
+    })
+    const id = data.folder?.id ?? data.id
+    if (!id) throw new FileHubError('FileHub did not return the new folder id')
+    return id
+  }
+
+  /**
+   * Finds a child folder by name under `parentId`, creating it if absent, so
+   * each server's backups land in their own folder.
+   */
+  async ensureFolder(name: string, parentId: string | null): Promise<string> {
+    const folders = await this.listFolders()
+    const existing = folders.find(
+      (f) => f.name.toLowerCase() === name.toLowerCase() && (f.parentId ?? null) === parentId
+    )
+    if (existing) return existing.id
+    return this.createFolder(name, parentId)
   }
 
   /** Uploads a local file, returning FileHub's file id. */

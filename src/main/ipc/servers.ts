@@ -1,5 +1,6 @@
 import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { rm, writeFile } from 'fs/promises'
+import { existsSync } from 'fs'
+import { readFile, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
 import type { CreateInstanceConfig, InstanceMetadata, InstanceSummary } from '../../shared/types'
 import { instanceManager } from '../services/instanceManager'
@@ -26,7 +27,20 @@ export function registerServerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('servers:list', async () => {
     const all = await listInstanceMetadata()
-    return all.map(toSummary)
+    // Read each server's own server-icon.png so the list shows what players see.
+    return Promise.all(
+      all.map(async (metadata) => {
+        const summary = toSummary(metadata)
+        const iconPath = join(metadata.path, 'server-icon.png')
+        if (!existsSync(iconPath)) return summary
+        try {
+          const data = await readFile(iconPath)
+          return { ...summary, iconDataUrl: `data:image/png;base64,${data.toString('base64')}` }
+        } catch {
+          return summary
+        }
+      })
+    )
   })
 
   ipcMain.handle('servers:getMetadata', async (_, id: string) => {
