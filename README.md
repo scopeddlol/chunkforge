@@ -196,6 +196,23 @@ Set these environment variables for node workers:
 - `CHUNKFORGE_NODE_NAME` (optional)
 - `CHUNKFORGE_HEARTBEAT_MS` (optional)
 
+### Example compose files (GHCR images)
+
+Prebuilt deployment examples are available under `examples/docker/`:
+
+- `docker-compose.portal.example.yml` — Portal only
+- `docker-compose.node.example.yml` — Node only
+- `docker-compose.panel-node.example.yml` — Portal + Node in one stack
+- `.env.example` — environment template for the examples
+
+Run examples:
+
+```bash
+docker compose -f examples/docker/docker-compose.portal.example.yml up -d
+docker compose -f examples/docker/docker-compose.node.example.yml up -d
+docker compose -f examples/docker/docker-compose.panel-node.example.yml up -d
+```
+
 ### Chunkforge Desktop
 
 Chunkforge Desktop is the existing Windows 11 application. It remains the main
