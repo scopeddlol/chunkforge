@@ -7,13 +7,18 @@
   "workspaces": [
     "packages/core",
     "packages/api",
-    "packages/desktop"
+    "packages/desktop",
+    "packages/node-worker"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @chunkforge/desktop",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build:win": "npm run build:win --workspace @chunkforge/desktop",
+    "build:portal": "npm run build:portal --workspace @chunkforge/desktop",
+    "build:image:portal": "docker build -f Dockerfile.portal -t chunkforge-portal:local .",
+    "build:image:node": "docker build -f Dockerfile.node -t chunkforge-node:local .",
+    "build:images": "npm run build:image:portal && npm run build:image:node",
     "release:win": "npm run release:win --workspace @chunkforge/desktop",
     "api": "npm run dev --workspace @chunkforge/api"
   },

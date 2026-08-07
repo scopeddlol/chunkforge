@@ -1,8 +1,12 @@
 import { randomBytes } from 'crypto'
+import { existsSync } from 'fs'
 import Fastify, { type FastifyInstance } from 'fastify'
 import cookie from '@fastify/cookie'
+import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { configureDataRoot, ensureChunkforgeDirs, loadSettings, runMigrations } from '@chunkforge/core'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { authStore } from './auth/store'
 import { registerAuth } from './auth/plugin'
 import { registerAuthRoutes } from './routes/auth'
@@ -13,6 +17,7 @@ import { registerPlatformRoutes } from './routes/platform'
 import { registerFileHubRoutes } from './routes/filehub'
 import { attachCoreEvents, registerEventSocket } from './events'
 import { registerCors } from './cors'
+import { portalRelay } from './portalRelay'
 
 export interface CoreApiOptions {
   /** Where instances, runtimes, and settings live. */
@@ -32,6 +37,7 @@ export interface CoreApiOptions {
    * same-origin only, which is what a Docker panel serving its own UI wants.
    */
   allowedOrigins?: string[]
+  servePortal?: boolean
 }
 
 export interface RunningCoreApi {
@@ -84,6 +90,15 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   await app.register(cookie)
   await app.register(websocket)
 
+  const portalRoot = join(dirname(fileURLToPath(import.meta.url)), '../portal-dist')
+  const servePortal = options.servePortal ?? existsSync(portalRoot)
+  if (servePortal && existsSync(portalRoot)) {
+    await app.register(fastifyStatic, {
+      root: portalRoot,
+      wildcard: false
+    })
+  }
+
   // Must precede the auth hook so a rejected preflight never reaches it.
   registerCors(app, options.allowedOrigins ?? [])
 
@@ -99,6 +114,15 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   attachCoreEvents()
 
   app.get('/api/health', async () => ({ ok: true, version: '0.3.0' }))
+
+  if (servePortal && existsSync(portalRoot)) {
+    app.get('/', async (_request, reply) => reply.sendFile('index.html'))
+    app.get<{ Params: { '*': string } }>('/*', async (request, reply) => {
+      const path = String(request.params['*'] ?? '')
+      if (path.startsWith('api/')) return reply.code(404).send({ error: 'Not found' })
+      return reply.sendFile('index.html')
+    })
+  }
 
   return app
 }
@@ -120,7 +144,10 @@ export async function startCoreApi(options: CoreApiOptions): Promise<RunningCore
     port: boundPort,
     url: `http://${host}:${boundPort}`,
     sessionToken: options.localOwner ? await createLocalOwnerSession() : undefined,
-    close: () => app.close()
+    close: async () => {
+      await portalRelay.close()
+      await app.close()
+    }
   }
 }
 

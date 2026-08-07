@@ -8,6 +8,9 @@ import type {
   InstanceMetadata,
   InstanceSummary,
   Node,
+  NodeStats,
+  PortalSettings,
+  PortalTunnelPort,
   PlayerEntry,
   Project,
   PluginSearchQuery,
@@ -232,7 +235,23 @@ export class ChunkforgeClient {
   }
 
   nodes = {
-    list: () => this.get<Node[]>('/api/nodes')
+    list: () => this.get<Node[]>('/api/nodes'),
+    createPairingCode: (name?: string) =>
+      this.post<{ node: Node; pairingCode: string }>('/api/nodes/pairing-code', name ? { name } : {}),
+    pair: (code: string) => this.post<Node>('/api/nodes/pair', { code }),
+    heartbeat: (id: string, stats: NodeStats) => this.post<Node>(`/api/nodes/${id}/heartbeat`, stats)
+  }
+
+  portal = {
+    status: () => this.get<PortalSettings>('/api/portal'),
+    createDesktopPin: () => this.post<{ pin: string; portal: PortalSettings }>('/api/portal/pin'),
+    connectDesktop: (pin: string) => this.post<PortalSettings>('/api/portal/connect', { pin }),
+    redeemNodePin: (pin: string, nodeName: string) =>
+      this.post<{ nodeId: string; nodeToken: string }>('/api/portal/nodes/redeem', { pin, nodeName }),
+    heartbeat: (nodeToken: string, stats: NodeStats) =>
+      this.post<Node>('/api/portal/nodes/heartbeat', { nodeToken, stats }),
+    registerTunnels: (nodeToken: string, ports: PortalTunnelPort[]) =>
+      this.post<Node>('/api/portal/nodes/tunnels', { nodeToken, ports })
   }
 
   filehub = {

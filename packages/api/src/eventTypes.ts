@@ -3,6 +3,8 @@ import type {
   CreateProgressEvent,
   LogLineEvent,
   ModpackInstallProgress,
+  Node,
+  PortalSettings,
   PlayersChangedEvent,
   StatusChangedEvent
 } from '@chunkforge/core'
@@ -23,6 +25,8 @@ export interface ServerEventPayloads {
   'backup-created': { instanceId: string; filename: string }
   'backup-failed': { instanceId: string; message: string }
   'filehub-upload': BackupUploadProgress
+  'portal-status': PortalSettings
+  'node-updated': Node
 }
 
 export type ServerEventType = keyof ServerEventPayloads

@@ -35,6 +35,7 @@ import { ChatTab } from './ChatTab'
 import { FilesTab } from './FilesTab'
 import { BackupsTab } from './BackupsTab'
 import { api, onEvent } from '../../api'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   root: {
@@ -157,7 +158,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             appearance="subtle"
             icon={<FolderOpen20Regular />}
             title="Open server folder"
-            onClick={() => window.native.openFolder(metadata.id)}
+            onClick={() => native().openFolder(metadata.id)}
           />
           <Button
             appearance="primary"

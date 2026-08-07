@@ -11,6 +11,7 @@ import {
 import { Checkmark16Filled, FolderOpen24Regular, ArrowResetRegular } from '@fluentui/react-icons'
 import { accentSwatches, type WizardState } from '../wizardState'
 import { WizardPanel } from '../WizardPanel'
+import { native } from '../../../native'
 
 const useStyles = makeStyles({
   root: {
@@ -66,11 +67,11 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
   const [defaultRoot, setDefaultRoot] = useState('')
 
   useEffect(() => {
-    window.native.getDefaultInstancesRoot().then(setDefaultRoot)
+    native().getDefaultInstancesRoot().then(setDefaultRoot)
   }, [])
 
   async function handleBrowse(): Promise<void> {
-    const picked = await window.native.pickFolder('Choose where this server is created')
+    const picked = await native().pickFolder('Choose where this server is created')
     if (picked) onChange({ installLocation: picked })
   }
 

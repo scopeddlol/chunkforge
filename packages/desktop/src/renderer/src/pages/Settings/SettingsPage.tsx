@@ -29,8 +29,10 @@ import {
 } from '@shared/types'
 import { ChunkforgeMark } from '../../components/ChunkforgeMark'
 import { FileHubPanel } from './FileHubPanel'
+import { PortalPanel } from './PortalPanel'
 import { ThemePicker } from './ThemePicker'
 import { api } from '../../api'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
@@ -197,7 +199,7 @@ export function SettingsPage(): JSX.Element {
                 <Button
                   icon={<FolderOpen20Regular />}
                   onClick={async () => {
-                    const picked = await window.native.pickFolder('Choose default server location')
+                    const picked = await native().pickFolder('Choose default server location')
                     if (picked) patch({ defaultInstallLocation: picked })
                   }}
                 >
@@ -263,11 +265,13 @@ export function SettingsPage(): JSX.Element {
             </Field>
             <Link
               appearance="subtle"
-              onClick={() => window.native.openExternal('https://console.curseforge.com/')}
+              onClick={() => native().openExternal('https://console.curseforge.com/')}
             >
               Get a key at console.curseforge.com <Open16Regular />
             </Link>
           </div>
+
+          <PortalPanel settings={draft} onPatch={patch} />
 
           {/* FileHub writes immediately: sign-in and folder choice are actions,
               not form fields, so they don't belong behind the save button. */}
@@ -313,7 +317,7 @@ export function SettingsPage(): JSX.Element {
             <Text weight="semibold" className={styles.panelTitle}>
               Storage
             </Text>
-            <Button icon={<FolderOpen20Regular />} onClick={() => window.native.openDataFolder()}>
+            <Button icon={<FolderOpen20Regular />} onClick={() => native().openDataFolder()}>
               Open Chunkforge Data Folder
             </Button>
           </div>

@@ -6,7 +6,8 @@ import {
   SquareMultiple24Regular,
   Dismiss24Regular
 } from '@fluentui/react-icons'
-import { ChunkforgeMark } from './ChunkforgeMark'
+import { ShellTitleBar } from './ShellTitleBar'
+import { native } from '../native'
 
 const useStyles = makeStyles({
   root: {
@@ -64,18 +65,19 @@ const dragStyle: CSSProperties = { WebkitAppRegion: 'drag' } as CSSProperties
 const noDragStyle: CSSProperties = { WebkitAppRegion: 'no-drag' } as CSSProperties
 
 export function TitleBar(): JSX.Element {
+  if (!window.native?.window) return <ShellTitleBar />
   const styles = useStyles()
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
-    window.native.window.isMaximized().then(setMaximized)
-    return window.native.window.onMaximizedChanged(setMaximized)
+    const host = native()
+    host.window.isMaximized().then(setMaximized)
+    return host.window.onMaximizedChanged(setMaximized)
   }, [])
 
   return (
     <div className={styles.root} style={dragStyle}>
       <div className={styles.brand}>
-        <ChunkforgeMark size={18} />
         <Text weight="semibold" size={300}>
           Chunkforge
         </Text>
@@ -84,21 +86,21 @@ export function TitleBar(): JSX.Element {
       <div className={styles.controls} style={noDragStyle}>
         <button
           className={styles.controlButton}
-          onClick={() => window.native.window.minimize()}
+          onClick={() => native().window.minimize()}
           aria-label="Minimize"
         >
           <Subtract24Regular fontSize={16} />
         </button>
         <button
           className={styles.controlButton}
-          onClick={() => window.native.window.maximizeToggle()}
+          onClick={() => native().window.maximizeToggle()}
           aria-label={maximized ? 'Restore' : 'Maximize'}
         >
           {maximized ? <SquareMultiple24Regular fontSize={16} /> : <Square24Regular fontSize={16} />}
         </button>
         <button
           className={mergeClasses(styles.controlButton, styles.closeButton)}
-          onClick={() => window.native.window.close()}
+          onClick={() => native().window.close()}
           aria-label="Close"
         >
           <Dismiss24Regular fontSize={16} />

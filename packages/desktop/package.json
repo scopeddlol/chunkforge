@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:portal": "vite build -c vite.portal.config.ts",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build:win": "electron-vite build && electron-builder --win --publish never",
