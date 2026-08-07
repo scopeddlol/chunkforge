@@ -127,7 +127,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
 
   attachCoreEvents()
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.5.0' }))
+  app.get('/api/health', async () => ({ ok: true, version: '0.5.1' }))
 
   if (serveWebUi) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))

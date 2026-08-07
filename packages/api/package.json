@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/api",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Chunkforge Core API — HTTP + WebSocket over @chunkforge/core",
   "private": true,
   "type": "module",
