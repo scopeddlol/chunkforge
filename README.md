@@ -281,11 +281,15 @@ docker build -f Dockerfile.portal -t chunkforge-portal:local .
 docker build -f Dockerfile.node -t chunkforge-node:local .
 ```
 
-To cut a release, push a tag — CI builds on Windows and publishes the installer
-to GitHub Releases:
+To cut a release, push a tag — CI publishes:
+
+- Windows installer to **GitHub Releases**
+- Docker images to **GHCR**:
+  - `ghcr.io/scopeddlol/chunkforge-portal:<tag>`
+  - `ghcr.io/scopeddlol/chunkforge-node:<tag>`
 
 ```bash
-git tag v0.3.0 && git push origin v0.3.0
+git tag v0.4.0 && git push origin v0.4.0
 ```
 
 ## Where your data lives
