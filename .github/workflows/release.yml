@@ -30,7 +30,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Compiles main/preload/renderer into out/ before packaging — electron-builder
+      # only bundles what electron-vite has already emitted.
       - name: Build and publish installer
-        run: npx electron-builder --win --publish always
+        run: npm run release:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
