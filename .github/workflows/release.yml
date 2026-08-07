@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+    tags-ignore:
+      - '*-portal'
   workflow_dispatch:
     inputs:
       tag:
