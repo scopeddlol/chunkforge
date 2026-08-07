@@ -13,6 +13,8 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusLarge,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground2,
+    // Native buttons don't inherit color; without this the card text renders black.
+    color: tokens.colorNeutralForeground1,
     cursor: 'pointer',
     textAlign: 'left',
     transitionProperty: 'border-color',

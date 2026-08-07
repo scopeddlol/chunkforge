@@ -41,11 +41,31 @@ export const chunkforgeDarkTheme: Theme = {
   colorNeutralBackground1: '#0C0A11',
   colorNeutralBackground2: '#000000',
   colorNeutralBackground3: '#000000',
-  colorNeutralBackground1Hover: '#17131F',
-  colorNeutralBackground1Pressed: '#201A2C',
-  colorNeutralStroke1: '#2A2435',
-  colorNeutralStroke2: '#1E1927',
-  colorNeutralStroke3: '#161220'
+  colorNeutralBackground4: '#0C0A11',
+  colorNeutralBackground1Hover: '#1A1524',
+  colorNeutralBackground1Pressed: '#241D31',
+  colorNeutralBackground1Selected: '#1F1929',
+  colorNeutralBackground3Hover: '#1A1524',
+  colorNeutralBackground3Pressed: '#241D31',
+  colorSubtleBackground: 'transparent',
+  colorSubtleBackgroundHover: '#1A1524',
+  colorSubtleBackgroundPressed: '#241D31',
+  colorNeutralStroke1: '#332B42',
+  colorNeutralStroke2: '#251E32',
+  colorNeutralStroke3: '#1B1626',
+  // Fluent's generated foregrounds assume its own lighter dark-mode surfaces;
+  // against true black they read as muddy, so pin them to explicit high-contrast values.
+  colorNeutralForeground1: '#F4F2F7',
+  colorNeutralForeground1Hover: '#FFFFFF',
+  colorNeutralForeground1Pressed: '#FFFFFF',
+  colorNeutralForeground2: '#DCD8E4',
+  colorNeutralForeground2Hover: '#F4F2F7',
+  colorNeutralForeground2Pressed: '#F4F2F7',
+  colorNeutralForeground3: '#A9A2B8',
+  colorNeutralForeground4: '#8B8399',
+  colorNeutralForegroundDisabled: '#5F5872',
+  colorNeutralForegroundOnBrand: '#FFFFFF',
+  colorNeutralForegroundInverted: '#0C0A11'
 }
 
 export const statusColors = {

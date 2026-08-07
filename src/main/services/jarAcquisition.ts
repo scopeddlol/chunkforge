@@ -8,7 +8,7 @@ interface MojangManifest {
 }
 
 interface MojangVersionDetail {
-  downloads: { server?: { url: string } }
+  downloads: { server?: { url: string; sha1?: string } }
 }
 
 interface PaperProjectResponse {
@@ -20,7 +20,7 @@ interface PaperProjectResponse {
 interface PaperBuild {
   id: number
   channel: string
-  downloads: Record<string, { name: string; url: string }>
+  downloads: Record<string, { name: string; url: string; checksums?: { sha256?: string } }>
 }
 
 const MOJANG_MANIFEST_URL = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
@@ -85,11 +85,11 @@ async function downloadVanillaJar(
   if (!entry) throw new Error(`Unknown Minecraft version: ${version}`)
 
   const detail = await fetchJson<MojangVersionDetail>(entry.url)
-  const serverUrl = detail.downloads.server?.url
-  if (!serverUrl) throw new Error(`Minecraft ${version} has no server jar available`)
+  const server = detail.downloads.server
+  if (!server?.url) throw new Error(`Minecraft ${version} has no server jar available`)
 
   const jarPath = join(destDir, 'server.jar')
-  await downloadFile(serverUrl, jarPath, onProgress)
+  await downloadFile(server.url, jarPath, { onProgress, sha1: server.sha1 })
   return jarPath
 }
 
@@ -108,7 +108,7 @@ async function downloadPaperJar(
   if (!download) throw new Error(`Paper build ${latestBuild.id} has no server download`)
 
   const jarPath = join(destDir, 'server.jar')
-  await downloadFile(download.url, jarPath, onProgress)
+  await downloadFile(download.url, jarPath, { onProgress, sha256: download.checksums?.sha256 })
   return jarPath
 }
 

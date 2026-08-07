@@ -37,6 +37,8 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     border: 'none',
     background: 'transparent',
+    // Native buttons don't inherit color; without this the rows render black on black.
+    color: tokens.colorNeutralForeground1,
     textAlign: 'left',
     ':hover': {
       backgroundColor: tokens.colorSubtleBackgroundHover

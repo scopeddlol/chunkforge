@@ -22,6 +22,9 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusLarge,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground2,
+    // Native buttons ignore inherited color and fall back to the UA `buttontext`
+    // (black, and near-transparent black when disabled), so set it explicitly.
+    color: tokens.colorNeutralForeground1,
     cursor: 'pointer',
     textAlign: 'left',
     transitionProperty: 'border-color, background-color',
@@ -35,8 +38,9 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorBrandBackground2
   },
   cardDisabled: {
-    opacity: 0.5,
     cursor: 'not-allowed',
+    color: tokens.colorNeutralForegroundDisabled,
+    backgroundColor: tokens.colorNeutralBackground2,
     ':hover': {
       border: `1px solid ${tokens.colorNeutralStroke2}`
     }

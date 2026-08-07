@@ -104,7 +104,9 @@ export async function ensureJavaRuntime(
 
   onProgress?.({ stage: 'downloading', percent: 0 })
   const zipPath = join(targetDir, 'jdk.zip')
-  await downloadFile(downloadUrl, zipPath, (percent) => onProgress?.({ stage: 'downloading', percent }))
+  await downloadFile(downloadUrl, zipPath, {
+    onProgress: (percent) => onProgress?.({ stage: 'downloading', percent })
+  })
 
   onProgress?.({ stage: 'extracting', percent: null })
   const zip = new AdmZip(zipPath)

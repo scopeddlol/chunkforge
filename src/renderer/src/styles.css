@@ -19,7 +19,7 @@ body {
     BlinkMacSystemFont,
     sans-serif;
   overflow: hidden;
-  background: transparent;
+  background: #000000;
 }
 
 button {

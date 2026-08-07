@@ -5,8 +5,6 @@ import { ensureChunkforgeDirs } from './services/paths'
 import { registerServerIpcHandlers } from './ipc/servers'
 
 function createMainWindow(): BrowserWindow {
-  const isWin11 = process.platform === 'win32'
-
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -14,11 +12,12 @@ function createMainWindow(): BrowserWindow {
     minHeight: 660,
     show: false,
     autoHideMenuBar: true,
+    // Deliberately opaque with no Mica backdrop: Mica blends the desktop
+    // wallpaper through, which washes out the OLED-black surfaces, and pairing
+    // it with an opaque background makes popups composite the window fully black.
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#F7F5FC',
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
-    // Windows 11 22H2+ Mica material; falls back gracefully on older builds.
-    ...(isWin11 ? { backgroundMaterial: 'mica' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
