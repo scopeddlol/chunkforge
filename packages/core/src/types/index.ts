@@ -75,6 +75,8 @@ export interface InstanceSummary {
   projectId?: string
   /** Node this instance runs on. `local` until remote nodes are paired. */
   nodeId?: string
+  /** Public portal hostname (e.g. server-1.play.example.com) when provisioned. */
+  portalHostname?: string
 }
 
 export interface InstanceMetadata extends InstanceSummary {

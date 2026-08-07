@@ -22,9 +22,12 @@
     "release:win": "npm run release:win --workspace @chunkforge/desktop",
     "api": "npm run dev --workspace @chunkforge/api"
   },
+  "overrides": {
+    "app-builder-bin": "5.0.0-alpha.13"
+  },
   "devDependencies": {
     "@types/node": "^22.7.5",
-    "app-builder-bin": "5.0.0-alpha.10",
+    "app-builder-bin": "5.0.0-alpha.13",
     "typescript": "^5.6.3"
   }
 }

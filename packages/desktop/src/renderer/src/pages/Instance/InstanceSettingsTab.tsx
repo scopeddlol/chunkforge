@@ -44,7 +44,14 @@ const useStyles = makeStyles({
   switchGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' },
   actions: { display: 'flex', gap: '8px' },
   pathText: { color: tokens.colorNeutralForeground3, wordBreak: 'break-all' },
-  danger: { border: `1px solid ${tokens.colorPaletteRedBorder1}` }
+  danger: { border: `1px solid ${tokens.colorPaletteRedBorder1}` },
+  portalHost: {
+    padding: '10px 12px',
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    fontFamily: 'Consolas, monospace'
+  }
 })
 
 const difficulties: InstanceToggles['difficulty'][] = ['peaceful', 'easy', 'normal', 'hard']
@@ -59,6 +66,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
   const styles = useStyles()
   const [draft, setDraft] = useState<InstanceMetadata>(metadata)
   const [saving, setSaving] = useState(false)
+  const [provisioningHost, setProvisioningHost] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteFiles, setDeleteFiles] = useState(true)
 
@@ -87,6 +95,17 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
       onSaved(updated)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function provisionPortalHostname(): Promise<void> {
+    setProvisioningHost(true)
+    try {
+      const updated = await api().portal.provisionInstanceHostname(metadata.id, Boolean(draft.portalHostname))
+      setDraft(updated)
+      onSaved(updated)
+    } finally {
+      setProvisioningHost(false)
     }
   }
 
@@ -219,12 +238,22 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
             {metadata.javaMajor ? ` (Java ${metadata.javaMajor})` : ''}
           </Text>
         </Field>
+        <Field label="Portal hostname" hint="Public hostname assigned by Chunkforge Portal when auto-provisioning is enabled.">
+          <div className={styles.portalHost}>{draft.portalHostname ?? 'Not provisioned yet'}</div>
+        </Field>
         <div className={styles.actions}>
           <Button
             icon={<FolderOpen20Regular />}
             onClick={() => native().openFolder(metadata.id)}
           >
             Open Folder
+          </Button>
+          <Button
+            appearance="secondary"
+            disabled={provisioningHost}
+            onClick={() => void provisionPortalHostname()}
+          >
+            {provisioningHost ? 'Provisioning…' : draft.portalHostname ? 'Regenerate Hostname' : 'Provision Hostname'}
           </Button>
         </div>
       </div>

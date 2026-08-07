@@ -251,7 +251,9 @@ export class ChunkforgeClient {
     heartbeat: (nodeToken: string, stats: NodeStats) =>
       this.post<Node>('/api/portal/nodes/heartbeat', { nodeToken, stats }),
     registerTunnels: (nodeToken: string, ports: PortalTunnelPort[]) =>
-      this.post<Node>('/api/portal/nodes/tunnels', { nodeToken, ports })
+      this.post<Node>('/api/portal/nodes/tunnels', { nodeToken, ports }),
+    provisionInstanceHostname: (instanceId: string, force = false) =>
+      this.post<InstanceMetadata>(`/api/portal/domains/provision/${instanceId}`, { force })
   }
 
   filehub = {

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
-import type { Node, NodeStats, PortalSettings, PortalTunnelPort } from '../types/index'
+import type { InstanceMetadata, Node, NodeStats, PortalSettings, PortalTunnelPort } from '../types/index'
 import { getSettings, saveSettings } from './settingsStore'
+import { listInstanceMetadata, loadInstanceMetadata, saveInstanceMetadata } from './instancesStore'
 
 const PENDING_NODE_TTL_MS = 15 * 60 * 1000
 
@@ -23,6 +24,31 @@ function nowIso(): string {
 
 function isPairingNode(node: Node): boolean {
   return node.kind === 'remote' && node.status === 'pairing' && !!node.pairingCode
+}
+
+function normalizeSuffix(value: string): string {
+  return value.trim().toLowerCase().replace(/^\.+/, '').replace(/\.+$/, '')
+}
+
+function toDnsLabel(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-')
+}
+
+function nextAvailableHostname(baseLabel: string, suffix: string, taken: Set<string>): string {
+  let label = baseLabel
+  let attempt = 2
+  let candidate = `${label}.${suffix}`
+  while (taken.has(candidate)) {
+    label = `${baseLabel}-${attempt}`
+    candidate = `${label}.${suffix}`
+    attempt += 1
+  }
+  return candidate
 }
 
 export async function createDesktopConnectorPin(): Promise<{ pin: string; portal: PortalSettings }> {
@@ -152,5 +178,32 @@ export async function registerPortalNodeTunnels(nodeToken: string, ports: Portal
   await saveSettings({
     nodes: settings.nodes.map((node) => (node.id === next.id ? next : node))
   })
+  return next
+}
+
+export async function autoProvisionInstancePortalHostname(
+  instanceId: string,
+  options?: { force?: boolean }
+): Promise<InstanceMetadata> {
+  const settings = getSettings()
+  const portal = settings.portal
+  const instance = await loadInstanceMetadata(instanceId)
+  const suffix = normalizeSuffix(portal.defaultDomainSuffix)
+  if (!portal.enabled || !portal.autoProvisionSubdomains || !suffix) return instance
+  if (instance.portalHostname && !options?.force) return instance
+
+  const all = await listInstanceMetadata()
+  const taken = new Set(
+    all
+      .filter((entry) => entry.id !== instanceId)
+      .map((entry) => entry.portalHostname?.trim().toLowerCase() ?? '')
+      .filter(Boolean)
+  )
+  const base = toDnsLabel(instance.name) || `server-${instance.id.slice(0, 6).toLowerCase()}`
+  const hostname = nextAvailableHostname(base, suffix, taken)
+  if (instance.portalHostname?.toLowerCase() === hostname) return instance
+
+  const next: InstanceMetadata = { ...instance, portalHostname: hostname }
+  await saveInstanceMetadata(next)
   return next
 }

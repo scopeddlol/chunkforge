@@ -87,5 +87,6 @@ export {
   connectDesktopToPortal,
   redeemNodePortalPin,
   updatePortalNodeHeartbeat,
-  registerPortalNodeTunnels
+  registerPortalNodeTunnels,
+  autoProvisionInstancePortalHostname
 } from './store/portalStore'

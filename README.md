@@ -5,16 +5,16 @@
 **Forge Your World.**
 
 A Minecraft hosting platform with a native Windows desktop app, a shared web
-panel, a self-hosted Chunkforge Portal, and Portal-connected Docker node
+panel, a self-hosted Chunkforge Portal proxy, and Portal-connected Docker node
 workers.
 
 Chunkforge still works as a standalone desktop app, but it now also includes the
 first end-to-end **Portal + Node** slice:
 
-- **Desktop App** for local management on Windows
-- **Web Panel** served by the Portal for browser-based management
-- **Chunkforge Portal** as the shared control plane and relay entrypoint
-- **Node Workers** as Docker-ran remote hosts that pair into Portal with a pin
+- **Chunkforge Desktop** for local management on Windows
+- **Chunkforge Web** as the browser-hosted panel replica
+- **Chunkforge Portal** as the proxy/control-plane entrypoint
+- **Chunkforge Nodes** as Docker-ran remote hosts that pair into Portal with a pin
 
 </div>
 
@@ -119,20 +119,25 @@ npm run build:images # build the Portal and Node Docker images
 npm run api          # run the Core API standalone, without the desktop shell
 ```
 
-## Nodes and Portal
+## Platform layout
 
 ### Chunkforge Portal
 
-Chunkforge Portal is the self-hosted connector between the desktop app, the web
-panel, and remote nodes.
+Chunkforge Portal is the self-hosted proxy and control-plane service between
+Chunkforge Desktop, Chunkforge Web, and remote Chunkforge Nodes.
 
 Current Portal responsibilities:
 
-- serves the shared browser panel
+- serves Chunkforge Web
 - stores the main app state and auth for self-hosted usage
 - generates and redeems connector pins
 - accepts node heartbeats and tunnel declarations
 - hosts the first TCP/UDP relay runtime for remote nodes
+- carries the first foundation for subdomain-aware proxy configuration
+
+**Important:** the current codebase only implements the first Portal foundation.
+It does **not** yet provide finished automatic Minecraft subdomain allocation or
+a production-ready no-open-ports proxy runtime.
 
 Run it with Docker Compose:
 
@@ -159,8 +164,18 @@ npm run start --workspace @chunkforge/api
 ### Chunkforge Nodes
 
 Chunkforge Nodes are Docker-ran workers that connect back to a Portal with a
-pairing pin. Once paired, they appear in the app and begin reporting CPU,
-memory, and storage telemetry.
+pairing pin. They are intended to host Minecraft servers on remote machines and
+relay traffic back through Portal to Chunkforge Desktop or Chunkforge Web.
+
+Today, the implemented Node foundation provides:
+
+- pin redemption through Portal
+- heartbeat reporting with CPU, memory, and storage telemetry
+- initial TCP/UDP tunnel registration and framed relay plumbing
+
+It does **not** yet provide a finished remote Minecraft hosting runtime with
+full lifecycle orchestration, automatic allocation logic, or production-grade
+tunnel recovery.
 
 Run a node worker with Docker Compose:
 
@@ -181,7 +196,39 @@ Set these environment variables for node workers:
 - `CHUNKFORGE_NODE_NAME` (optional)
 - `CHUNKFORGE_HEARTBEAT_MS` (optional)
 
-### Current connector flow
+### Chunkforge Desktop
+
+Chunkforge Desktop is the existing Windows 11 application. It remains the main
+native app and now includes the first shared Portal/Node management surfaces.
+
+### Chunkforge Web
+
+Chunkforge Web is the browser-served replica of the shared Chunkforge UI. It is
+built from the same renderer and served by Chunkforge Portal.
+
+Today, the repository includes:
+
+- a browser-safe shared renderer build
+- a Portal-served web panel build output
+- Docker packaging for the web panel through the Portal image
+- an explicit all-in-one compose mode with an optional co-located Chunkforge Node
+
+Run Web only:
+
+```bash
+docker compose -f docker-compose.web-node.yml up
+```
+
+Run Web with a co-located Node worker:
+
+```bash
+docker compose -f docker-compose.web-node.yml --profile with-node up
+```
+
+When using the co-located node profile, set `CHUNKFORGE_PAIRING_PIN` to the pin
+generated in **Settings → Chunkforge Portal**.
+
+### Current foundation flow
 
 1. Start the Portal panel and open **Settings → Chunkforge Portal**.
 2. Set the public Portal URL, then generate the **Desktop/Web connector pin**.
@@ -193,7 +240,7 @@ Set these environment variables for node workers:
 The current transport slice supports the first Portal-to-node relay path with
 TCP and UDP tunnel metadata for Minecraft-style workloads, including multi-port
 announcements. It is still an early runtime, not the final production tunnel
-system.
+system your target architecture calls for.
 
 ## Build outputs
 
