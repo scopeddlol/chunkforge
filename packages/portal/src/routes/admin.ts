@@ -11,6 +11,7 @@ import {
   verifyPassword
 } from '../auth'
 import { normalizeZone } from '../domains'
+import { isPublicBaseUrlManaged } from '../environment'
 import { broadcastPortal, subscribePortalEvents } from '../events'
 import { portalRelay } from '../relay'
 import { portalStore } from '../store'
@@ -84,13 +85,24 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/overview', { preHandler: requireOperator }, async () => buildOverview())
 
-  app.get('/api/config', { preHandler: requireOperator }, async () => portalStore.config())
+  app.get('/api/config', { preHandler: requireOperator }, async () => ({
+    ...portalStore.config(),
+    publicBaseUrlManaged: isPublicBaseUrlManaged()
+  }))
 
   app.patch<{ Body: Partial<PortalConfig> }>(
     '/api/config',
     { preHandler: requireOperator },
     async (request, reply) => {
       const patch = { ...request.body }
+      // The environment owns the domain when it supplies one. Silently keeping
+      // the stored value would be worse than refusing: the operator would see
+      // their edit accepted and then reverted on the next restart.
+      if (patch.publicBaseUrl !== undefined && isPublicBaseUrlManaged()) {
+        return reply.code(409).send({
+          error: 'The public URL is set by CHUNKFORGE_PORTAL_DOMAIN on this deployment.'
+        })
+      }
       if (patch.zoneSuffix !== undefined) patch.zoneSuffix = normalizeZone(patch.zoneSuffix)
       if (
         patch.publicPortRangeStart !== undefined &&
@@ -101,7 +113,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       }
       const config = await portalStore.saveConfig(patch)
       broadcastPortal({ type: 'overview', payload: buildOverview() })
-      return config
+      return { ...config, publicBaseUrlManaged: isPublicBaseUrlManaged() }
     }
   )
 

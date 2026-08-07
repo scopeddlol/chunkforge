@@ -84,8 +84,13 @@ it.
 
 | Record | When | Why |
 | --- | --- | --- |
-| `*.play.example.com A <portal ip>` | Once | Covers every subdomain Portal will ever allocate |
+| `portal.example.com A <portal ip>` | Once | The Portal itself, and what its certificate is issued for |
+| `*.play.example.com CNAME portal.example.com` | Once | Covers every subdomain Portal will ever allocate |
 | `_minecraft._tcp.<name>.play.example.com SRV 0 0 <port> <host>` | Per server | Lets players connect without typing a port |
+
+The wildcard is a `CNAME` when Portal is reached at a domain, so changing the
+VPS's IP needs no further DNS work. Point Portal at a bare IP instead and it
+reports an `A` record.
 
 Portal reports the exact records for each server under **Subdomains**. It does
 not write them for you — it holds no credentials for your zone.
@@ -101,13 +106,28 @@ other than your own machine.
 
 ### With a Portal
 
+Portal needs a domain. It is the one public component — every node dials it,
+every control plane pairs with it, and operator passwords and node tokens cross
+it — so the stack terminates TLS in front of it and refuses to start without a
+name to get a certificate for.
+
+Point a domain at the VPS, then:
+
 ```bash
 # 1. On the VPS
+export CHUNKFORGE_PORTAL_DOMAIN=portal.example.com
+export CHUNKFORGE_PORTAL_ZONE=play.example.com   # optional, seeds the zone
 docker compose -f docker-compose.portal.yml up -d
 ```
 
-Open it, create the operator account, then under **Settings** set the public
-base URL, the domain zone, and the port range. Publish the wildcard `A` record.
+Caddy obtains and renews the certificate automatically over ACME, which is why
+ports 80 and 443 both have to reach the host. Portal itself is not published —
+the only way in is through the proxy.
+
+Open `https://portal.example.com`, create the operator account, then under
+**Settings** confirm the zone and port range. The public URL is already filled in
+and read-only: it comes from `CHUNKFORGE_PORTAL_DOMAIN`, so it can never
+disagree with the certificate. Publish the wildcard record Portal shows you.
 
 ```bash
 # 2. On each machine that should run servers
@@ -264,7 +284,7 @@ npm run build:win     # produce a Windows installer in release/
 npm run build:web     # build the Chunkforge Web bundle
 npm run build:portal  # build Portal's admin UI
 npm run build:images  # build all three Docker images
-npm run dev:portal    # run Portal locally
+npm run dev:portal    # run Portal locally, no domain or TLS needed
 npm run dev:web       # run the Chunkforge Web UI against a local API
 npm run api           # run the Core API headless
 ```
@@ -308,9 +328,11 @@ The Portal and node runtime is young. Working today: pairing, node adoption,
 automatic subdomain allocation with the DNS records to publish, the TCP/UDP
 relay, and full remote management through the Portal channel.
 
-Not yet built: writing DNS records automatically through a provider API, TLS
-termination for the allocated routes, and scheduling logic that picks a node for
-you rather than asking.
+TLS for the control surface is handled by the bundled Caddy proxy.
+
+Not yet built: writing DNS records automatically through a provider API, TLS on
+the allocated *player* routes (Minecraft is not HTTP, so the proxy cannot help
+there), and scheduling logic that picks a node for you rather than asking.
 
 ## Tech
 

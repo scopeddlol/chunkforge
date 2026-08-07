@@ -1,0 +1,21 @@
+# TLS termination for Chunkforge Portal.
+#
+# Caddy fronts only the *control* surface — the admin UI, the node API, and the
+# control-plane API. Player traffic does not pass through here: Minecraft is not
+# HTTP, so it stays on Portal's own listeners in the allocated port range.
+#
+# Certificates are obtained and renewed automatically over ACME, which is why
+# ports 80 and 443 both have to reach this container.
+
+{$CHUNKFORGE_PORTAL_DOMAIN} {
+	encode zstd gzip
+
+	# reverse_proxy upgrades WebSockets on its own, which matters more here than
+	# usual: the node channel and the admin event stream are both long-lived
+	# sockets, and a proxy that mishandled the upgrade would leave every node
+	# looking permanently offline.
+	reverse_proxy chunkforge-portal:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+}

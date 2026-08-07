@@ -6,6 +6,7 @@ import cookie from '@fastify/cookie'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { registerPortalAuth } from './auth'
+import { applyEnvironmentConfig } from './environment'
 import { portalRelay } from './relay'
 import { portalStore } from './store'
 import { registerAdminRoutes } from './routes/admin'
@@ -42,6 +43,9 @@ export interface RunningPortal {
  */
 export async function createPortal(options: PortalOptions): Promise<FastifyInstance> {
   await portalStore.load(options.dataRoot)
+  // Before any route is served, so a redeployed container never answers with a
+  // base URL it has since moved away from.
+  await applyEnvironmentConfig()
 
   const app = Fastify({
     logger: options.logger ?? false,
@@ -124,4 +128,5 @@ export { PortalClient, PortalApiError } from './client'
 export * from './types'
 export * from './protocol'
 export type { DnsRecord } from './dns'
+export { managedPublicBaseUrl, isPublicBaseUrlManaged } from './environment'
 export type { PortalEvent, PortalEventType, PortalEventPayloads } from './events'

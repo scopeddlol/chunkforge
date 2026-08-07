@@ -26,10 +26,8 @@ export interface DnsRecord {
 export function dnsRecordsFor(domain: PortalDomain, portalAddress: string): DnsRecord[] {
   const records: DnsRecord[] = [
     {
-      type: 'A',
-      name: domain.hostname,
-      value: portalAddress || '<your Portal public IP>',
-      note: 'Covered already if you published a wildcard A record for the zone.'
+      ...addressRecord(domain.hostname, portalAddress),
+      note: 'Covered already if you published the wildcard record for the zone.'
     }
   ]
   if (domain.protocol === 'tcp') {
@@ -48,11 +46,32 @@ export function wildcardRecord(portalAddress: string): DnsRecord | null {
   const zone = normalizeZone(portalStore.config().zoneSuffix)
   if (!zone) return null
   return {
-    type: 'A',
-    name: `*.${zone}`,
-    value: portalAddress || '<your Portal public IP>',
+    ...addressRecord(`*.${zone}`, portalAddress),
     note: 'Publish once. Every subdomain Portal allocates resolves through it.'
   }
+}
+
+/**
+ * Picks the record type that is actually legal for the address in hand.
+ *
+ * Portal is normally reached at a domain now, and an A record's value must be
+ * an IP — pointing one at `portal.example.com` is invalid and every resolver
+ * will reject it. A CNAME is the correct shape for that case, and has the happy
+ * side effect that changing the VPS's IP needs no change here at all.
+ */
+function addressRecord(name: string, portalAddress: string): Omit<DnsRecord, 'note'> {
+  if (!portalAddress) {
+    return { type: 'A', name, value: '<your Portal public IP>' }
+  }
+  return isIpAddress(portalAddress)
+    ? { type: 'A', name, value: portalAddress }
+    : { type: 'CNAME', name, value: portalAddress }
+}
+
+function isIpAddress(value: string): boolean {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return true
+  // Bracketless IPv6 as it comes out of URL.hostname parsing.
+  return value.includes(':')
 }
 
 /**

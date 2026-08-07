@@ -1,0 +1,32 @@
+# Chunkforge Portal without TLS — local testing only.
+#
+#   docker compose -f docker-compose.portal.local.yml up --build
+#
+# Used on its own, not as an override: the production stack *requires* a domain,
+# and Compose resolves that requirement before any override is merged, so there
+# is no way to opt out of it from a second file.
+#
+# Do not run this on anything reachable from the internet. Pairing pins, node
+# tokens, and the operator password would all travel in clear text.
+services:
+  chunkforge-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile.portal
+    image: ghcr.io/scopeddlol/chunkforge-portal:latest
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      CHUNKFORGE_PORTAL_DATA: /data
+      CHUNKFORGE_PORTAL_PUBLIC_URL: http://localhost:${CHUNKFORGE_PORTAL_PORT:-8080}
+      CHUNKFORGE_PORTAL_ZONE: ${CHUNKFORGE_PORTAL_ZONE:-}
+    ports:
+      - "${CHUNKFORGE_PORTAL_PORT:-8080}:8080"
+      - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/tcp"
+      - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/udp"
+    volumes:
+      - chunkforge-portal-data:/data
+    restart: unless-stopped
+
+volumes:
+  chunkforge-portal-data:

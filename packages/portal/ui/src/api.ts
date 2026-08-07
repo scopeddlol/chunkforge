@@ -2,6 +2,7 @@ import type { PortalEvent, PortalEventPayloads, PortalEventType } from '../../sr
 import type {
   PortalClientRecord,
   PortalConfig,
+  PortalConfigView,
   PortalDomain,
   PortalNodeView,
   PortalOverview,
@@ -60,9 +61,9 @@ export const portalApi = {
   },
   overview: () => call<PortalOverview>('/api/overview'),
   config: {
-    get: () => call<PortalConfig>('/api/config'),
+    get: () => call<PortalConfigView>('/api/config'),
     save: (patch: Partial<PortalConfig>) =>
-      call<PortalConfig>('/api/config', { method: 'PATCH', body: JSON.stringify(patch) })
+      call<PortalConfigView>('/api/config', { method: 'PATCH', body: JSON.stringify(patch) })
   },
   pins: {
     list: () => call<PortalPin[]>('/api/pins'),

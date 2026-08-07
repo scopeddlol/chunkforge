@@ -1,15 +1,38 @@
 # Chunkforge Portal, on a VPS. Needed by both deployment modes.
+#
+# Requires CHUNKFORGE_PORTAL_DOMAIN. Caddy obtains and renews a certificate for
+# it automatically, so Portal's admin UI and every node/control-plane handshake
+# run over TLS. Point the domain's DNS at this host before starting.
 services:
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      CHUNKFORGE_PORTAL_DOMAIN: ${CHUNKFORGE_PORTAL_DOMAIN:?Set CHUNKFORGE_PORTAL_DOMAIN, e.g. portal.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - chunkforge-portal
+    restart: unless-stopped
+
   chunkforge-portal:
     image: ghcr.io/scopeddlol/chunkforge-portal:latest
     environment:
       PORT: 8080
       HOST: 0.0.0.0
       CHUNKFORGE_PORTAL_DATA: /data
+      CHUNKFORGE_PORTAL_DOMAIN: ${CHUNKFORGE_PORTAL_DOMAIN}
+      CHUNKFORGE_PORTAL_ZONE: ${CHUNKFORGE_PORTAL_ZONE:-}
+    expose:
+      - "8080"
     ports:
-      - "${CHUNKFORGE_PORTAL_PORT:-8080}:8080"
       # Player traffic for every server on every node lands in this range.
-      # It must match Portal → Settings → port range.
+      # Not HTTP, so it bypasses Caddy entirely.
       - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/tcp"
       - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/udp"
     volumes:
@@ -18,3 +41,5 @@ services:
 
 volumes:
   portal-data:
+  caddy-data:
+  caddy-config:

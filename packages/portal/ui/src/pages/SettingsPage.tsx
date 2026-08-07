@@ -11,7 +11,7 @@ import {
   tokens
 } from '@fluentui/react-components'
 import { portalApi } from '../api'
-import type { PortalConfig } from '../../../src/types'
+import type { PortalConfigView } from '../../../src/types'
 
 const useStyles = makeStyles({
   root: { padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '720px' },
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
 
 export function SettingsPage(): JSX.Element {
   const styles = useStyles()
-  const [config, setConfig] = useState<PortalConfig | null>(null)
+  const [config, setConfig] = useState<PortalConfigView | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
   const [password, setPassword] = useState('')
@@ -43,7 +43,7 @@ export function SettingsPage(): JSX.Element {
     void portalApi.config.get().then(setConfig)
   }, [])
 
-  function patch(next: Partial<PortalConfig>): void {
+  function patch(next: Partial<PortalConfigView>): void {
     setConfig((prev) => (prev ? { ...prev, ...next } : prev))
   }
 
@@ -52,7 +52,12 @@ export function SettingsPage(): JSX.Element {
     setSaving(true)
     setMessage(null)
     try {
-      setConfig(await portalApi.config.save(config))
+      // Sending a managed public URL back would 409; the server owns it.
+      const { publicBaseUrlManaged, ...rest } = config
+      const patchBody = publicBaseUrlManaged
+        ? (({ publicBaseUrl: _managed, ...keep }) => keep)(rest)
+        : rest
+      setConfig(await portalApi.config.save(patchBody))
       setMessage({ text: 'Saved.', ok: true })
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : 'Could not save.', ok: false })
@@ -89,11 +94,16 @@ export function SettingsPage(): JSX.Element {
       <div className={styles.panel}>
         <Field
           label="Public base URL"
-          hint="How nodes and Chunkforge UIs reach this Portal, e.g. https://portal.example.com"
+          hint={
+            config.publicBaseUrlManaged
+              ? 'Set by CHUNKFORGE_PORTAL_DOMAIN on this deployment, so it always matches the certificate.'
+              : 'How nodes and Chunkforge UIs reach this Portal, e.g. https://portal.example.com'
+          }
         >
           <Input
             value={config.publicBaseUrl}
             placeholder="https://portal.example.com"
+            disabled={config.publicBaseUrlManaged}
             onChange={(_, data) => patch({ publicBaseUrl: data.value })}
           />
         </Field>

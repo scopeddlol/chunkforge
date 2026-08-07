@@ -1,9 +1,35 @@
 # Chunkforge Portal — run this on your VPS.
 #
-# Two things are published: the admin UI, and the range of ports player traffic
-# lands on. Every server on every node is funnelled through that range, which is
-# why it must be reachable here and nowhere else.
+# A domain is required. Portal is the one public thing in a Chunkforge setup:
+# every node dials it, every control plane pairs with it, and every player
+# connects through it. Running that over plain HTTP on a raw IP would put node
+# tokens and operator passwords on the wire in clear text, so this stack
+# terminates TLS in front of it and refuses to start without a name to get a
+# certificate for.
+#
+# Set CHUNKFORGE_PORTAL_DOMAIN (e.g. portal.example.com) and point its DNS at
+# this host before starting.
 services:
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      CHUNKFORGE_PORTAL_DOMAIN: ${CHUNKFORGE_PORTAL_DOMAIN:?Set CHUNKFORGE_PORTAL_DOMAIN to the domain this Portal is reached at, e.g. portal.example.com}
+    ports:
+      # Both are required: 443 serves Portal, and 80 is how the ACME HTTP
+      # challenge proves you own the domain, at issue and at every renewal.
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here. Lose this volume and every restart re-issues,
+      # which will hit Let's Encrypt's rate limits soon enough.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - chunkforge-portal
+    restart: unless-stopped
+
   chunkforge-portal:
     build:
       context: .
@@ -13,10 +39,17 @@ services:
       PORT: 8080
       HOST: 0.0.0.0
       CHUNKFORGE_PORTAL_DATA: /data
+      # Portal takes its public URL from here rather than from the settings
+      # form, so it can never disagree with the certificate Caddy holds.
+      CHUNKFORGE_PORTAL_DOMAIN: ${CHUNKFORGE_PORTAL_DOMAIN}
+      # Optional: pre-seeds the zone on first boot. Editable in the UI after.
+      CHUNKFORGE_PORTAL_ZONE: ${CHUNKFORGE_PORTAL_ZONE:-}
+    expose:
+      # Deliberately not published to the host. The only way in is through Caddy.
+      - "8080"
     ports:
-      # Admin UI and the node/control-plane API.
-      - "${CHUNKFORGE_PORTAL_PORT:-8080}:8080"
-      # Player traffic. Must match the port range set under Portal → Settings.
+      # Player traffic, which is not HTTP and so does not pass through Caddy.
+      # Must match the port range set under Portal → Settings.
       - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/tcp"
       - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/udp"
     volumes:
@@ -25,3 +58,5 @@ services:
 
 volumes:
   chunkforge-portal-data:
+  caddy-data:
+  caddy-config:

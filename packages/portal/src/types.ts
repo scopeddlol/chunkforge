@@ -160,3 +160,12 @@ export interface PortalNodeView {
   claimed: boolean
   claimedByOther: boolean
 }
+
+/**
+ * Config as the admin UI sees it. `publicBaseUrlManaged` is not stored — it
+ * reflects whether the container was given a domain, in which case the field is
+ * read-only rather than merely discouraged.
+ */
+export interface PortalConfigView extends PortalConfig {
+  publicBaseUrlManaged: boolean
+}
