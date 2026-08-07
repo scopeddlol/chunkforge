@@ -30,6 +30,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Ensure app-builder binary
+        shell: pwsh
+        run: |
+          $path = "node_modules\app-builder-bin\win\x64\app-builder.exe"
+          if (-not (Test-Path $path)) {
+            npm install --no-save app-builder-bin@5.0.0-alpha.13
+          }
+          if (-not (Test-Path $path)) {
+            throw "Missing app-builder binary at $path"
+          }
+
       # Compiles main/preload/renderer into out/ before packaging — electron-builder
       # only bundles what electron-vite has already emitted.
       - name: Build and publish installer
