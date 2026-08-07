@@ -113,9 +113,19 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
     []
   )
 
-  // Populate with popular plugins on first open so the page is never empty.
+  // Start from the sources enabled in Settings, then show popular plugins so
+  // the page is never empty on first open.
   useEffect(() => {
-    runSearch('', allSources)
+    let cancelled = false
+    window.chunkforge.settings.get().then((settings) => {
+      if (cancelled) return
+      const enabled = settings.enabledPluginSources.length > 0 ? settings.enabledPluginSources : allSources
+      setActiveSources(enabled)
+      runSearch('', enabled)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [runSearch])
 
   function toggleSource(source: PluginSource): void {

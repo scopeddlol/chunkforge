@@ -2,7 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
   BackupEntry,
+  BackupUploadProgress,
   CreateInstanceConfig,
+  FileHubStatus,
   CreateProgressEvent,
   FileEntry,
   InstalledPlugin,
@@ -132,6 +134,24 @@ const backups = {
     ipcRenderer.invoke('backups:delete', instanceId, filename)
 }
 
+const filehub = {
+  status: (): Promise<FileHubStatus> => ipcRenderer.invoke('filehub:status'),
+  login: (
+    baseUrl: string,
+    username: string,
+    password: string,
+    totp?: string
+  ): Promise<{ ok: boolean; totpRequired: boolean; message: string | null }> =>
+    ipcRenderer.invoke('filehub:login', baseUrl, username, password, totp),
+  logout: (): Promise<void> => ipcRenderer.invoke('filehub:logout'),
+  listFolders: (): Promise<Array<{ id: string; name: string }>> =>
+    ipcRenderer.invoke('filehub:listFolders'),
+  uploadBackup: (instanceId: string, filename: string): Promise<void> =>
+    ipcRenderer.invoke('filehub:uploadBackup', instanceId, filename),
+  onUploadProgress: (callback: (event: BackupUploadProgress) => void): (() => void) =>
+    subscribe('filehub:upload-progress', callback)
+}
+
 const chunkforgeApi = {
   window: windowControls,
   theme,
@@ -140,7 +160,8 @@ const chunkforgeApi = {
   settings,
   players,
   files,
-  backups
+  backups,
+  filehub
 }
 
 export type ChunkforgeApi = typeof chunkforgeApi

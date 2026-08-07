@@ -13,6 +13,8 @@ export interface InstanceSummary {
   ramAllocatedMb: number
   accentColor: string
   createdAt: string
+  /** Custom thumbnail as a data: URL. Falls back to generated artwork when unset. */
+  iconDataUrl?: string | null
 }
 
 export interface InstanceMetadata extends InstanceSummary {
@@ -194,6 +196,17 @@ export interface PluginSearchResponse {
 
 export type ThemePreference = 'system' | 'dark' | 'light'
 
+export interface FileHubSettings {
+  /** Base URL of a self-hosted FileHub instance, e.g. https://files.example.com */
+  baseUrl: string
+  username: string
+  /** Session cookie captured at sign-in; the password is never stored. */
+  sessionCookie: string | null
+  /** Destination folder id on FileHub, or null for the root. */
+  folderId: string | null
+  uploadBackupsAutomatically: boolean
+}
+
 export interface AppSettings {
   themePreference: ThemePreference
   curseForgeApiKey: string
@@ -204,6 +217,7 @@ export interface AppSettings {
   enabledPluginSources: PluginSource[]
   confirmBeforeStop: boolean
   consoleScrollbackLines: number
+  fileHub: FileHubSettings
 }
 
 export const defaultAppSettings: AppSettings = {
@@ -215,5 +229,27 @@ export const defaultAppSettings: AppSettings = {
   defaultPort: 25565,
   enabledPluginSources: ['modrinth', 'hangar', 'spiget', 'curseforge'],
   confirmBeforeStop: true,
-  consoleScrollbackLines: 2000
+  consoleScrollbackLines: 2000,
+  fileHub: {
+    baseUrl: '',
+    username: '',
+    sessionCookie: null,
+    folderId: null,
+    uploadBackupsAutomatically: false
+  }
+}
+
+export interface FileHubStatus {
+  configured: boolean
+  connected: boolean
+  username: string | null
+  message: string | null
+}
+
+export interface BackupUploadProgress {
+  instanceId: string
+  filename: string
+  percent: number
+  done: boolean
+  error: string | null
 }

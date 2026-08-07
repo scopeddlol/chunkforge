@@ -25,3 +25,15 @@ body {
 button {
   font-family: inherit;
 }
+
+/*
+ * Fluent renders portal content (dropdown listboxes, menus, tooltips, dialogs)
+ * inside a nested FluentProvider appended to <body>. That provider inherits the
+ * theme's colorNeutralBackground1 and is an absolutely positioned, full-window
+ * layer at z-index 1000000 — so every popup painted an opaque sheet over the
+ * entire app. Only the portal providers are direct children of <body>; the app
+ * shell lives under #root, so this leaves the real background untouched.
+ */
+body > .fui-FluentProvider {
+  background-color: transparent;
+}

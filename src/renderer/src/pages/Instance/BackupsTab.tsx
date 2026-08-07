@@ -18,7 +18,8 @@ import {
   ArrowSync20Regular,
   Delete20Regular,
   ArrowDownload20Regular,
-  DatabaseArrowUp20Regular
+  DatabaseArrowUp20Regular,
+  CloudArrowUp20Regular
 } from '@fluentui/react-icons'
 import type { BackupEntry } from '@shared/types'
 
@@ -67,6 +68,9 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null)
+  const [fileHubReady, setFileHubReady] = useState(false)
+  const [uploading, setUploading] = useState<string | null>(null)
+  const [uploadPercent, setUploadPercent] = useState(0)
 
   const load = useCallback(() => {
     window.chunkforge.backups
@@ -77,12 +81,43 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
 
   useEffect(load, [load])
 
+  useEffect(() => {
+    window.chunkforge.filehub.status().then((status) => setFileHubReady(status.connected))
+  }, [])
+
+  useEffect(() => {
+    return window.chunkforge.filehub.onUploadProgress((event) => {
+      if (event.instanceId !== instanceId) return
+      setUploadPercent(event.percent)
+      if (event.done) {
+        setUploading(null)
+        if (event.error) setError(`FileHub upload failed: ${event.error}`)
+      }
+    })
+  }, [instanceId])
+
+  async function upload(backup: BackupEntry): Promise<void> {
+    setUploading(backup.filename)
+    setUploadPercent(0)
+    setError(null)
+    try {
+      await window.chunkforge.filehub.uploadBackup(instanceId, backup.filename)
+    } catch (err) {
+      setError((err as Error).message)
+      setUploading(null)
+    }
+  }
+
   async function create(): Promise<void> {
     setBusy(true)
     setError(null)
     try {
-      await window.chunkforge.backups.create(instanceId)
+      const created = await window.chunkforge.backups.create(instanceId)
       load()
+      const settings = await window.chunkforge.settings.get()
+      if (settings.fileHub.uploadBackupsAutomatically && fileHubReady) {
+        upload(created)
+      }
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -159,6 +194,20 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
                 onClick={() => setRestoreTarget(backup)}
               >
                 Restore
+              </Button>
+              <Button
+                appearance="subtle"
+                size="small"
+                icon={<CloudArrowUp20Regular />}
+                title={
+                  fileHubReady
+                    ? 'Upload to FileHub'
+                    : 'Connect a FileHub instance in Settings to upload backups'
+                }
+                disabled={busy || !fileHubReady || uploading === backup.filename}
+                onClick={() => upload(backup)}
+              >
+                {uploading === backup.filename ? `${uploadPercent}%` : ''}
               </Button>
               <Button
                 appearance="subtle"

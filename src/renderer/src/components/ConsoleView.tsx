@@ -3,7 +3,7 @@ import { makeStyles, tokens, Input, Button } from '@fluentui/react-components'
 import { Send24Regular } from '@fluentui/react-icons'
 import type { LogLineEvent } from '@shared/types'
 
-const MAX_LINES = 2000
+const FALLBACK_MAX_LINES = 2000
 
 const useStyles = makeStyles({
   root: {
@@ -55,6 +55,14 @@ export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): 
   const [lines, setLines] = useState<LogLineEvent[]>([])
   const [command, setCommand] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Read through a ref so changing the setting doesn't resubscribe the log stream.
+  const maxLinesRef = useRef(FALLBACK_MAX_LINES)
+
+  useEffect(() => {
+    window.chunkforge.settings.get().then((settings) => {
+      maxLinesRef.current = settings.consoleScrollbackLines || FALLBACK_MAX_LINES
+    })
+  }, [])
 
   useEffect(() => {
     setLines([])
@@ -62,7 +70,8 @@ export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): 
       if (event.instanceId !== instanceId) return
       setLines((prev) => {
         const next = [...prev, event]
-        return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
+        const max = maxLinesRef.current
+        return next.length > max ? next.slice(next.length - max) : next
       })
     })
   }, [instanceId])

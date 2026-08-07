@@ -26,6 +26,7 @@ import {
 import type { InstanceMetadata, InstanceStatus } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
 import { ConsoleView } from '../../components/ConsoleView'
+import { useConfirmStop } from '../../components/ConfirmStopDialog'
 import { useInstancesStore } from '../../state/instancesStore'
 import { InstalledPluginsTab } from './InstalledPluginsTab'
 import { InstanceSettingsTab } from './InstanceSettingsTab'
@@ -76,6 +77,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
   const [onlinePlayers, setOnlinePlayers] = useState<string[]>([])
   const applyStatus = useInstancesStore((s) => s.applyStatus)
   const refreshInstances = useInstancesStore((s) => s.refresh)
+  const { requestStop, dialog: confirmStopDialog } = useConfirmStop()
 
   useEffect(() => {
     let cancelled = false
@@ -160,7 +162,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             icon={isRunning ? <Stop20Filled /> : <Play20Filled />}
             onClick={() =>
               isRunning
-                ? window.chunkforge.servers.stop(instanceId)
+                ? requestStop(instanceId, metadata.name)
                 : window.chunkforge.servers.start(instanceId)
             }
           >
@@ -224,6 +226,8 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
           />
         )}
       </div>
+
+      {confirmStopDialog}
     </div>
   )
 }

@@ -31,17 +31,22 @@ export const accentSwatches = [
   '#E0C22E' // gold
 ]
 
-export function createInitialWizardState(): WizardState {
+export function createInitialWizardState(defaults?: {
+  defaultPort: number
+  defaultMinRamMb: number
+  defaultMaxRamMb: number
+  defaultInstallLocation: string | null
+}): WizardState {
   return {
     serverType: 'paper',
     minecraftVersion: '',
     name: '',
     accentColor: accentSwatches[0],
-    port: 25565,
-    minRamMb: 2048,
-    maxRamMb: 4096,
+    port: defaults?.defaultPort ?? 25565,
+    minRamMb: defaults?.defaultMinRamMb ?? 2048,
+    maxRamMb: defaults?.defaultMaxRamMb ?? 4096,
     toggles: { ...defaultToggles },
-    installLocation: null
+    installLocation: defaults?.defaultInstallLocation ?? null
   }
 }
 

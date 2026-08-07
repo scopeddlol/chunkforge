@@ -6,7 +6,14 @@ import { registerServerIpcHandlers } from './ipc/servers'
 import { registerPluginIpcHandlers } from './ipc/plugins'
 import { registerSettingsIpcHandlers } from './ipc/settings'
 import { registerInstanceToolIpcHandlers } from './ipc/instanceTools'
+import { registerFileHubIpcHandlers } from './ipc/filehub'
 import { loadSettings } from './store/settingsStore'
+
+// Lets tooling attach to the renderer during development for real diagnostics
+// (CDP screenshots, DOM inspection) instead of guessing at rendering issues.
+if (is.dev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222')
+}
 
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -62,6 +69,7 @@ app.whenReady().then(async () => {
   registerPluginIpcHandlers()
   registerSettingsIpcHandlers(mainWindow)
   registerInstanceToolIpcHandlers(mainWindow)
+  registerFileHubIpcHandlers(mainWindow)
 
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
   ipcMain.handle('window:maximizeToggle', () =>

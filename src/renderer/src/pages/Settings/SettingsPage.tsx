@@ -24,6 +24,7 @@ import {
   type ThemePreference
 } from '@shared/types'
 import { ChunkforgeMark } from '../../components/ChunkforgeMark'
+import { FileHubPanel } from './FileHubPanel'
 
 const useStyles = makeStyles({
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', padding: '28px 36px', overflowY: 'auto' },
@@ -233,6 +234,8 @@ export function SettingsPage(): JSX.Element {
             Get a key at console.curseforge.com <Open16Regular />
           </Link>
         </div>
+
+        <FileHubPanel settings={settings} onPatch={patch} />
 
         <div className={styles.panel}>
           <Text weight="semibold" className={styles.panelTitle}>

@@ -3,6 +3,7 @@ import { makeStyles, tokens, Text, Title2, Button } from '@fluentui/react-compon
 import { AddCircle24Regular } from '@fluentui/react-icons'
 import { ChunkforgeMark } from '../../components/ChunkforgeMark'
 import { useInstancesStore } from '../../state/instancesStore'
+import { useConfirmStop } from '../../components/ConfirmStopDialog'
 import { InstanceCard } from './InstanceCard'
 
 const useStyles = makeStyles({
@@ -66,6 +67,7 @@ interface DashboardPageProps {
 export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPageProps): JSX.Element {
   const styles = useStyles()
   const { instances, loaded, refresh, applyStatus } = useInstancesStore()
+  const { requestStop, dialog: confirmStopDialog } = useConfirmStop()
 
   useEffect(() => {
     refresh()
@@ -83,7 +85,8 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
   }
 
   function handleStop(id: string): void {
-    window.chunkforge.servers.stop(id)
+    const instance = instances.find((i) => i.id === id)
+    requestStop(id, instance?.name ?? 'this server')
   }
 
   const hasInstances = instances.length > 0
@@ -135,6 +138,8 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
           </Button>
         </div>
       )}
+
+      {confirmStopDialog}
     </div>
   )
 }

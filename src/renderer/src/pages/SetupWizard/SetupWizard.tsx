@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { makeStyles, tokens, Button, Text } from '@fluentui/react-components'
 import { ArrowLeft24Regular, ArrowRight24Regular, Dismiss24Regular } from '@fluentui/react-icons'
 import type { InstanceMetadata } from '@shared/types'
@@ -46,7 +46,25 @@ interface SetupWizardProps {
 export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Element {
   const styles = useStyles()
   const [stepIndex, setStepIndex] = useState(0)
-  const [state, setState] = useState<WizardState>(createInitialWizardState)
+  const [state, setState] = useState<WizardState>(() => createInitialWizardState())
+
+  // Seed from the saved "new server defaults" without blocking first paint.
+  useEffect(() => {
+    let cancelled = false
+    window.chunkforge.settings.get().then((settings) => {
+      if (cancelled) return
+      setState((prev) => ({
+        ...prev,
+        port: settings.defaultPort,
+        minRamMb: settings.defaultMinRamMb,
+        maxRamMb: settings.defaultMaxRamMb,
+        installLocation: settings.defaultInstallLocation
+      }))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function onChange(patch: Partial<WizardState>): void {
     setState((prev) => ({ ...prev, ...patch }))

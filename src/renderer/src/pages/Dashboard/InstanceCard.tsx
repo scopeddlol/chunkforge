@@ -3,6 +3,7 @@ import { makeStyles, tokens, Text, Badge, Button, Spinner } from '@fluentui/reac
 import { Play20Filled, Stop20Filled, Options20Regular } from '@fluentui/react-icons'
 import type { InstanceSummary } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
+import { ServerThumbnail } from '../../components/ServerThumbnail'
 import { statusColors } from '../../theme/chunkforgeTheme'
 
 const useStyles = makeStyles({
@@ -36,15 +37,15 @@ const useStyles = makeStyles({
     bottom: 0,
     width: '3px'
   },
-  header: { display: 'flex', alignItems: 'center', gap: '10px' },
+  header: { display: 'flex', alignItems: 'center', gap: '12px' },
+  headerText: { display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, flexGrow: 1 },
   name: {
-    flexGrow: 1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     fontSize: '15px'
   },
-  metaRow: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+  metaRow: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
   statsRow: {
     display: 'flex',
     alignItems: 'center',
@@ -80,19 +81,26 @@ export function InstanceCard({ instance, onOpen, onStart, onStop }: InstanceCard
       />
 
       <div className={styles.header}>
-        <Text weight="semibold" className={styles.name}>
-          {instance.name}
-        </Text>
+        <ServerThumbnail
+          name={instance.name}
+          serverType={instance.serverType}
+          iconUrl={instance.iconDataUrl}
+          size={44}
+        />
+        <div className={styles.headerText}>
+          <Text weight="semibold" className={styles.name}>
+            {instance.name}
+          </Text>
+          <div className={styles.metaRow}>
+            <Badge appearance="tint" color="informative">
+              {instance.serverType}
+            </Badge>
+            <Badge appearance="outline" color="informative">
+              {instance.minecraftVersion}
+            </Badge>
+          </div>
+        </div>
         <StatusDot status={instance.status} />
-      </div>
-
-      <div className={styles.metaRow}>
-        <Badge appearance="tint" color="informative">
-          {instance.serverType}
-        </Badge>
-        <Badge appearance="outline" color="informative">
-          {instance.minecraftVersion}
-        </Badge>
       </div>
 
       <div className={styles.statsRow}>
