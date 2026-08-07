@@ -6,8 +6,6 @@ import {
   Title3,
   Badge,
   Spinner,
-  MessageBar,
-  MessageBarBody,
   mergeClasses
 } from '@fluentui/react-components'
 import type { VersionCatalogEntry } from '@shared/types'
@@ -95,22 +93,6 @@ export function VersionStep({ state, onChange }: VersionStepProps): JSX.Element 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.serverType])
-
-  // A modpack dictates its own loader and Minecraft version; letting the user
-  // change it here would just produce a server the pack can't run on.
-  if (state.modpack) {
-    return (
-      <div className={styles.root}>
-        <Title3>Which version?</Title3>
-        <MessageBar intent="info">
-          <MessageBarBody>
-            Locked to {state.minecraftVersion} by the “{state.modpack.name}” modpack. Remove the pack on
-            the previous step to choose a different version.
-          </MessageBarBody>
-        </MessageBar>
-      </div>
-    )
-  }
 
   return (
     <div className={styles.root}>

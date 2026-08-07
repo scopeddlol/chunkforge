@@ -90,14 +90,39 @@ export function ServerTypeStep({ state, onChange }: ServerTypeStepProps): JSX.El
     <div className={styles.root}>
       <Title3>What kind of server?</Title3>
       <div className={styles.grid}>
+        {/* A modpack picks its own loader, so it's offered as a starting point
+            alongside the loaders rather than as a step everyone walks through. */}
+        <button
+          type="button"
+          className={mergeClasses(styles.card, state.useModpack && styles.cardSelected)}
+          onClick={() => onChange({ useModpack: true, minecraftVersion: '' })}
+        >
+          <div className={styles.cardHeader}>
+            <Text weight="semibold">Modpack</Text>
+            <Badge appearance="outline" color="brand">
+              Curated
+            </Badge>
+          </div>
+          <Text size={200} className={styles.blurb}>
+            Start from a Modrinth or CurseForge pack. It sets the loader and version for you.
+          </Text>
+        </button>
+
         {options.map((option) => {
-          const selected = state.serverType === option.type
+          const selected = !state.useModpack && state.serverType === option.type
           return (
             <button
               key={option.type}
               type="button"
               className={mergeClasses(styles.card, selected && styles.cardSelected)}
-              onClick={() => onChange({ serverType: option.type, minecraftVersion: '' })}
+              onClick={() =>
+                onChange({
+                  serverType: option.type,
+                  minecraftVersion: '',
+                  useModpack: false,
+                  modpack: null
+                })
+              }
             >
               <div className={styles.cardHeader}>
                 <Text weight="semibold">{option.label}</Text>

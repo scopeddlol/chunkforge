@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import { makeStyles, tokens, Text, mergeClasses } from '@fluentui/react-components'
 import { Checkmark16Filled } from '@fluentui/react-icons'
-import { wizardSteps } from './wizardState'
+import { stepLabel, type WizardStepKey } from './wizardState'
 
 const useStyles = makeStyles({
   root: {
@@ -55,19 +55,21 @@ const useStyles = makeStyles({
 })
 
 interface WizardStepperProps {
+  steps: WizardStepKey[]
   currentStep: number
 }
 
-export function WizardStepper({ currentStep }: WizardStepperProps): JSX.Element {
+export function WizardStepper({ steps, currentStep }: WizardStepperProps): JSX.Element {
   const styles = useStyles()
 
   return (
     <div className={styles.root}>
-      {wizardSteps.map((label, index) => {
+      {steps.map((key, index) => {
+        const label = stepLabel(key)
         const isDone = index < currentStep
         const isActive = index === currentStep
         return (
-          <div className={styles.step} key={label}>
+          <div className={styles.step} key={key}>
             <span
               className={mergeClasses(styles.dot, isDone && styles.dotDone, isActive && styles.dotActive)}
             >
@@ -76,7 +78,7 @@ export function WizardStepper({ currentStep }: WizardStepperProps): JSX.Element 
             <Text size={200} className={mergeClasses(styles.label, isActive && styles.labelActive)}>
               {label}
             </Text>
-            {index < wizardSteps.length - 1 && <span className={styles.connector} />}
+            {index < steps.length - 1 && <span className={styles.connector} />}
           </div>
         )
       })}

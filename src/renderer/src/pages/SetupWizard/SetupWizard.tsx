@@ -3,7 +3,7 @@ import { makeStyles, tokens, Button, Text } from '@fluentui/react-components'
 import { ArrowLeft24Regular, ArrowRight24Regular, Dismiss24Regular } from '@fluentui/react-icons'
 import type { InstanceMetadata } from '@shared/types'
 import { WizardStepper } from './WizardStepper'
-import { createInitialWizardState, wizardSteps, type WizardState } from './wizardState'
+import { buildSteps, createInitialWizardState, type WizardState } from './wizardState'
 import { ServerTypeStep } from './steps/ServerTypeStep'
 import { ModpackPickerStep } from './steps/ModpackPickerStep'
 import { VersionStep } from './steps/VersionStep'
@@ -71,9 +71,17 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
     setState((prev) => ({ ...prev, ...patch }))
   }
 
-  const isLastStep = stepIndex === wizardSteps.length - 1
+  // The step list changes with the chosen path, so navigation works off keys
+  // rather than fixed indices.
+  const steps = buildSteps(state)
+  const boundedIndex = Math.min(stepIndex, steps.length - 1)
+  const current = steps[boundedIndex]
+  const isLastStep = boundedIndex === steps.length - 1
+
   const canGoNext =
-    (stepIndex !== 2 || state.minecraftVersion !== '') && (stepIndex !== 3 || state.name.trim() !== '')
+    (current !== 'version' || state.minecraftVersion !== '') &&
+    (current !== 'modpack' || state.modpack !== null) &&
+    (current !== 'name' || state.name.trim() !== '')
 
   return (
     <div className={styles.root}>
@@ -86,24 +94,24 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
         </Button>
       </div>
 
-      <WizardStepper currentStep={stepIndex} />
+      <WizardStepper steps={steps} currentStep={boundedIndex} />
 
       <div className={styles.body}>
-        {stepIndex === 0 && <ServerTypeStep state={state} onChange={onChange} />}
-        {stepIndex === 1 && <ModpackPickerStep state={state} onChange={onChange} />}
-        {stepIndex === 2 && <VersionStep state={state} onChange={onChange} />}
-        {stepIndex === 3 && <NameLocationStep state={state} onChange={onChange} />}
-        {stepIndex === 4 && <ResourcesStep state={state} onChange={onChange} />}
-        {stepIndex === 5 && <TogglesStep state={state} onChange={onChange} />}
-        {stepIndex === 6 && <PluginsStep state={state} onChange={onChange} />}
-        {stepIndex === 7 && <ReviewStep state={state} onCreated={onCreated} />}
+        {current === 'type' && <ServerTypeStep state={state} onChange={onChange} />}
+        {current === 'modpack' && <ModpackPickerStep state={state} onChange={onChange} />}
+        {current === 'version' && <VersionStep state={state} onChange={onChange} />}
+        {current === 'name' && <NameLocationStep state={state} onChange={onChange} />}
+        {current === 'resources' && <ResourcesStep state={state} onChange={onChange} />}
+        {current === 'toggles' && <TogglesStep state={state} onChange={onChange} />}
+        {current === 'addons' && <PluginsStep state={state} onChange={onChange} />}
+        {current === 'review' && <ReviewStep state={state} onCreated={onCreated} />}
       </div>
 
       <div className={styles.footer}>
         <Button
           appearance="subtle"
           icon={<ArrowLeft24Regular />}
-          disabled={stepIndex === 0}
+          disabled={boundedIndex === 0}
           onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
         >
           Back
@@ -114,7 +122,7 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
             iconPosition="after"
             icon={<ArrowRight24Regular />}
             disabled={!canGoNext}
-            onClick={() => setStepIndex((i) => Math.min(wizardSteps.length - 1, i + 1))}
+            onClick={() => setStepIndex((i) => Math.min(steps.length - 1, i + 1))}
           >
             Next
           </Button>
