@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { makeStyles, tokens, Tooltip, mergeClasses } from '@fluentui/react-components'
+import { makeStyles, tokens, Text, mergeClasses } from '@fluentui/react-components'
 import {
   Grid24Regular,
   Grid24Filled,
@@ -18,46 +18,26 @@ export type NavKey = 'dashboard' | 'plugins' | 'settings'
 
 const useStyles = makeStyles({
   root: {
-    width: '64px',
+    width: '88px',
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    paddingTop: '16px',
-    gap: '8px'
-  },
-  itemWrap: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '48px'
-  },
-  indicator: {
-    position: 'absolute',
-    left: '-12px',
-    width: '3px',
-    height: '18px',
-    borderRadius: tokens.borderRadiusCircular,
-    backgroundColor: tokens.colorBrandBackground,
-    opacity: 0,
-    transform: 'scaleY(0.4)',
-    transitionProperty: 'opacity, transform',
-    transitionDuration: tokens.durationNormal,
-    transitionTimingFunction: tokens.curveEasyEase
-  },
-  indicatorActive: {
-    opacity: 1,
-    transform: 'scaleY(1)'
+    paddingTop: '14px',
+    gap: '6px',
+    borderRight: `1px solid ${tokens.colorNeutralStroke3}`
   },
   item: {
+    position: 'relative',
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '44px',
-    height: '44px',
+    gap: '5px',
+    width: '72px',
+    padding: '10px 4px 8px',
     borderRadius: tokens.borderRadiusLarge,
-    color: tokens.colorNeutralForeground2,
+    color: tokens.colorNeutralForeground3,
     background: 'transparent',
     border: 'none',
     cursor: 'pointer',
@@ -78,6 +58,20 @@ const useStyles = makeStyles({
       backgroundColor: tokens.colorBrandBackground2Hover,
       color: tokens.colorBrandForeground1
     }
+  },
+  indicator: {
+    position: 'absolute',
+    left: '-8px',
+    top: '50%',
+    marginTop: '-9px',
+    width: '3px',
+    height: '18px',
+    borderRadius: tokens.borderRadiusCircular,
+    backgroundColor: tokens.colorBrandBackground
+  },
+  label: {
+    fontSize: '11px',
+    lineHeight: '14px'
   }
 })
 
@@ -92,6 +86,11 @@ interface NavRailProps {
   onSelect: (key: NavKey) => void
 }
 
+/**
+ * Labels are rendered inline rather than in hover tooltips: a Fluent Tooltip
+ * mounts a portal on every hover, and popup layers in this window trigger a
+ * full-window repaint flash.
+ */
 export function NavRail({ active, onSelect }: NavRailProps): JSX.Element {
   const styles = useStyles()
 
@@ -100,19 +99,16 @@ export function NavRail({ active, onSelect }: NavRailProps): JSX.Element {
       {items.map(({ key, label, Icon }) => {
         const isActive = active === key
         return (
-          <Tooltip key={key} content={label} relationship="label" positioning="after">
-            <div className={styles.itemWrap}>
-              <span className={mergeClasses(styles.indicator, isActive && styles.indicatorActive)} />
-              <button
-                className={mergeClasses(styles.item, isActive && styles.itemActive)}
-                onClick={() => onSelect(key)}
-                aria-current={isActive}
-                aria-label={label}
-              >
-                <Icon fontSize={22} />
-              </button>
-            </div>
-          </Tooltip>
+          <button
+            key={key}
+            className={mergeClasses(styles.item, isActive && styles.itemActive)}
+            onClick={() => onSelect(key)}
+            aria-current={isActive}
+          >
+            {isActive && <span className={styles.indicator} />}
+            <Icon fontSize={22} />
+            <Text className={styles.label}>{label}</Text>
+          </button>
         )
       })}
     </nav>

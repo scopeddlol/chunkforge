@@ -100,6 +100,45 @@ export interface StatusChangedEvent {
   status: InstanceStatus
 }
 
+export interface PlayersChangedEvent {
+  instanceId: string
+  players: string[]
+}
+
+export interface ChatMessage {
+  id: string
+  kind: 'chat' | 'join' | 'leave' | 'death' | 'server'
+  author: string | null
+  text: string
+  timestamp: number
+}
+
+export interface PlayerEntry {
+  name: string
+  uuid: string | null
+  online: boolean
+  op: boolean
+  whitelisted: boolean
+  banned: boolean
+}
+
+export interface FileEntry {
+  name: string
+  /** Path relative to the instance root, using forward slashes. */
+  relativePath: string
+  isDirectory: boolean
+  sizeBytes: number
+  modifiedAt: number
+  /** Whether the file is small enough and looks like text we can edit in-app. */
+  editable: boolean
+}
+
+export interface BackupEntry {
+  filename: string
+  sizeBytes: number
+  createdAt: number
+}
+
 export type PluginSource = 'modrinth' | 'hangar' | 'spiget' | 'curseforge'
 
 export const pluginSourceLabels: Record<PluginSource, string> = {

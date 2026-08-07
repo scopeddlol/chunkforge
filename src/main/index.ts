@@ -5,6 +5,7 @@ import { ensureChunkforgeDirs } from './services/paths'
 import { registerServerIpcHandlers } from './ipc/servers'
 import { registerPluginIpcHandlers } from './ipc/plugins'
 import { registerSettingsIpcHandlers } from './ipc/settings'
+import { registerInstanceToolIpcHandlers } from './ipc/instanceTools'
 import { loadSettings } from './store/settingsStore'
 
 function createMainWindow(): BrowserWindow {
@@ -60,6 +61,7 @@ app.whenReady().then(async () => {
   registerServerIpcHandlers(mainWindow)
   registerPluginIpcHandlers()
   registerSettingsIpcHandlers(mainWindow)
+  registerInstanceToolIpcHandlers(mainWindow)
 
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
   ipcMain.handle('window:maximizeToggle', () =>

@@ -14,7 +14,14 @@ import {
   ArrowLeft20Regular,
   Play20Filled,
   Stop20Filled,
-  FolderOpen20Regular
+  FolderOpen20Regular,
+  Window20Regular,
+  Chat20Regular,
+  People20Regular,
+  AppsAddIn20Regular,
+  Folder20Regular,
+  DatabaseArrowUp20Regular,
+  Settings20Regular
 } from '@fluentui/react-icons'
 import type { InstanceMetadata, InstanceStatus } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
@@ -22,6 +29,10 @@ import { ConsoleView } from '../../components/ConsoleView'
 import { useInstancesStore } from '../../state/instancesStore'
 import { InstalledPluginsTab } from './InstalledPluginsTab'
 import { InstanceSettingsTab } from './InstanceSettingsTab'
+import { PlayersTab } from './PlayersTab'
+import { ChatTab } from './ChatTab'
+import { FilesTab } from './FilesTab'
+import { BackupsTab } from './BackupsTab'
 
 const useStyles = makeStyles({
   root: {
@@ -49,7 +60,7 @@ const useStyles = makeStyles({
   loading: { flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }
 })
 
-type TabKey = 'console' | 'plugins' | 'settings'
+type TabKey = 'console' | 'chat' | 'players' | 'plugins' | 'files' | 'backups' | 'settings'
 
 interface InstancePageProps {
   instanceId: string
@@ -62,6 +73,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
   const [metadata, setMetadata] = useState<InstanceMetadata | null>(null)
   const [status, setStatus] = useState<InstanceStatus>('stopped')
   const [tab, setTab] = useState<TabKey>('console')
+  const [onlinePlayers, setOnlinePlayers] = useState<string[]>([])
   const applyStatus = useInstancesStore((s) => s.applyStatus)
   const refreshInstances = useInstancesStore((s) => s.refresh)
 
@@ -85,6 +97,13 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
       applyStatus(event.instanceId, event.status)
     })
   }, [instanceId, applyStatus])
+
+  useEffect(() => {
+    window.chunkforge.players.online(instanceId).then(setOnlinePlayers)
+    return window.chunkforge.players.onChanged((event) => {
+      if (event.instanceId === instanceId) setOnlinePlayers(event.players)
+    })
+  }, [instanceId])
 
   if (!metadata) {
     return (
@@ -119,6 +138,11 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             </Badge>
             <Text size={200}>port {metadata.port}</Text>
             <Text size={200}>{(metadata.maxRamMb / 1024).toFixed(1)} GB max</Text>
+            {isRunning && (
+              <Text size={200}>
+                {onlinePlayers.length}/{metadata.maxPlayers} online
+              </Text>
+            )}
             <StatusDot status={status} />
           </div>
         </div>
@@ -150,13 +174,33 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
         selectedValue={tab}
         onTabSelect={(_, data) => setTab(data.value as TabKey)}
       >
-        <Tab value="console">Console</Tab>
-        <Tab value="plugins">Plugins</Tab>
-        <Tab value="settings">Settings</Tab>
+        <Tab value="console" icon={<Window20Regular />}>
+          Console
+        </Tab>
+        <Tab value="chat" icon={<Chat20Regular />}>
+          Chat
+        </Tab>
+        <Tab value="players" icon={<People20Regular />}>
+          {onlinePlayers.length > 0 ? `Players (${onlinePlayers.length})` : 'Players'}
+        </Tab>
+        <Tab value="plugins" icon={<AppsAddIn20Regular />}>
+          Plugins
+        </Tab>
+        <Tab value="files" icon={<Folder20Regular />}>
+          Files
+        </Tab>
+        <Tab value="backups" icon={<DatabaseArrowUp20Regular />}>
+          Backups
+        </Tab>
+        <Tab value="settings" icon={<Settings20Regular />}>
+          Settings
+        </Tab>
       </TabList>
 
       <div className={styles.tabPanel}>
         {tab === 'console' && <ConsoleView instanceId={instanceId} canSendCommands={isRunning} />}
+        {tab === 'chat' && <ChatTab instanceId={instanceId} serverRunning={isRunning} />}
+        {tab === 'players' && <PlayersTab instanceId={instanceId} serverRunning={isRunning} />}
         {tab === 'plugins' && (
           <InstalledPluginsTab
             instanceId={instanceId}
@@ -164,6 +208,8 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             onBrowse={() => onBrowsePlugins(instanceId)}
           />
         )}
+        {tab === 'files' && <FilesTab instanceId={instanceId} />}
+        {tab === 'backups' && <BackupsTab instanceId={instanceId} serverRunning={isRunning} />}
         {tab === 'settings' && (
           <InstanceSettingsTab
             metadata={metadata}

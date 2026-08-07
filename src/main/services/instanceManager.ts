@@ -19,13 +19,45 @@ import { resolveInstanceDir, saveInstanceMetadata, slugifyInstanceName } from '.
 interface RunningProcess {
   child: ChildProcessWithoutNullStreams
   expectedStop: boolean
+  players: Set<string>
 }
+
+// Vanilla/Paper log lines look like:
+//   [12:00:00] [Server thread/INFO]: Steve joined the game
+const JOIN_PATTERN = /\]: ([A-Za-z0-9_]{1,16}) joined the game/
+const LEAVE_PATTERN = /\]: ([A-Za-z0-9_]{1,16}) left the game/
 
 class InstanceManager extends EventEmitter {
   private running = new Map<string, RunningProcess>()
 
   getStatus(id: string): InstanceStatus {
     return this.running.has(id) ? 'running' : 'stopped'
+  }
+
+  getOnlinePlayers(id: string): string[] {
+    return [...(this.running.get(id)?.players ?? [])]
+  }
+
+  private trackPlayers(instanceId: string, text: string): void {
+    const entry = this.running.get(instanceId)
+    if (!entry) return
+
+    let changed = false
+    for (const line of text.split('\n')) {
+      const joined = line.match(JOIN_PATTERN)
+      if (joined) {
+        entry.players.add(joined[1])
+        changed = true
+        continue
+      }
+      const left = line.match(LEAVE_PATTERN)
+      if (left) {
+        entry.players.delete(left[1])
+        changed = true
+      }
+    }
+
+    if (changed) this.emit('players-changed', { instanceId, players: [...entry.players] })
   }
 
   private emitLog(instanceId: string, stream: LogLineEvent['stream'], line: string): void {
@@ -182,12 +214,13 @@ class InstanceManager extends EventEmitter {
     ]
     const child = spawn(metadata.javaPath, args, { cwd: metadata.path })
 
-    const entry: RunningProcess = { child, expectedStop: false }
+    const entry: RunningProcess = { child, expectedStop: false, players: new Set() }
     this.running.set(metadata.id, entry)
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString()
       this.emitLog(metadata.id, 'stdout', text)
+      this.trackPlayers(metadata.id, text)
       if (/Done \(.+\)! For help, type "help"/.test(text)) {
         this.emitStatus(metadata.id, 'running')
       }
@@ -196,6 +229,7 @@ class InstanceManager extends EventEmitter {
 
     child.on('close', (code) => {
       this.running.delete(metadata.id)
+      this.emit('players-changed', { instanceId: metadata.id, players: [] })
       const status: InstanceStatus = entry.expectedStop || code === 0 ? 'stopped' : 'crashed'
       this.emitStatus(metadata.id, status)
     })

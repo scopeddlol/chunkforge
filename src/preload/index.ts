@@ -1,13 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
+  BackupEntry,
   CreateInstanceConfig,
   CreateProgressEvent,
+  FileEntry,
   InstalledPlugin,
   InstanceMetadata,
   InstanceSummary,
   InstanceToggles,
   LogLineEvent,
+  PlayerEntry,
+  PlayersChangedEvent,
   PluginSearchQuery,
   PluginSearchResponse,
   PluginSource,
@@ -93,12 +97,50 @@ const settings = {
   pickFolder: (title: string): Promise<string | null> => ipcRenderer.invoke('settings:pickFolder', title)
 }
 
+const players = {
+  list: (instanceId: string): Promise<PlayerEntry[]> => ipcRenderer.invoke('players:list', instanceId),
+  online: (instanceId: string): Promise<string[]> => ipcRenderer.invoke('players:online', instanceId),
+  action: (instanceId: string, action: string, name: string, reason?: string): Promise<void> =>
+    ipcRenderer.invoke('players:action', instanceId, action, name, reason),
+  say: (instanceId: string, message: string): Promise<void> =>
+    ipcRenderer.invoke('players:say', instanceId, message),
+  onChanged: (callback: (event: PlayersChangedEvent) => void): (() => void) =>
+    subscribe('players:changed', callback)
+}
+
+const files = {
+  list: (instanceId: string, relativePath: string): Promise<FileEntry[]> =>
+    ipcRenderer.invoke('files:list', instanceId, relativePath),
+  read: (instanceId: string, relativePath: string): Promise<string> =>
+    ipcRenderer.invoke('files:read', instanceId, relativePath),
+  write: (instanceId: string, relativePath: string, contents: string): Promise<void> =>
+    ipcRenderer.invoke('files:write', instanceId, relativePath, contents),
+  delete: (instanceId: string, relativePath: string): Promise<void> =>
+    ipcRenderer.invoke('files:delete', instanceId, relativePath),
+  rename: (instanceId: string, relativePath: string, newName: string): Promise<void> =>
+    ipcRenderer.invoke('files:rename', instanceId, relativePath, newName),
+  createFolder: (instanceId: string, relativePath: string): Promise<void> =>
+    ipcRenderer.invoke('files:createFolder', instanceId, relativePath)
+}
+
+const backups = {
+  list: (instanceId: string): Promise<BackupEntry[]> => ipcRenderer.invoke('backups:list', instanceId),
+  create: (instanceId: string): Promise<BackupEntry> => ipcRenderer.invoke('backups:create', instanceId),
+  restore: (instanceId: string, filename: string): Promise<void> =>
+    ipcRenderer.invoke('backups:restore', instanceId, filename),
+  delete: (instanceId: string, filename: string): Promise<void> =>
+    ipcRenderer.invoke('backups:delete', instanceId, filename)
+}
+
 const chunkforgeApi = {
   window: windowControls,
   theme,
   servers,
   plugins,
-  settings
+  settings,
+  players,
+  files,
+  backups
 }
 
 export type ChunkforgeApi = typeof chunkforgeApi
