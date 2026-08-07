@@ -1,0 +1,294 @@
+import os from 'os'
+import net from 'net'
+import dgram from 'dgram'
+import { statfs } from 'fs/promises'
+import { startCoreApi, type RunningCoreApi } from '@chunkforge/api'
+import { PortalClient } from '@chunkforge/portal/client'
+import type { AgentRequestFrame, PortalFrame, TrafficFrame } from '@chunkforge/portal/protocol'
+import type { PortalNodeStats, PortalTunnel } from '@chunkforge/portal/types'
+
+export interface NodeAgentOptions {
+  portalUrl: string
+  pairingPin: string
+  nodeName: string
+  /** Where instances, runtimes, and settings live on this node. */
+  dataRoot: string
+  heartbeatIntervalMs?: number
+}
+
+export interface RunningNodeAgent {
+  nodeId: string
+  close: () => Promise<void>
+}
+
+/**
+ * A Chunkforge Node.
+ *
+ * The node is where servers actually run — it holds the jars, the worlds, and
+ * the java processes. What it deliberately does not hold is a single open
+ * inbound port. It dials out to a Portal once and keeps that socket, and
+ * everything afterwards arrives down it: player traffic to relay, and
+ * Chunkforge API calls to run against its own embedded Core API.
+ *
+ * That embedded Core API is the whole trick behind "a node links into
+ * Chunkforge's regular UI". The node runs the same server-management code the
+ * desktop app runs, on loopback, reachable only through the Portal socket. So
+ * the UI managing a node 500 miles away is calling the identical endpoints it
+ * calls locally.
+ */
+export async function startNodeAgent(options: NodeAgentOptions): Promise<RunningNodeAgent> {
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000
+  const portal = new PortalClient({ baseUrl: options.portalUrl })
+
+  // The node's own Chunkforge, on loopback. `localOwner` gives it an owner
+  // session without a login screen, exactly as the desktop shell does — the
+  // Portal socket is the only way in, and Portal has already authenticated it.
+  const coreApi: RunningCoreApi = await startCoreApi({
+    dataRoot: options.dataRoot,
+    host: '127.0.0.1',
+    localOwner: true
+  })
+  console.log(`Node Core API listening on ${coreApi.url}`)
+
+  const redeemed = await portal.node.redeem(options.pairingPin, options.nodeName)
+  portal.setToken(redeemed.nodeToken)
+  console.log(`Paired with Portal as node ${redeemed.nodeId}`)
+
+  const link = new PortalLink(portal, redeemed.nodeToken, coreApi)
+  link.connect()
+
+  // Announce nothing up front. Routes are created by Portal when Chunkforge
+  // allocates a subdomain for a server, and pushed down on connect — a node
+  // guessing at port 25565 was how the old build ended up with tunnels nobody
+  // asked for.
+  await portal.node.announceTunnels([]).catch((err: Error) => {
+    console.error(`Could not announce tunnels: ${err.message}`)
+  })
+
+  const beat = async (): Promise<void> => {
+    const startedAt = Date.now()
+    const stats = await sampleStats(options.dataRoot)
+    await portal.node.heartbeat({ ...stats, latencyMs: Date.now() - startedAt }, true)
+  }
+  await beat().catch((err: Error) => console.error(`First heartbeat failed: ${err.message}`))
+  const timer = setInterval(() => {
+    void beat().catch((err: Error) => console.error(`Heartbeat failed: ${err.message}`))
+  }, heartbeatIntervalMs)
+
+  return {
+    nodeId: redeemed.nodeId,
+    close: async () => {
+      clearInterval(timer)
+      link.close()
+      await coreApi.close()
+    }
+  }
+}
+
+/**
+ * The one outbound socket, and everything that arrives on it.
+ *
+ * Reconnection is not optional here: this socket is the node's only contact
+ * with the world, so losing it silently would strand every server on the
+ * machine behind an address that no longer resolves anywhere.
+ */
+class PortalLink {
+  private socket: WebSocket | null = null
+  private closed = false
+  private retryDelayMs = 1000
+  private readonly tcpUpstreams = new Map<string, net.Socket>()
+  private readonly udpUpstreams = new Map<string, dgram.Socket>()
+
+  constructor(
+    private readonly portal: PortalClient,
+    private readonly token: string,
+    private readonly coreApi: RunningCoreApi
+  ) {}
+
+  connect(): void {
+    if (this.closed) return
+    const socket = new WebSocket(this.portal.node.channelUrl(this.token))
+    this.socket = socket
+
+    socket.onopen = () => {
+      this.retryDelayMs = 1000
+      console.log('Portal channel open')
+      // Portal only forwards management calls to a node that says it is ready;
+      // saying so on every reconnect avoids a window where the UI sees the node
+      // as up but unmanageable.
+      this.send({ type: 'agent-ready', ready: true })
+    }
+
+    socket.onmessage = (event) => {
+      let frame: PortalFrame
+      try {
+        frame = JSON.parse(String(event.data)) as PortalFrame
+      } catch {
+        return
+      }
+      this.handleFrame(frame)
+    }
+
+    socket.onclose = () => {
+      this.socket = null
+      this.dropUpstreams()
+      if (this.closed) return
+      setTimeout(() => this.connect(), this.retryDelayMs)
+      // Backing off keeps a Portal that is down or restarting from being hit
+      // once a second by every node attached to it.
+      this.retryDelayMs = Math.min(this.retryDelayMs * 2, 30_000)
+    }
+
+    socket.onerror = () => socket.close()
+  }
+
+  close(): void {
+    this.closed = true
+    this.socket?.close()
+    this.dropUpstreams()
+  }
+
+  private send(frame: PortalFrame): void {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(frame))
+  }
+
+  private handleFrame(frame: PortalFrame): void {
+    if (frame.type === 'agent-request') {
+      void this.runAgentRequest(frame)
+      return
+    }
+    if (frame.type === 'agent-response' || frame.type === 'agent-ready') return
+    this.handleTraffic(frame)
+  }
+
+  /** Runs a forwarded Chunkforge API call against this node's own Core API. */
+  private async runAgentRequest(frame: AgentRequestFrame): Promise<void> {
+    try {
+      const response = await fetch(this.coreApi.url + frame.path, {
+        method: frame.method,
+        headers: {
+          ...frame.headers,
+          // The node's Core API demands auth like any other; the shell session
+          // it minted at startup is what authorises calls arriving over Portal.
+          ...(this.coreApi.sessionToken
+            ? { authorization: `Bearer ${this.coreApi.sessionToken}` }
+            : {})
+        },
+        body: frame.body ? Buffer.from(frame.body, 'base64') : undefined
+      })
+      const payload = Buffer.from(await response.arrayBuffer())
+      this.send({
+        type: 'agent-response',
+        requestId: frame.requestId,
+        status: response.status,
+        headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' },
+        body: payload.toString('base64')
+      })
+    } catch (err) {
+      this.send({
+        type: 'agent-response',
+        requestId: frame.requestId,
+        status: 500,
+        headers: {},
+        error: (err as Error).message
+      })
+    }
+  }
+
+  private handleTraffic(frame: TrafficFrame): void {
+    if (frame.protocol === 'tcp') {
+      this.handleTcp(frame)
+      return
+    }
+    this.handleUdp(frame)
+  }
+
+  private handleTcp(frame: TrafficFrame): void {
+    if (frame.type === 'tcp-open') {
+      // `targetPort`, not `publicPort`: Portal allocates public ports from its
+      // own range, and they rarely match what the server listens on here.
+      const upstream = net.createConnection({ host: '127.0.0.1', port: frame.targetPort })
+      this.tcpUpstreams.set(frame.connectionId, upstream)
+
+      upstream.on('data', (chunk: Buffer) => {
+        this.send({ ...frame, type: 'tcp-data', payload: chunk.toString('base64') })
+      })
+      const end = (): void => {
+        if (!this.tcpUpstreams.delete(frame.connectionId)) return
+        this.send({ ...frame, type: 'tcp-end', payload: undefined })
+      }
+      upstream.on('close', end)
+      upstream.on('error', () => {
+        upstream.destroy()
+        end()
+      })
+      return
+    }
+
+    const upstream = this.tcpUpstreams.get(frame.connectionId)
+    if (!upstream) return
+    if (frame.type === 'tcp-data' && frame.payload) {
+      upstream.write(Buffer.from(frame.payload, 'base64'))
+    }
+    if (frame.type === 'tcp-end') {
+      upstream.end()
+      this.tcpUpstreams.delete(frame.connectionId)
+    }
+  }
+
+  private handleUdp(frame: TrafficFrame): void {
+    let upstream = this.udpUpstreams.get(frame.connectionId)
+    if (!upstream) {
+      upstream = dgram.createSocket('udp4')
+      upstream.on('message', (message: Buffer) => {
+        this.send({ ...frame, type: 'udp-message', payload: message.toString('base64') })
+      })
+      this.udpUpstreams.set(frame.connectionId, upstream)
+    }
+    if (frame.payload) {
+      upstream.send(Buffer.from(frame.payload, 'base64'), frame.targetPort, '127.0.0.1')
+    }
+  }
+
+  private dropUpstreams(): void {
+    for (const socket of this.tcpUpstreams.values()) socket.destroy()
+    this.tcpUpstreams.clear()
+    for (const socket of this.udpUpstreams.values()) socket.close()
+    this.udpUpstreams.clear()
+  }
+}
+
+/**
+ * Real numbers, not guesses. The scheduler and the node cards both read these,
+ * and a node that misreports its free disk is a node that fills up mid-install.
+ */
+async function sampleStats(dataRoot: string): Promise<PortalNodeStats> {
+  const totalMemoryBytes = os.totalmem()
+  const usedMemoryBytes = totalMemoryBytes - os.freemem()
+  const cpuCores = os.cpus().length || 1
+  const load = os.loadavg()[0] ?? 0
+
+  let totalStorageBytes = 0
+  let usedStorageBytes = 0
+  try {
+    // statfs reports the container's view of the volume the servers actually
+    // live on, which is the one that matters — the host's spare terabyte is no
+    // use inside a bind mount.
+    const fs = await statfs(dataRoot)
+    totalStorageBytes = fs.blocks * fs.bsize
+    usedStorageBytes = (fs.blocks - fs.bfree) * fs.bsize
+  } catch {
+    // Left at zero; the UI renders that as unknown rather than as an empty disk.
+  }
+
+  return {
+    cpuPercent: Math.max(0, Math.min(100, Math.round((load / cpuCores) * 100))),
+    cpuCores,
+    totalMemoryBytes,
+    usedMemoryBytes,
+    totalStorageBytes,
+    usedStorageBytes
+  }
+}
+
+export type { PortalTunnel }

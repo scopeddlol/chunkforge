@@ -7,20 +7,28 @@
   "workspaces": [
     "packages/core",
     "packages/api",
+    "packages/portal",
+    "packages/web",
     "packages/desktop",
     "packages/node-worker"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @chunkforge/desktop",
+    "dev:portal": "npm run dev --workspace @chunkforge/portal",
+    "dev:web": "npm run dev --workspace @chunkforge/web",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build:win": "npm run build:win --workspace @chunkforge/desktop",
-    "build:portal": "npm run build:portal --workspace @chunkforge/desktop",
+    "build:web": "npm run build --workspace @chunkforge/web",
+    "build:portal": "npm run build --workspace @chunkforge/portal",
     "build:image:portal": "docker build -f Dockerfile.portal -t chunkforge-portal:local .",
+    "build:image:web": "docker build -f Dockerfile.web -t chunkforge-web:local .",
     "build:image:node": "docker build -f Dockerfile.node -t chunkforge-node:local .",
-    "build:images": "npm run build:image:portal && npm run build:image:node",
+    "build:images": "npm run build:image:portal && npm run build:image:web && npm run build:image:node",
     "release:win": "npm run release:win --workspace @chunkforge/desktop",
-    "api": "npm run dev --workspace @chunkforge/api"
+    "api": "npm run dev --workspace @chunkforge/api",
+    "portal": "npm run start --workspace @chunkforge/portal",
+    "web": "npm run start --workspace @chunkforge/web"
   },
   "overrides": {
     "app-builder-bin": "5.0.0-alpha.13"

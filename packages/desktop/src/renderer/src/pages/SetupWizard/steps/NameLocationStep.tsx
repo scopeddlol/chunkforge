@@ -6,12 +6,17 @@ import {
   Field,
   Input,
   Button,
+  Dropdown,
+  Option,
+  Text,
   mergeClasses
 } from '@fluentui/react-components'
 import { Checkmark16Filled, FolderOpen24Regular, ArrowResetRegular } from '@fluentui/react-icons'
+import type { Node } from '@shared/types'
 import { accentSwatches, type WizardState } from '../wizardState'
 import { WizardPanel } from '../WizardPanel'
 import { native } from '../../../native'
+import { api } from '../../../api'
 
 const useStyles = makeStyles({
   root: {
@@ -65,10 +70,23 @@ interface NameLocationStepProps {
 export function NameLocationStep({ state, onChange }: NameLocationStepProps): JSX.Element {
   const styles = useStyles()
   const [defaultRoot, setDefaultRoot] = useState('')
+  const [nodes, setNodes] = useState<Node[]>([])
 
   useEffect(() => {
     native().getDefaultInstancesRoot().then(setDefaultRoot)
   }, [])
+
+  useEffect(() => {
+    void api()
+      .nodes.list()
+      // Only nodes this Chunkforge has adopted can be deployed to, so offering
+      // the rest would just be a list of ways to fail.
+      .then((all) => setNodes(all.filter((node) => node.kind === 'local' || node.claimed)))
+      .catch(() => setNodes([]))
+  }, [])
+
+  const remoteNodes = nodes.filter((node) => node.kind === 'portal')
+  const isRemote = state.nodeId !== 'local'
 
   async function handleBrowse(): Promise<void> {
     const picked = await native().pickFolder('Choose where this server is created')
@@ -110,25 +128,52 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
           </div>
         </Field>
 
-        <Field label="Install location" hint="A folder named after your server is created here.">
-          <div className={styles.locationRow}>
-            <Input className={styles.locationInput} value={displayedLocation} readOnly />
-            <Button icon={<FolderOpen24Regular />} onClick={handleBrowse}>
-              Browse…
-            </Button>
-          </div>
-          {state.installLocation && (
-            <Button
-              appearance="transparent"
-              size="small"
-              className={styles.resetLink}
-              icon={<ArrowResetRegular />}
-              onClick={() => onChange({ installLocation: null })}
+        {remoteNodes.length > 0 && (
+          <Field
+            label="Run this server on"
+            hint="Servers on a node get their own address automatically, and need no ports opened."
+          >
+            <Dropdown
+              value={nodes.find((node) => node.id === state.nodeId)?.name ?? 'This machine'}
+              selectedOptions={[state.nodeId]}
+              onOptionSelect={(_, data) => onChange({ nodeId: data.optionValue ?? 'local' })}
             >
-              Reset to default
-            </Button>
-          )}
-        </Field>
+              {nodes.map((node) => (
+                <Option key={node.id} value={node.id} text={node.name}>
+                  {node.name}
+                  {node.kind === 'portal' && node.status !== 'online' ? ' (offline)' : ''}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+        )}
+
+        {isRemote ? (
+          <Text size={200} className={styles.locationHint}>
+            This server is created on the node, in its own storage. Chunkforge will ask your Portal for
+            an address once it exists.
+          </Text>
+        ) : (
+          <Field label="Install location" hint="A folder named after your server is created here.">
+            <div className={styles.locationRow}>
+              <Input className={styles.locationInput} value={displayedLocation} readOnly />
+              <Button icon={<FolderOpen24Regular />} onClick={handleBrowse}>
+                Browse…
+              </Button>
+            </div>
+            {state.installLocation && (
+              <Button
+                appearance="transparent"
+                size="small"
+                className={styles.resetLink}
+                icon={<ArrowResetRegular />}
+                onClick={() => onChange({ installLocation: null })}
+              >
+                Reset to default
+              </Button>
+            )}
+          </Field>
+        )}
       </WizardPanel>
     </div>
   )

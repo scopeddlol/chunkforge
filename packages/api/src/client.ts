@@ -9,8 +9,8 @@ import type {
   InstanceSummary,
   Node,
   NodeStats,
+  PortalDomainBinding,
   PortalSettings,
-  PortalTunnelPort,
   PlayerEntry,
   Project,
   PluginSearchQuery,
@@ -234,26 +234,25 @@ export class ChunkforgeClient {
     list: () => this.get<Project[]>('/api/projects')
   }
 
+  // Nodes are paired at the Portal, not here — this Chunkforge only discovers
+  // them and claims the ones it wants to manage.
   nodes = {
     list: () => this.get<Node[]>('/api/nodes'),
-    createPairingCode: (name?: string) =>
-      this.post<{ node: Node; pairingCode: string }>('/api/nodes/pairing-code', name ? { name } : {}),
-    pair: (code: string) => this.post<Node>('/api/nodes/pair', { code }),
-    heartbeat: (id: string, stats: NodeStats) => this.post<Node>(`/api/nodes/${id}/heartbeat`, stats)
+    claim: (id: string) => this.post<Node>(`/api/nodes/${id}/claim`),
+    release: (id: string) => this.post<{ ok: true }>(`/api/nodes/${id}/release`),
+    reportLocalStats: (stats: NodeStats) => this.post<Node>('/api/nodes/local/stats', stats)
   }
 
   portal = {
     status: () => this.get<PortalSettings>('/api/portal'),
-    createDesktopPin: () => this.post<{ pin: string; portal: PortalSettings }>('/api/portal/pin'),
-    connectDesktop: (pin: string) => this.post<PortalSettings>('/api/portal/connect', { pin }),
-    redeemNodePin: (pin: string, nodeName: string) =>
-      this.post<{ nodeId: string; nodeToken: string }>('/api/portal/nodes/redeem', { pin, nodeName }),
-    heartbeat: (nodeToken: string, stats: NodeStats) =>
-      this.post<Node>('/api/portal/nodes/heartbeat', { nodeToken, stats }),
-    registerTunnels: (nodeToken: string, ports: PortalTunnelPort[]) =>
-      this.post<Node>('/api/portal/nodes/tunnels', { nodeToken, ports }),
-    provisionInstanceHostname: (instanceId: string, force = false) =>
-      this.post<InstanceMetadata>(`/api/portal/domains/provision/${instanceId}`, { force })
+    refresh: () => this.post<PortalSettings>('/api/portal/refresh'),
+    connect: (portalUrl: string, pin: string, name?: string, kind: 'desktop' | 'web' = 'desktop') =>
+      this.post<PortalSettings>('/api/portal/connect', { portalUrl, pin, name, kind }),
+    disconnect: () => this.post<PortalSettings>('/api/portal/disconnect'),
+    domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
+    provisionDomain: (instanceId: string, force = false) =>
+      this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}`, { force }),
+    releaseDomain: (instanceId: string) => this.del<{ ok: true }>(`/api/portal/domains/${instanceId}`)
   }
 
   filehub = {

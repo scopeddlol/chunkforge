@@ -1,0 +1,30 @@
+{
+  "name": "@chunkforge/web",
+  "version": "0.4.0",
+  "description": "Chunkforge Web — the Chunkforge UI in Docker, optionally with a node packaged in",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@chunkforge/api": "*",
+    "@chunkforge/core": "*",
+    "@chunkforge/node-worker": "*"
+  },
+  "devDependencies": {
+    "@fluentui/react-components": "^9.54.15",
+    "@fluentui/react-icons": "^2.0.257",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.19.2",
+    "vite": "^5.4.8",
+    "zustand": "^4.5.5"
+  }
+}

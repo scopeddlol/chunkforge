@@ -1,11 +1,24 @@
+# Chunkforge Node — run this anywhere servers should live.
+#
+# Your bedroom PC, a friend's Docker host, a spare box in a cupboard. Note there
+# are no published ports: the node reaches its Portal outbound and never accepts
+# an inbound connection, so nothing has to be opened on the network it sits on.
 services:
   chunkforge-node:
     build:
       context: .
       dockerfile: Dockerfile.node
+    image: ghcr.io/scopeddlol/chunkforge-node:latest
     environment:
       CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL}
+      # Generated under Portal → Nodes. Single-use and short-lived.
       CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN}
       CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Chunkforge Node}
       CHUNKFORGE_HEARTBEAT_MS: ${CHUNKFORGE_HEARTBEAT_MS:-15000}
+      CHUNKFORGE_DATA: /data
+    volumes:
+      - chunkforge-node-data:/data
     restart: unless-stopped
+
+volumes:
+  chunkforge-node-data:

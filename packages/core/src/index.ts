@@ -75,18 +75,13 @@ export {
 } from './store/instancesStore'
 export { getSettings, loadSettings, saveSettings } from './store/settingsStore'
 export { runMigrations, migrateInstance, CURRENT_SCHEMA_VERSION } from './store/migrations'
+export { listLocalNodes, getLocalNode, updateLocalNodeStats } from './store/nodesStore'
 export {
-  listNodes,
-  createNodePairingCode,
-  pairNodeByCode,
-  updateNodeHeartbeat
-} from './store/nodesStore'
-export {
-  createDesktopConnectorPin,
   getPortalStatus,
-  connectDesktopToPortal,
-  redeemNodePortalPin,
-  updatePortalNodeHeartbeat,
-  registerPortalNodeTunnels,
-  autoProvisionInstancePortalHostname
+  savePortalStatus,
+  isPortalLinked,
+  requirePortalLink,
+  clearPortalLink,
+  bindInstanceHostname,
+  unbindInstanceHostname
 } from './store/portalStore'

@@ -1,0 +1,27 @@
+# Chunkforge Web with a node packaged in.
+#
+# For a homelab box that both runs the panel and hosts the servers. One
+# container, one volume, and the servers it hosts are reachable by subdomain
+# through the Portal exactly like any other node's.
+services:
+  chunkforge-web:
+    image: ghcr.io/scopeddlol/chunkforge-web:latest
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      CHUNKFORGE_DATA: /data
+
+      CHUNKFORGE_EMBEDDED_NODE: "true"
+      CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL}
+      # A node pin from Portal → Nodes. Not the control plane pin — that one is
+      # entered in the web UI under Settings → Chunkforge Portal.
+      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN}
+      CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Homelab}
+    ports:
+      - "${CHUNKFORGE_WEB_PORT:-8080}:8080"
+    volumes:
+      - web-data:/data
+    restart: unless-stopped
+
+volumes:
+  web-data:

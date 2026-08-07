@@ -67,6 +67,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
   const [draft, setDraft] = useState<InstanceMetadata>(metadata)
   const [saving, setSaving] = useState(false)
   const [provisioningHost, setProvisioningHost] = useState(false)
+  const [hostError, setHostError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteFiles, setDeleteFiles] = useState(true)
 
@@ -98,12 +99,21 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
     }
   }
 
+  /**
+   * Asks Portal for this server's address. Normally unnecessary — every server
+   * created on a node gets one automatically — but it is here for a server that
+   * predates the Portal link, or one whose name changed.
+   */
   async function provisionPortalHostname(): Promise<void> {
     setProvisioningHost(true)
+    setHostError(null)
     try {
-      const updated = await api().portal.provisionInstanceHostname(metadata.id, Boolean(draft.portalHostname))
+      const domain = await api().portal.provisionDomain(metadata.id, Boolean(draft.portalHostname))
+      const updated = { ...draft, portalHostname: domain.hostname, portalPublicPort: domain.publicPort }
       setDraft(updated)
       onSaved(updated)
+    } catch (err) {
+      setHostError(err instanceof Error ? err.message : 'Could not allocate an address.')
     } finally {
       setProvisioningHost(false)
     }
@@ -238,8 +248,16 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
             {metadata.javaMajor ? ` (Java ${metadata.javaMajor})` : ''}
           </Text>
         </Field>
-        <Field label="Portal hostname" hint="Public hostname assigned by Chunkforge Portal when auto-provisioning is enabled.">
-          <div className={styles.portalHost}>{draft.portalHostname ?? 'Not provisioned yet'}</div>
+        <Field
+          label="Public address"
+          hint="Allocated by your Portal. Servers on a node get one automatically."
+          validationMessage={hostError ?? undefined}
+        >
+          <div className={styles.portalHost}>
+            {draft.portalHostname
+              ? `${draft.portalHostname}${draft.portalPublicPort ? `:${draft.portalPublicPort}` : ''}`
+              : 'No address — this server runs on this machine'}
+          </div>
         </Field>
         <div className={styles.actions}>
           <Button
@@ -253,7 +271,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
             disabled={provisioningHost}
             onClick={() => void provisionPortalHostname()}
           >
-            {provisioningHost ? 'Provisioning…' : draft.portalHostname ? 'Regenerate Hostname' : 'Provision Hostname'}
+            {provisioningHost ? 'Allocating…' : draft.portalHostname ? 'Reallocate Address' : 'Allocate Address'}
           </Button>
         </div>
       </div>

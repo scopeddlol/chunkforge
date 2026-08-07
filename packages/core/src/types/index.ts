@@ -73,10 +73,12 @@ export interface InstanceSummary {
   groupId?: string | null
   /** Owning project. Stamped by migration on records that predate projects. */
   projectId?: string
-  /** Node this instance runs on. `local` until remote nodes are paired. */
+  /** Node this instance runs on. `local` unless it was deployed to a Portal node. */
   nodeId?: string
-  /** Public portal hostname (e.g. server-1.play.example.com) when provisioned. */
+  /** Address players connect to, allocated by Portal (e.g. survival.play.example.com). */
   portalHostname?: string
+  /** Public port Portal accepts traffic on for this server. */
+  portalPublicPort?: number
 }
 
 export interface InstanceMetadata extends InstanceSummary {
@@ -149,6 +151,26 @@ export interface CreateInstanceConfig {
   /** Modpack to install over the fresh server, replacing manual mod picking. */
   modpack?: SelectedModpack | null
   exposedPorts?: PortalTunnelPort[]
+  /**
+   * Where to build the server. `local` (the default) means this machine;
+   * anything else is a Portal node id, and the whole creation is carried out on
+   * that node instead.
+   */
+  nodeId?: string
+}
+
+/**
+ * Where a server lives, when it does not live here.
+ *
+ * A remote server's real record is on the node that runs it. This control plane
+ * keeps only the pointer, so it knows which node to forward `/api/servers/:id`
+ * calls to without asking every node in turn.
+ */
+export interface RemoteInstanceRef {
+  instanceId: string
+  nodeId: string
+  name: string
+  createdAt: string
 }
 
 export interface QueuedPlugin {
@@ -380,16 +402,30 @@ export interface FileHubSettings {
   uploadBackupsAutomatically: boolean
 }
 
+/**
+ * This Chunkforge's link to a Portal.
+ *
+ * Everything here describes the *client* side of that relationship. The zone,
+ * the port range, and who else is attached are Portal's business and are
+ * configured in Portal's own web interface — Chunkforge only mirrors the few
+ * fields it needs in order to show what an address will look like.
+ */
 export interface PortalSettings {
   enabled: boolean
-  publicBaseUrl: string
-  relayBaseUrl: string
-  defaultDomainSuffix: string
-  trustProxy: boolean
-  autoProvisionSubdomains: boolean
-  desktopConnectorPin: string
+  /** Base URL of the Portal, e.g. https://portal.example.com */
+  portalUrl: string
+  /** Identity Portal issued when the pairing pin was redeemed. */
+  clientId: string
+  /** Bearer token for this control plane. Never leaves the machine. */
+  clientToken: string
+  /** Mirrored from Portal, e.g. play.example.com */
+  zoneSuffix: string
   connectionStatus: 'disconnected' | 'connecting' | 'connected'
   connectedAt?: string
+  /** Last failure, so the UI can explain a red status instead of just showing one. */
+  lastError?: string
+  /** Request a subdomain from Portal for every server created on a node. */
+  autoProvisionSubdomains: boolean
 }
 
 export interface AppSettings {
@@ -407,8 +443,14 @@ export interface AppSettings {
   /** @deprecated Migrated into `projects`; retained so older builds still read. */
   serverGroups: ServerGroup[]
   projects: Project[]
-  /** Known hosts. Always contains the local node; remote ones are added by pairing. */
+  /**
+   * Only the local node. Remote nodes are not stored here — they belong to the
+   * Portal, which is the single place they are paired and named, and are read
+   * live so two control planes never disagree about what exists.
+   */
   nodes: Node[]
+  /** Pointers to servers that live on Portal nodes rather than this machine. */
+  remoteInstances: RemoteInstanceRef[]
   dashboardView: DashboardView
 }
 
@@ -425,16 +467,16 @@ export const defaultAppSettings: AppSettings = {
   serverGroups: [],
   projects: [],
   nodes: [{ id: LOCAL_NODE_ID, name: 'This machine', kind: 'local', status: 'online' }],
+  remoteInstances: [],
   dashboardView: 'grid',
   portal: {
     enabled: false,
-    publicBaseUrl: '',
-    relayBaseUrl: '',
-    defaultDomainSuffix: '',
-    trustProxy: true,
-    autoProvisionSubdomains: true,
-    desktopConnectorPin: '',
-    connectionStatus: 'disconnected'
+    portalUrl: '',
+    clientId: '',
+    clientToken: '',
+    zoneSuffix: '',
+    connectionStatus: 'disconnected',
+    autoProvisionSubdomains: true
   },
   fileHub: {
     baseUrl: '',

@@ -2,6 +2,7 @@ node_modules/
 out/
 dist/
 dist-electron/
+ui-dist/
 release/
 *.log
 *.tsbuildinfo

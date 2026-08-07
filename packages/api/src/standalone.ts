@@ -3,8 +3,11 @@ import { join } from 'path'
 import { startCoreApi } from './index'
 
 /**
- * Standalone entrypoint for the Docker panel and for local development.
- * The desktop app does not use this — it embeds createCoreApi directly.
+ * Headless Core API, for development and for anything that wants Chunkforge's
+ * API without a UI in front of it.
+ *
+ * Chunkforge Web does not use this — it has its own entrypoint, which also
+ * serves the UI and can bring up a co-located node. See `@chunkforge/web`.
  */
 const dataRoot = process.env.CHUNKFORGE_DATA ?? join(homedir(), 'Chunkforge')
 const port = Number(process.env.PORT ?? 8080)
@@ -15,14 +18,7 @@ const allowedOrigins = (process.env.CHUNKFORGE_ALLOWED_ORIGINS ?? '')
   .map((value) => value.trim())
   .filter(Boolean)
 
-const running = await startCoreApi({
-  dataRoot,
-  port,
-  host,
-  logger: true,
-  allowedOrigins,
-  servePortal: true
-})
+const running = await startCoreApi({ dataRoot, port, host, logger: true, allowedOrigins })
 console.log(`Chunkforge Core API listening on ${running.url}`)
 console.log(`Data root: ${dataRoot}`)
 

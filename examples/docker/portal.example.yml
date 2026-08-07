@@ -1,0 +1,20 @@
+# Chunkforge Portal, on a VPS. Needed by both deployment modes.
+services:
+  chunkforge-portal:
+    image: ghcr.io/scopeddlol/chunkforge-portal:latest
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      CHUNKFORGE_PORTAL_DATA: /data
+    ports:
+      - "${CHUNKFORGE_PORTAL_PORT:-8080}:8080"
+      # Player traffic for every server on every node lands in this range.
+      # It must match Portal → Settings → port range.
+      - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/tcp"
+      - "${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}:${CHUNKFORGE_RANGE_START:-25600}-${CHUNKFORGE_RANGE_END:-25699}/udp"
+    volumes:
+      - portal-data:/data
+    restart: unless-stopped
+
+volumes:
+  portal-data:

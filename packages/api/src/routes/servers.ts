@@ -4,7 +4,6 @@ import { join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import {
   instanceManager,
-  autoProvisionInstancePortalHostname,
   listInstanceMetadata,
   listVersions,
   loadInstanceMetadata,
@@ -17,6 +16,13 @@ import {
   type ServerType
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
+import { callNodeAgent, provisionInstanceDomain, releaseInstanceDomain } from '../portalLink'
+import {
+  createRemoteInstance,
+  forgetRemoteInstance,
+  listRemoteInstances,
+  nodeForInstance
+} from '../remoteInstances'
 
 /**
  * Live process state always wins over what was persisted, since the stored
@@ -48,7 +54,14 @@ function toSummary(metadata: InstanceMetadata): InstanceSummary {
 }
 
 export async function registerServerRoutes(app: FastifyInstance): Promise<void> {
+  // One list, wherever the servers actually run. Remote ones are fetched from
+  // their nodes through Portal and appear beside the local ones.
   app.get('/api/servers', { preHandler: requireRole('viewer') }, async () => {
+    const [local, remote] = await Promise.all([listLocalSummaries(), listRemoteInstances()])
+    return [...local, ...remote]
+  })
+
+  async function listLocalSummaries(): Promise<InstanceSummary[]> {
     const all = await listInstanceMetadata()
     return Promise.all(
       all.map(async (metadata) => {
@@ -63,7 +76,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
         }
       })
     )
-  })
+  }
 
   app.get<{ Params: { id: string } }>(
     '/api/servers/:id',
@@ -77,13 +90,36 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     }
   )
 
+  /**
+   * Creates a server, here or on a node.
+   *
+   * Both paths end the same way: the server exists, and then Portal is asked
+   * for an address for it. That second step is what makes every server
+   * reachable by name without anyone opening a port — see `provisionInstanceDomain`.
+   */
   app.post<{ Body: CreateInstanceConfig }>(
     '/api/servers',
     { preHandler: requireRole('member') },
     async (request, reply) => {
+      const targetNode = request.body?.nodeId
       try {
+        if (targetNode && targetNode !== 'local') {
+          const created = await createRemoteInstance(targetNode, request.body)
+          const metadata = {
+            ...(created as unknown as InstanceMetadata),
+            id: created.id,
+            name: created.name,
+            port: created.port,
+            nodeId: targetNode
+          }
+          const domain = await provisionInstanceDomain(metadata).catch(() => null)
+          return { ...created, nodeId: targetNode, portalHostname: domain?.hostname ?? null }
+        }
+
         const created = await instanceManager.createInstance(request.body)
-        return await autoProvisionInstancePortalHostname(created.id)
+        // A local server has no Portal route: Portal proxies to nodes, and this
+        // machine is not one. It keeps its plain host:port.
+        return created
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }
@@ -161,8 +197,24 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: requireRole('admin') },
     async (request) => {
       const { id } = request.params
+      // A remote server is destroyed on its own node, but the subdomain and the
+      // pointer to it are ours to clean up — so this one call is forwarded by
+      // hand rather than by the transparent hook.
+      const remoteNode = nodeForInstance(id)
+      if (remoteNode) {
+        await callNodeAgent(
+          remoteNode,
+          'DELETE',
+          `/api/servers/${encodeURIComponent(id)}?deleteFiles=${request.query.deleteFiles === 'true'}`
+        ).catch(() => undefined)
+        await releaseInstanceDomain({ id })
+        await forgetRemoteInstance(id)
+        return { ok: true }
+      }
+
       await instanceManager.stopInstance(id).catch(() => undefined)
       const metadata = await loadInstanceMetadata(id)
+      await releaseInstanceDomain(metadata)
       if (request.query.deleteFiles === 'true') {
         await rm(metadata.path, { recursive: true, force: true })
       }

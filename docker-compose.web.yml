@@ -1,0 +1,37 @@
+# Chunkforge Web — run this on your homelab.
+#
+# This is deployment mode 2: the Chunkforge UI in a browser instead of on one
+# desktop, attached to a Portal on a VPS, deploying to nodes. Roughly the shape
+# of Pterodactyl and Wings, with automatic subdomain provisioning in the middle.
+#
+# Port 8080 here is the *panel*, on your own network. Player traffic never
+# touches this container — it arrives at the Portal and is forwarded to whichever
+# node runs the server.
+services:
+  chunkforge-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: ghcr.io/scopeddlol/chunkforge-web:latest
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      CHUNKFORGE_DATA: /data
+      CHUNKFORGE_ALLOWED_ORIGINS: ${CHUNKFORGE_ALLOWED_ORIGINS:-}
+
+      # --- optional: run a Chunkforge Node in this same container ---
+      # Turn this on when this box should also *host* servers, not just manage
+      # them. Off by default, because a panel that only deploys elsewhere has no
+      # use for it.
+      CHUNKFORGE_EMBEDDED_NODE: ${CHUNKFORGE_EMBEDDED_NODE:-false}
+      CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL:-}
+      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN:-}
+      CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Chunkforge Web (local node)}
+    ports:
+      - "${CHUNKFORGE_WEB_PORT:-8080}:8080"
+    volumes:
+      - chunkforge-web-data:/data
+    restart: unless-stopped
+
+volumes:
+  chunkforge-web-data:

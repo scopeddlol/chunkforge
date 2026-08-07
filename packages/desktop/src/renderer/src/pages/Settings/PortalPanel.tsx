@@ -1,5 +1,15 @@
 import { useEffect, useState, type JSX } from 'react'
-import { Badge, Button, Field, Input, Switch, Text, makeStyles, tokens } from '@fluentui/react-components'
+import {
+  Badge,
+  Button,
+  Field,
+  Input,
+  Link,
+  Switch,
+  Text,
+  makeStyles,
+  tokens
+} from '@fluentui/react-components'
 import type { AppSettings } from '@shared/types'
 import { api, onEvent } from '../../api'
 
@@ -17,15 +27,12 @@ const useStyles = makeStyles({
   muted: { color: tokens.colorNeutralForeground3 },
   row: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' },
   headerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
-  codeBox: {
-    minWidth: '150px',
+  error: { color: tokens.colorPaletteRedForeground2 },
+  zone: {
     padding: '10px 12px',
     borderRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground2,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    fontFamily: 'Consolas, monospace',
-    fontSize: '16px',
-    letterSpacing: '1px'
+    fontFamily: 'Consolas, monospace'
   }
 })
 
@@ -34,37 +41,53 @@ interface PortalPanelProps {
   onPatch: (patch: Partial<AppSettings>) => void
 }
 
+/**
+ * Attaching this Chunkforge to a Portal.
+ *
+ * Note what this panel no longer does: it does not configure a zone, a port
+ * range, or a public address. Those belong to the Portal and are set in the
+ * Portal's own web interface — this side only redeems a pin and then reports
+ * what it was given.
+ */
 export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Element {
   const styles = useStyles()
   const portal = settings.portal
-  const [desktopPin, setDesktopPin] = useState(portal.desktopConnectorPin)
+  const [portalUrl, setPortalUrl] = useState(portal.portalUrl)
+  const [pin, setPin] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => setDesktopPin(portal.desktopConnectorPin), [portal.desktopConnectorPin])
+  useEffect(() => setPortalUrl(portal.portalUrl), [portal.portalUrl])
 
-  useEffect(() => onEvent('portal-status', (next) => setDesktopPin(next.desktopConnectorPin)), [])
+  useEffect(
+    () =>
+      onEvent('portal-status', (next) => {
+        onPatch({ portal: next })
+        setPortalUrl(next.portalUrl)
+      }),
+    [onPatch]
+  )
 
-  function patchPortal(patch: Partial<AppSettings['portal']>): void {
-    onPatch({ portal: { ...portal, ...patch } })
-  }
+  const linked = portal.connectionStatus === 'connected' && Boolean(portal.clientId)
 
-  async function generatePin(): Promise<void> {
+  async function connect(): Promise<void> {
     setBusy(true)
+    setError(null)
     try {
-      const result = await api().portal.createDesktopPin()
-      patchPortal(result.portal)
-      setDesktopPin(result.pin)
+      const next = await api().portal.connect(portalUrl, pin, 'Chunkforge Desktop', 'desktop')
+      onPatch({ portal: next })
+      setPin('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not pair with that Portal.')
     } finally {
       setBusy(false)
     }
   }
 
-  async function connectDesktop(): Promise<void> {
-    if (!desktopPin.trim()) return
+  async function disconnect(): Promise<void> {
     setBusy(true)
     try {
-      const next = await api().portal.connectDesktop(desktopPin)
-      patchPortal(next)
+      onPatch({ portal: await api().portal.disconnect() })
     } finally {
       setBusy(false)
     }
@@ -76,72 +99,87 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
         <Text weight="semibold" className={styles.title}>
           Chunkforge Portal
         </Text>
-        <Badge appearance="tint" color={portal.connectionStatus === 'connected' ? 'success' : 'informative'}>
+        <Badge appearance="tint" color={linked ? 'success' : 'informative'}>
           {portal.connectionStatus}
         </Badge>
       </div>
       <Text size={200} className={styles.muted}>
-        Configure the self-hosted proxy panel your remote nodes and external clients connect through.
+        Attach this Chunkforge to a Portal to deploy servers onto remote nodes and get an address for
+        each one automatically. Without a Portal, Chunkforge still runs servers on this machine.
       </Text>
 
+      <Field label="Portal URL" hint="Where your Portal is reachable, e.g. https://portal.example.com">
+        <Input
+          value={portalUrl}
+          placeholder="https://portal.example.com"
+          disabled={linked}
+          onChange={(_, data) => setPortalUrl(data.value)}
+        />
+      </Field>
+
+      {linked ? (
+        <>
+          <Field label="Subdomain zone">
+            <div className={styles.zone}>
+              {portal.zoneSuffix ? `<server>.${portal.zoneSuffix}` : 'No zone set on the Portal yet'}
+            </div>
+          </Field>
+          <Text size={200} className={styles.muted}>
+            Paired{portal.connectedAt ? ` ${new Date(portal.connectedAt).toLocaleString()}` : ''}. Manage
+            nodes, subdomains, and pins in the{' '}
+            <Link href={portal.portalUrl} target="_blank">
+              Portal web interface
+            </Link>
+            .
+          </Text>
+          <div className={styles.row}>
+            <Button onClick={() => void api().portal.refresh().then((next) => onPatch({ portal: next }))}>
+              Refresh
+            </Button>
+            <Button disabled={busy} onClick={() => void disconnect()}>
+              Disconnect
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Field
+          label="Pairing pin"
+          hint="Generate one in the Portal web interface under Control planes."
+          validationMessage={error ?? undefined}
+        >
+          <div className={styles.row}>
+            <Input
+              value={pin}
+              placeholder="ABCD-2345"
+              onChange={(_, data) => setPin(data.value.toUpperCase())}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && pin && portalUrl) void connect()
+              }}
+            />
+            <Button
+              appearance="primary"
+              disabled={busy || !pin.trim() || !portalUrl.trim()}
+              onClick={() => void connect()}
+            >
+              {busy ? 'Pairing…' : 'Connect'}
+            </Button>
+          </div>
+        </Field>
+      )}
+
+      {portal.lastError && !linked && <Text className={styles.error}>{portal.lastError}</Text>}
+
       <Switch
-        label="Enable Portal integration"
-        checked={portal.enabled}
-        onChange={(_, data) => patchPortal({ enabled: data.checked })}
-      />
-
-      <Field label="Public panel URL" hint="e.g. https://panel.example.com">
-        <Input
-          value={portal.publicBaseUrl}
-          placeholder="https://panel.example.com"
-          onChange={(_, data) => patchPortal({ publicBaseUrl: data.value })}
-        />
-      </Field>
-
-      <Field label="Relay URL" hint="e.g. wss://relay.example.com">
-        <Input
-          value={portal.relayBaseUrl}
-          placeholder="wss://relay.example.com"
-          onChange={(_, data) => patchPortal({ relayBaseUrl: data.value })}
-        />
-      </Field>
-
-      <Field label="Default domain suffix" hint="e.g. play.example.com">
-        <Input
-          value={portal.defaultDomainSuffix}
-          placeholder="play.example.com"
-          onChange={(_, data) => patchPortal({ defaultDomainSuffix: data.value })}
-        />
-      </Field>
-
-      <Switch
-        label="Auto-provision subdomains"
+        label="Give every server on a node its own subdomain"
         checked={portal.autoProvisionSubdomains}
-        onChange={(_, data) => patchPortal({ autoProvisionSubdomains: data.checked })}
+        onChange={(_, data) =>
+          onPatch({ portal: { ...portal, autoProvisionSubdomains: data.checked } })
+        }
       />
-
-      <Field label="Desktop/Web connector pin" hint="Use this pin when linking the panel to your hosted Portal.">
-        <div className={styles.row}>
-          <div className={styles.codeBox}>{desktopPin || 'Not generated yet'}</div>
-          <Button onClick={() => void generatePin()} disabled={busy}>
-            {busy ? 'Working…' : desktopPin ? 'Rotate Pin' : 'Generate Pin'}
-          </Button>
-          <Button appearance="primary" onClick={() => void connectDesktop()} disabled={busy || !desktopPin}>
-            Mark Connected
-          </Button>
-        </div>
-      </Field>
-
       <Text size={200} className={styles.muted}>
-        Portal status: {portal.connectionStatus}
-        {portal.connectedAt ? ` — connected ${new Date(portal.connectedAt).toLocaleString()}` : ''}
+        On by default. Turning it off means servers created on nodes have no public address until you
+        provision one by hand from the server's Settings tab.
       </Text>
-
-      <Switch
-        label="Trust reverse-proxy forwarding headers"
-        checked={portal.trustProxy}
-        onChange={(_, data) => patchPortal({ trustProxy: data.checked })}
-      />
     </div>
   )
 }

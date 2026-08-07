@@ -166,7 +166,6 @@ class InstanceManager extends EventEmitter {
           protocol: 'tcp',
           targetPort: config.port,
           publicPort: config.port,
-          host: '',
           enabled: true
         },
         {
@@ -175,7 +174,6 @@ class InstanceManager extends EventEmitter {
           protocol: 'udp',
           targetPort: config.port,
           publicPort: config.port,
-          host: '',
           enabled: false
         }
       ],

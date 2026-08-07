@@ -1,209 +1,72 @@
-import { randomBytes } from 'crypto'
-import type { InstanceMetadata, Node, NodeStats, PortalSettings, PortalTunnelPort } from '../types/index'
+import type { InstanceMetadata, PortalSettings } from '../types/index'
 import { getSettings, saveSettings } from './settingsStore'
-import { listInstanceMetadata, loadInstanceMetadata, saveInstanceMetadata } from './instancesStore'
+import { loadInstanceMetadata, saveInstanceMetadata } from './instancesStore'
 
-const PENDING_NODE_TTL_MS = 15 * 60 * 1000
-
-function buildPin(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  const raw = randomBytes(6)
-  const chars = Array.from(raw, (value) => alphabet[value % alphabet.length]).join('')
-  return `${chars.slice(0, 4)}-${chars.slice(4, 8)}`
-}
-
-function requirePortalConfigured(): PortalSettings {
-  const portal = getSettings().portal
-  if (!portal.publicBaseUrl.trim()) throw new Error('Portal public URL is not configured.')
-  return portal
-}
-
-function nowIso(): string {
-  return new Date().toISOString()
-}
-
-function isPairingNode(node: Node): boolean {
-  return node.kind === 'remote' && node.status === 'pairing' && !!node.pairingCode
-}
-
-function normalizeSuffix(value: string): string {
-  return value.trim().toLowerCase().replace(/^\.+/, '').replace(/\.+$/, '')
-}
-
-function toDnsLabel(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-+/g, '-')
-}
-
-function nextAvailableHostname(baseLabel: string, suffix: string, taken: Set<string>): string {
-  let label = baseLabel
-  let attempt = 2
-  let candidate = `${label}.${suffix}`
-  while (taken.has(candidate)) {
-    label = `${baseLabel}-${attempt}`
-    candidate = `${label}.${suffix}`
-    attempt += 1
-  }
-  return candidate
-}
-
-export async function createDesktopConnectorPin(): Promise<{ pin: string; portal: PortalSettings }> {
-  const portal = requirePortalConfigured()
-  const pin = buildPin()
-  const nextPortal: PortalSettings = {
-    ...portal,
-    desktopConnectorPin: pin,
-    connectionStatus: 'connecting'
-  }
-  await saveSettings({ portal: nextPortal })
-  return { pin, portal: nextPortal }
-}
+/**
+ * This control plane's side of its Portal link.
+ *
+ * Deliberately state-only: no HTTP lives here. Core is the domain layer and
+ * runs in three very different hosts, so the network call that actually talks
+ * to a Portal belongs one layer up, in `@chunkforge/api`. What core owns is the
+ * record of *whether* we are linked and under what identity.
+ */
 
 export function getPortalStatus(): PortalSettings {
   return getSettings().portal
 }
 
-export async function connectDesktopToPortal(pin: string): Promise<PortalSettings> {
-  const settings = getSettings()
-  const portal = settings.portal
-  if (!portal.desktopConnectorPin || portal.desktopConnectorPin !== pin.trim().toUpperCase()) {
-    throw new Error('Unknown desktop connector pin.')
-  }
-  const nextPortal: PortalSettings = {
-    ...portal,
-    connectionStatus: 'connected',
-    connectedAt: nowIso()
-  }
-  await saveSettings({ portal: nextPortal })
-  return nextPortal
-}
-
-export async function redeemNodePortalPin(pin: string, nodeName: string): Promise<{ nodeId: string; nodeToken: string }> {
-  const settings = getSettings()
-  const normalizedPin = pin.trim().toUpperCase()
-  const existingNode = settings.nodes.find((node) => node.pairingCode === normalizedPin && isPairingNode(node))
-  const now = nowIso()
-  const token = randomBytes(24).toString('hex')
-
-  let node: Node
-  if (existingNode) {
-    node = {
-      ...existingNode,
-      name: nodeName.trim() || existingNode.name,
-      pairingCode: undefined,
-      pairedAt: existingNode.pairedAt ?? now,
-      lastSeenAt: now,
-      status: 'offline',
-      portal: {
-        portalUrl: settings.portal.publicBaseUrl,
-        portalNodeToken: token,
-        connectionStatus: 'connected',
-        lastHandshakeAt: now
-      }
-    }
-  } else {
-    const pendingNode = settings.nodes.find(
-      (entry) =>
-        entry.kind === 'remote' &&
-        entry.status === 'pairing' &&
-        entry.lastSeenAt &&
-        Date.now() - Date.parse(entry.lastSeenAt) < PENDING_NODE_TTL_MS
-    )
-    if (!pendingNode) throw new Error('Unknown node pairing pin.')
-    node = {
-      ...pendingNode,
-      name: nodeName.trim() || pendingNode.name,
-      pairingCode: undefined,
-      pairedAt: pendingNode.pairedAt ?? now,
-      lastSeenAt: now,
-      status: 'offline',
-      portal: {
-        portalUrl: settings.portal.publicBaseUrl,
-        portalNodeToken: token,
-        connectionStatus: 'connected',
-        lastHandshakeAt: now
-      }
-    }
-  }
-
-  await saveSettings({
-    nodes: settings.nodes.map((entry) => (entry.id === node.id ? node : entry))
-  })
-  return { nodeId: node.id, nodeToken: token }
-}
-
-export async function updatePortalNodeHeartbeat(nodeToken: string, stats: NodeStats): Promise<Node> {
-  const settings = getSettings()
-  const existing = settings.nodes.find((node) => node.portal?.portalNodeToken === nodeToken)
-  if (!existing) throw new Error('Unknown portal node token.')
-  const now = nowIso()
-  const next: Node = {
-    ...existing,
-    stats,
-    lastSeenAt: now,
-    status: 'online',
-    portal: existing.portal
-      ? {
-          ...existing.portal,
-          connectionStatus: 'connected',
-          lastHandshakeAt: now
-        }
-      : undefined
-  }
-  await saveSettings({
-    nodes: settings.nodes.map((node) => (node.id === next.id ? next : node))
-  })
+export async function savePortalStatus(patch: Partial<PortalSettings>): Promise<PortalSettings> {
+  const next: PortalSettings = { ...getSettings().portal, ...patch }
+  await saveSettings({ portal: next })
   return next
 }
 
-export async function registerPortalNodeTunnels(nodeToken: string, ports: PortalTunnelPort[]): Promise<Node> {
-  const settings = getSettings()
-  const existing = settings.nodes.find((node) => node.portal?.portalNodeToken === nodeToken)
-  if (!existing) throw new Error('Unknown portal node token.')
-  if (ports.length === 0) throw new Error('At least one tunnel port is required.')
-  const next: Node = {
-    ...existing,
-    portal: existing.portal
-      ? {
-          ...existing.portal,
-          connectionStatus: 'connected',
-          lastHandshakeAt: nowIso()
-        }
-      : undefined
-  }
-  await saveSettings({
-    nodes: settings.nodes.map((node) => (node.id === next.id ? next : node))
-  })
-  return next
+/** True once a pin has been redeemed and a token stored. */
+export function isPortalLinked(): boolean {
+  const portal = getSettings().portal
+  return portal.enabled && Boolean(portal.portalUrl.trim()) && Boolean(portal.clientToken)
 }
 
-export async function autoProvisionInstancePortalHostname(
+/** Throws with a message worth showing, rather than a bare falsy check. */
+export function requirePortalLink(): PortalSettings {
+  const portal = getSettings().portal
+  if (!portal.portalUrl.trim()) throw new Error('No Chunkforge Portal is configured.')
+  if (!portal.clientToken) throw new Error('This Chunkforge is not paired with its Portal yet.')
+  return portal
+}
+
+export async function clearPortalLink(): Promise<PortalSettings> {
+  return savePortalStatus({
+    clientId: '',
+    clientToken: '',
+    zoneSuffix: '',
+    connectionStatus: 'disconnected',
+    connectedAt: undefined,
+    lastError: undefined
+  })
+}
+
+/**
+ * Records the address Portal allocated for a server, so the UI can show it and
+ * a later rename can ask for the same one back.
+ */
+export async function bindInstanceHostname(
   instanceId: string,
-  options?: { force?: boolean }
+  hostname: string,
+  publicPort: number
 ): Promise<InstanceMetadata> {
-  const settings = getSettings()
-  const portal = settings.portal
   const instance = await loadInstanceMetadata(instanceId)
-  const suffix = normalizeSuffix(portal.defaultDomainSuffix)
-  if (!portal.enabled || !portal.autoProvisionSubdomains || !suffix) return instance
-  if (instance.portalHostname && !options?.force) return instance
+  if (instance.portalHostname === hostname && instance.portalPublicPort === publicPort) {
+    return instance
+  }
+  const next: InstanceMetadata = { ...instance, portalHostname: hostname, portalPublicPort: publicPort }
+  await saveInstanceMetadata(next)
+  return next
+}
 
-  const all = await listInstanceMetadata()
-  const taken = new Set(
-    all
-      .filter((entry) => entry.id !== instanceId)
-      .map((entry) => entry.portalHostname?.trim().toLowerCase() ?? '')
-      .filter(Boolean)
-  )
-  const base = toDnsLabel(instance.name) || `server-${instance.id.slice(0, 6).toLowerCase()}`
-  const hostname = nextAvailableHostname(base, suffix, taken)
-  if (instance.portalHostname?.toLowerCase() === hostname) return instance
-
-  const next: InstanceMetadata = { ...instance, portalHostname: hostname }
+export async function unbindInstanceHostname(instanceId: string): Promise<InstanceMetadata> {
+  const instance = await loadInstanceMetadata(instanceId)
+  const next: InstanceMetadata = { ...instance, portalHostname: undefined, portalPublicPort: undefined }
   await saveInstanceMetadata(next)
   return next
 }

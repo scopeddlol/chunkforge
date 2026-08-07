@@ -12,7 +12,14 @@
     "baseUrl": ".",
     "paths": {
       "@chunkforge/core": ["../core/src/index.ts"],
-      "@shared/types": ["../core/src/types/index.ts"]
+      "@shared/types": ["../core/src/types/index.ts"],
+      // The Electron main process pulls in the Core API, which reaches a Portal
+      // through these. Electron's tsconfig resolves modules the classic way and
+      // cannot follow the portal package's "exports" map on its own.
+      "@chunkforge/portal": ["../portal/src/index.ts"],
+      "@chunkforge/portal/client": ["../portal/src/client.ts"],
+      "@chunkforge/portal/protocol": ["../portal/src/protocol.ts"],
+      "@chunkforge/portal/types": ["../portal/src/types.ts"]
     }
   }
 }

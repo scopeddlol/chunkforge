@@ -16,6 +16,12 @@ export interface WizardState {
   minRamMb: number
   maxRamMb: number
   toggles: InstanceToggles
+  /**
+   * Which machine builds and runs this server. `local` is this one; anything
+   * else is a node adopted through Portal, and the whole creation happens
+   * there.
+   */
+  nodeId: string
   installLocation: string | null
   enableGeyser: boolean
   groupId: string | null
@@ -86,6 +92,7 @@ export function createInitialWizardState(defaults?: {
     minRamMb: defaults?.defaultMinRamMb ?? 2048,
     maxRamMb: defaults?.defaultMaxRamMb ?? 4096,
     toggles: { ...defaultToggles },
+    nodeId: 'local',
     installLocation: defaults?.defaultInstallLocation ?? null,
     enableGeyser: false,
     groupId: null,
@@ -96,6 +103,23 @@ export function createInitialWizardState(defaults?: {
 }
 
 export function toCreateInstanceConfig(state: WizardState): CreateInstanceConfig {
-  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack } = state
-  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack }
+  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack, nodeId } = state
+  return {
+    serverType,
+    minecraftVersion,
+    name,
+    accentColor,
+    port,
+    minRamMb,
+    maxRamMb,
+    toggles,
+    // An install path is this machine's concept. A node picks its own location
+    // inside its data volume, so sending ours would be meaningless there.
+    installLocation: nodeId === 'local' ? installLocation : null,
+    enableGeyser,
+    groupId,
+    initialPlugins,
+    modpack,
+    nodeId
+  }
 }

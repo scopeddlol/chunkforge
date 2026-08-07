@@ -14,7 +14,14 @@ permissions:
 
 jobs:
   release:
-    if: ${{ github.event_name != 'push' || !endsWith(github.ref_name, '-portal') }}
+    # Server-side pieces release far more often than the desktop app, so a tag
+    # suffixed with the component name ships only that image and skips building
+    # a Windows installer nothing in it changed.
+    if: >-
+      ${{ github.event_name != 'push' ||
+      (!endsWith(github.ref_name, '-portal') &&
+       !endsWith(github.ref_name, '-web') &&
+       !endsWith(github.ref_name, '-node')) }}
     runs-on: windows-latest
 
     steps:

@@ -4,32 +4,141 @@
 
 **Forge Your World.**
 
-A Minecraft hosting platform with a native Windows desktop app, a shared web
-panel, a self-hosted Chunkforge Portal proxy, and Portal-connected Docker node
-workers.
-
-Chunkforge still works as a standalone desktop app, but it now also includes the
-first end-to-end **Portal + Node** slice:
-
-- **Chunkforge Desktop** for local management on Windows
-- **Chunkforge Web** as the browser-hosted panel replica
-- **Chunkforge Portal** as the proxy/control-plane entrypoint
-- **Chunkforge Nodes** as Docker-ran remote hosts that pair into Portal with a pin
+A self-hostable Minecraft platform: create a server in a wizard, run it on any
+machine you own, and reach it at its own subdomain — without opening a single
+port on the machine it runs on.
 
 </div>
 
 ---
 
+## The four pieces
+
+Chunkforge is one platform in four parts. Three of them are optional; the first
+one works entirely on its own.
+
+| | What it is | Where it runs |
+| --- | --- | --- |
+| **Chunkforge Desktop** | The Chunkforge UI. Creates and manages servers. Works standalone and offline. | Your Windows PC |
+| **Chunkforge Web** | The same UI, in Docker, reachable from any browser on your network. Can run a node inside itself. | Your homelab |
+| **Chunkforge Portal** | Subdomain manager and proxy, with its own small web interface. Runs no servers. | A VPS with a public address |
+| **Chunkforge Node** | Runs the actual Minecraft servers. Holds no open ports. | Anywhere — a spare box, a friend's Docker host |
+
+Desktop and Web are **control planes**: interchangeable front ends onto the same
+platform. Pick whichever suits you; you do not need both.
+
+## The two ways to run it
+
+Both are the same triangle — a control plane you click in, a Portal with a
+public address, and nodes that do the work.
+
+### 1. Desktop + Portal + Nodes
+
+```
+Chunkforge Desktop (your PC) ──┐
+                               ├── Chunkforge Portal (VPS) ── Chunkforge Nodes
+                     players ──┘
+```
+
+Run the desktop app you already use. Point it at a Portal, pair some nodes, and
+you can deploy servers onto them with automatic subdomains and the same mod,
+plugin, and modpack support you get locally.
+
+### 2. Web + Portal + Nodes
+
+```
+Chunkforge Web (homelab) ──┐
+                           ├── Chunkforge Portal (VPS) ── Chunkforge Nodes
+                 players ──┘
+```
+
+The panel lives in a browser instead of on one desktop. Closer in shape to
+Pterodactyl and Wings — with automatic subdomain provisioning in the middle.
+
+If the homelab box should also *host* servers, Chunkforge Web can run a node
+inside its own container, so it is one service instead of two.
+
+## No open ports. Anywhere.
+
+This is the constraint the whole design is built around.
+
+A node never accepts an inbound connection. It dials **out** to its Portal once
+and keeps that one WebSocket open, and everything afterwards arrives down it:
+player traffic to relay, and Chunkforge API calls to run. Portal owns every
+public listener.
+
+So a server in your bedroom and a server on a friend's box 500 miles away are
+reached the same way, through an address Portal allocated:
+
+```
+player → survival.play.example.com → Portal → (existing socket) → node → server
+```
+
+Neither machine has a port forwarded, and neither needs a static address.
+
+### What you publish in DNS
+
+Portal allocates a public port per server, because every server on every node is
+funnelled through one host. Players never see that port — an SRV record carries
+it.
+
+| Record | When | Why |
+| --- | --- | --- |
+| `*.play.example.com A <portal ip>` | Once | Covers every subdomain Portal will ever allocate |
+| `_minecraft._tcp.<name>.play.example.com SRV 0 0 <port> <host>` | Per server | Lets players connect without typing a port |
+
+Portal reports the exact records for each server under **Subdomains**. It does
+not write them for you — it holds no credentials for your zone.
+
+## Getting started
+
+### Standalone
+
+Grab the latest `Chunkforge-Setup-*.exe` from
+[Releases](https://github.com/scopeddlol/chunkforge/releases). That is the whole
+setup — Portal and nodes are only needed once you want servers running somewhere
+other than your own machine.
+
+### With a Portal
+
+```bash
+# 1. On the VPS
+docker compose -f docker-compose.portal.yml up -d
+```
+
+Open it, create the operator account, then under **Settings** set the public
+base URL, the domain zone, and the port range. Publish the wildcard `A` record.
+
+```bash
+# 2. On each machine that should run servers
+CHUNKFORGE_PORTAL_URL=https://portal.example.com \
+CHUNKFORGE_PAIRING_PIN=<node pin from Portal → Nodes> \
+docker compose -f docker-compose.node.yml up -d
+```
+
+```bash
+# 3. If you want the browser panel rather than the desktop app
+docker compose -f docker-compose.web.yml up -d
+```
+
+Then, in Desktop or Web, open **Settings → Chunkforge Portal** and redeem a
+**control plane pin**. Adopt your nodes under **Nodes**, and create a server —
+the wizard now asks which machine to run it on, and its address is allocated
+automatically.
+
+Ready-made stacks using the published images are in
+[`examples/docker/`](examples/docker/).
+
 ## What it does
 
 **Create a server without touching a terminal.** An eight-step wizard walks you
 from server type through an optional modpack, version, resources, gameplay
-toggles, and add-ons. It
-downloads the right server jar, fetches a matching Java runtime if you don't
-already have one, accepts the EULA, and writes `server.properties` for you.
+toggles, and add-ons. It downloads the right server jar, fetches a matching Java
+runtime if you don't already have one, accepts the EULA, and writes
+`server.properties` for you.
 
-**Run and manage it.** Each server gets a dashboard card with live status, and a
-detail view with seven tabs:
+**Run and manage it — wherever it is.** Each server gets a dashboard card with
+live status, and a detail view with seven tabs:
 
 | Tab | What's in it |
 | --- | --- |
@@ -39,21 +148,20 @@ detail view with seven tabs:
 | **Add-Ons** | Installed plugins or mods with enable/disable toggles and uninstall |
 | **Files** | Sandboxed file browser with an inline text editor |
 | **Backups** | Zip snapshots of the overworld, nether, and end — with optional upload to FileHub |
-| **Settings** | Editable name, port, RAM, gameplay options, and delete |
+| **Settings** | Editable name, port, RAM, gameplay options, public address, and delete |
+
+A server on a remote node behaves identically to a local one. Requests for it
+are forwarded to its node through Portal, so the console, the file browser, and
+everything else work the same at any distance.
 
 **Find add-ons anywhere.** One search box queries four sources in parallel.
 Results are interleaved so no single source dominates, the same project found on
 several sources merges into one card with the download source picked at install
-time, and results filter by Minecraft version and loader. Separate Plugins and
-Mods sections match what your server actually accepts.
+time, and results filter by Minecraft version and loader.
 
 **Install whole modpacks.** Browse Modrinth and CurseForge modpacks, install one
 onto an existing server, or start a brand-new server from a pack — Chunkforge
 reads the archive and sets the loader and Minecraft version to match.
-
-**Keep an eye on everything.** The dashboard shows live CPU, memory, running
-servers, players online, backup count, and disk use, with card or table views and
-server groups you can start and stop in bulk.
 
 ## Supported servers
 
@@ -94,10 +202,49 @@ token is stored — your password is never written to disk.
 Eight built-in themes — OLED Violet, Midnight, Nebula, Forest, Ember, Slate,
 Light, and Parchment — selectable under Settings, or set to follow Windows.
 
-## Install
+Chunkforge Portal has its own single dark theme. It is infrastructure you
+configure once, not something you sit in.
 
-Grab the latest `Chunkforge-Setup-*.exe` from
-[Releases](https://github.com/scopeddlol/chunkforge/releases).
+## Architecture
+
+An npm-workspaces monorepo built around a **Core API**. The domain layer has no
+UI and no Electron dependency, so the same code runs inside the desktop app,
+inside Chunkforge Web, and on every node.
+
+```
+packages/
+  core/         domain layer — server engine, Java, add-ons, files, backups, stats
+  api/          Fastify HTTP + WebSocket over core, with auth, roles, and the Portal link
+  portal/       Chunkforge Portal — subdomains, proxy, pairing, and its own admin UI
+  web/          Chunkforge Web — the Chunkforge UI in Docker, optional embedded node
+  desktop/      Electron shell; embeds the API and owns the shared renderer
+  node-worker/  Chunkforge Node — embeds the API and reaches Portal outbound only
+```
+
+**One UI, two hosts.** Chunkforge Web builds the *same renderer* the desktop app
+ships. The renderer holds no privileged bridge — it talks to the Core API over
+HTTP with a typed client, exactly as a browser would — so running it in a
+browser needed nothing but a different place to serve it from.
+
+**Portal depends on nothing.** `packages/portal` has no `@chunkforge/core`
+dependency, deliberately. It cannot start a Minecraft server even if asked,
+because it holds none of the code that could. A Portal on a small VPS stays
+small.
+
+**Nodes embed a whole Chunkforge.** A node runs the same Core API the desktop
+app does, on loopback. Portal forwards management calls to it over the node's
+existing socket, which is why the UI can drive a remote node with the identical
+code path it uses locally.
+
+**Auth** is multi-user with an ordered role ladder — `viewer` → `member` →
+`admin` → `owner` — plus per-project grants and hashed API tokens. Passwords use
+scrypt from Node's standard library, so self-hosting needs no native build
+toolchain. Portal keeps its own separate operator account: it is shared
+infrastructure, and whoever runs the VPS is not necessarily a Chunkforge user.
+
+**Pairing** is by short-lived, single-use pins, and pins are typed. A node pin
+cannot be redeemed as a control plane, so a code you read out to a friend who is
+hosting a node can only ever make them a node.
 
 ## Build from source
 
@@ -111,249 +258,59 @@ npm run dev
 Other scripts:
 
 ```bash
-npm run typecheck    # type-check every workspace
-npm run build        # compile without packaging
-npm run build:win    # produce a Windows installer in release/
-npm run build:portal # build the browser panel into packages/api/portal-dist
-npm run build:images # build the Portal and Node Docker images
-npm run api          # run the Core API standalone, without the desktop shell
+npm run typecheck     # type-check every workspace
+npm run build         # compile without packaging
+npm run build:win     # produce a Windows installer in release/
+npm run build:web     # build the Chunkforge Web bundle
+npm run build:portal  # build Portal's admin UI
+npm run build:images  # build all three Docker images
+npm run dev:portal    # run Portal locally
+npm run dev:web       # run the Chunkforge Web UI against a local API
+npm run api           # run the Core API headless
 ```
 
-## Platform layout
+### Releases
 
-### Chunkforge Portal
+Push a tag and CI publishes the Windows installer to **GitHub Releases** and all
+three images to **GHCR**:
 
-Chunkforge Portal is the self-hosted proxy and control-plane service between
-Chunkforge Desktop, Chunkforge Web, and remote Chunkforge Nodes.
-
-Current Portal responsibilities:
-
-- serves Chunkforge Web
-- stores the main app state and auth for self-hosted usage
-- generates and redeems connector pins
-- accepts node heartbeats and tunnel declarations
-- hosts the first TCP/UDP relay runtime for remote nodes
-- carries the first foundation for subdomain-aware proxy configuration
-
-**Important:** the current codebase only implements the first Portal foundation.
-It does **not** yet provide finished automatic Minecraft subdomain allocation or
-a production-ready no-open-ports proxy runtime.
-
-Run it with Docker Compose:
+- `ghcr.io/scopeddlol/chunkforge-portal:<tag>`
+- `ghcr.io/scopeddlol/chunkforge-web:<tag>`
+- `ghcr.io/scopeddlol/chunkforge-node:<tag>`
 
 ```bash
-docker compose -f docker-compose.portal.yml up
+git tag v0.5.0 && git push origin v0.5.0
 ```
 
-Or build the image directly:
-
-```bash
-docker build -f Dockerfile.portal -t chunkforge-portal:local .
-```
-
-Then open `http://localhost:8080`, create the first owner account, and configure
-Portal under **Settings → Chunkforge Portal**.
-
-For a local non-Docker panel build:
-
-```bash
-npm run build:portal --workspace @chunkforge/desktop
-npm run start --workspace @chunkforge/api
-```
-
-### Chunkforge Nodes
-
-Chunkforge Nodes are Docker-ran workers that connect back to a Portal with a
-pairing pin. They are intended to host Minecraft servers on remote machines and
-relay traffic back through Portal to Chunkforge Desktop or Chunkforge Web.
-
-Today, the implemented Node foundation provides:
-
-- pin redemption through Portal
-- heartbeat reporting with CPU, memory, and storage telemetry
-- initial TCP/UDP tunnel registration and framed relay plumbing
-
-It does **not** yet provide a finished remote Minecraft hosting runtime with
-full lifecycle orchestration, automatic allocation logic, or production-grade
-tunnel recovery.
-
-Run a node worker with Docker Compose:
-
-```bash
-docker compose -f docker-compose.node.yml up
-```
-
-Or build the image directly:
-
-```bash
-docker build -f Dockerfile.node -t chunkforge-node:local .
-```
-
-Set these environment variables for node workers:
-
-- `CHUNKFORGE_PORTAL_URL`
-- `CHUNKFORGE_PAIRING_PIN`
-- `CHUNKFORGE_NODE_NAME` (optional)
-- `CHUNKFORGE_HEARTBEAT_MS` (optional)
-
-### Example compose files (GHCR images)
-
-Prebuilt deployment examples are available under `examples/docker/`:
-
-- `docker-compose.portal.example.yml` — Portal only
-- `docker-compose.node.example.yml` — Node only
-- `docker-compose.panel-node.example.yml` — Portal + Node in one stack
-- `.env.example` — environment template for the examples
-
-Run examples:
-
-```bash
-docker compose -f examples/docker/docker-compose.portal.example.yml up -d
-docker compose -f examples/docker/docker-compose.node.example.yml up -d
-docker compose -f examples/docker/docker-compose.panel-node.example.yml up -d
-```
-
-### Chunkforge Desktop
-
-Chunkforge Desktop is the existing Windows 11 application. It remains the main
-native app and now includes the first shared Portal/Node management surfaces.
-
-### Chunkforge Web
-
-Chunkforge Web is the browser-served replica of the shared Chunkforge UI. It is
-built from the same renderer and served by Chunkforge Portal.
-
-Today, the repository includes:
-
-- a browser-safe shared renderer build
-- a Portal-served web panel build output
-- Docker packaging for the web panel through the Portal image
-- an explicit all-in-one compose mode with an optional co-located Chunkforge Node
-
-Run Web only:
-
-```bash
-docker compose -f docker-compose.web-node.yml up
-```
-
-Run Web with a co-located Node worker:
-
-```bash
-docker compose -f docker-compose.web-node.yml --profile with-node up
-```
-
-When using the co-located node profile, set `CHUNKFORGE_PAIRING_PIN` to the pin
-generated in **Settings → Chunkforge Portal**.
-
-### Current foundation flow
-
-1. Start the Portal panel and open **Settings → Chunkforge Portal**.
-2. Set the public Portal URL, then generate the **Desktop/Web connector pin**.
-3. Use **Add Node** in the app and enter the node pairing code.
-4. Start a node worker and point it at the same Portal.
-5. The node redeems the pin, registers its exposed tunnel metadata, and starts
-   sending heartbeats.
-
-The current transport slice supports the first Portal-to-node relay path with
-TCP and UDP tunnel metadata for Minecraft-style workloads, including multi-port
-announcements. It is still an early runtime, not the final production tunnel
-system your target architecture calls for.
-
-## Build outputs
-
-### Desktop app
-
-Build the desktop shell:
-
-```bash
-npm run build --workspace @chunkforge/desktop
-```
-
-Build the Windows installer:
-
-```bash
-npm run build:win
-```
-
-### Web panel
-
-Build the browser panel that the Portal serves:
-
-```bash
-npm run build:portal
-```
-
-### Docker images
-
-Build both Docker images:
-
-```bash
-npm run build:images
-```
-
-Build them individually:
-
-```bash
-docker build -f Dockerfile.portal -t chunkforge-portal:local .
-docker build -f Dockerfile.node -t chunkforge-node:local .
-```
-
-To cut a release, push a tag — CI publishes:
-
-- Windows installer to **GitHub Releases**
-- Docker images to **GHCR**:
-  - `ghcr.io/scopeddlol/chunkforge-portal:<tag>`
-  - `ghcr.io/scopeddlol/chunkforge-node:<tag>`
-
-```bash
-git tag v0.4.0 && git push origin v0.4.0
-```
+Suffix a tag with `-portal`, `-web`, or `-node` to ship only that image and skip
+building a desktop installer.
 
 ## Where your data lives
+
+Chunkforge Desktop, on Windows:
 
 ```
 Documents\Chunkforge\
   Instances\<server>\        server files, world, plugins, backups
   Runtimes\jdk-<major>\      Java runtimes Chunkforge downloaded
   instances-index.json       tracks servers created outside the default folder
-  settings.json              app settings, projects, and known nodes
+  settings.json              app settings, projects, and the Portal link
   auth.json                  accounts and API tokens (sessions stay in memory)
 ```
 
-Servers can be created anywhere — the wizard has an install-location picker, and
-the index keeps them discoverable.
+In Docker, `/data` holds the same layout. Chunkforge Web separates `panel/` from
+`node/` so a co-located node's servers stay its own. Portal keeps only
+`portal.json` — nodes, subdomains, routes, and pins.
 
-## Architecture
+## Status
 
-Chunkforge is an npm-workspaces monorepo built around a **Core API**. The domain
-layer has no UI and no Electron dependency, so the same code runs inside the
-desktop app, inside a Docker panel, and on remote nodes.
+The Portal and node runtime is young. Working today: pairing, node adoption,
+automatic subdomain allocation with the DNS records to publish, the TCP/UDP
+relay, and full remote management through the Portal channel.
 
-```
-packages/
-  core/       domain layer — server engine, Java, add-ons, files, backups, stats
-  api/        Fastify HTTP + WebSocket over core, with auth and roles
-  desktop/    Electron shell; embeds the API and renders the UI
-  node-worker/ Portal-connected node runtime for remote hosts
-```
-
-The desktop app starts the Core API in-process on loopback with an
-OS-assigned port, so it still works standalone and offline. The renderer holds no
-privileged bridge — it talks to that API over HTTP with a typed client, exactly
-as a browser would. Live state (console output, status changes, player joins,
-install progress) arrives on a single WebSocket rather than being polled.
-
-**Auth** is multi-user with an ordered role ladder — `viewer` → `member` →
-`admin` → `owner` — plus per-project grants and hashed API tokens. Passwords use
-scrypt from Node's standard library, so self-hosting needs no native build
-toolchain. The desktop shell holds an owner session for the local machine, which
-is why it never shows a login screen.
-
-**Models.** A server's identity, its owner, and its location are separate
-records: `Project` (ownership and permission scope), `Server` (the logical
-definition), `Instance` (that server materialised on a host), and `Node` (a host
-that can run servers). Existing installs are migrated on first launch — the
-migration is additive and idempotent, so nothing is stranded.
+Not yet built: writing DNS records automatically through a provider API, TLS
+termination for the allocated routes, and scheduling logic that picks a node for
+you rather than asking.
 
 ## Tech
 

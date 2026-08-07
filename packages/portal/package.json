@@ -1,0 +1,38 @@
+{
+  "name": "@chunkforge/portal",
+  "version": "0.4.0",
+  "description": "Chunkforge Portal — subdomain manager and proxy service with its own admin web UI",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./protocol": "./src/protocol.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/standalone.ts",
+    "start": "tsx src/standalone.ts",
+    "build": "vite build -c ui/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.1",
+    "@fastify/static": "^8.0.3",
+    "@fastify/websocket": "^11.0.1",
+    "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "@fluentui/react-components": "^9.54.15",
+    "@fluentui/react-icons": "^2.0.257",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.19.2",
+    "vite": "^5.4.8"
+  }
+}

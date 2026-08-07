@@ -1,0 +1,18 @@
+# A Chunkforge Node. Run one on every machine that should host servers.
+#
+# No ports are published, and none need to be. The node dials out to the Portal
+# and everything arrives back down that one connection.
+services:
+  chunkforge-node:
+    image: ghcr.io/scopeddlol/chunkforge-node:latest
+    environment:
+      CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL}
+      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN}
+      CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Chunkforge Node}
+      CHUNKFORGE_DATA: /data
+    volumes:
+      - node-data:/data
+    restart: unless-stopped
+
+volumes:
+  node-data:

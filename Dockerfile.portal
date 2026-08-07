@@ -1,3 +1,8 @@
+# Chunkforge Portal — subdomain manager and proxy.
+#
+# This is the piece that lives on a VPS with a public address. It runs no
+# Minecraft servers and holds no server data; it hands out subdomains, and
+# forwards player traffic and control calls to the nodes that do.
 FROM node:22-bookworm-slim
 
 WORKDIR /app
@@ -6,12 +11,18 @@ COPY package.json package-lock.json ./
 COPY packages ./packages
 
 RUN npm ci
-RUN npm run build:portal --workspace @chunkforge/desktop
 
+# Portal's own small admin UI, built into packages/portal/ui-dist and served by
+# the service itself. This is not the Chunkforge server UI — that is a separate
+# image entirely (Dockerfile.web).
+RUN npm run build --workspace @chunkforge/portal
+
+# The control/admin API. Player traffic arrives on the allocated port range
+# instead, which is published separately in compose.
 EXPOSE 8080
 
 ENV PORT=8080
 ENV HOST=0.0.0.0
-ENV CHUNKFORGE_DATA=/data
+ENV CHUNKFORGE_PORTAL_DATA=/data
 
-CMD ["npm", "run", "start", "--workspace", "@chunkforge/api"]
+CMD ["npm", "run", "start", "--workspace", "@chunkforge/portal"]

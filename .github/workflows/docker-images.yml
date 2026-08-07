@@ -16,6 +16,18 @@ jobs:
   docker-images:
     runs-on: ubuntu-latest
 
+    strategy:
+      # One image failing should not hide the state of the other two.
+      fail-fast: false
+      matrix:
+        include:
+          - name: portal
+            dockerfile: ./Dockerfile.portal
+          - name: web
+            dockerfile: ./Dockerfile.web
+          - name: node
+            dockerfile: ./Dockerfile.node
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,44 +42,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Portal image (CI)
+      - name: Build ${{ matrix.name }} image (CI)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.portal
+          file: ${{ matrix.dockerfile }}
           push: false
           load: false
-          tags: chunkforge-portal:ci
+          tags: chunkforge-${{ matrix.name }}:ci
 
-      - name: Build Node image (CI)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.node
-          push: false
-          load: false
-          tags: chunkforge-node:ci
-
-      - name: Publish Portal image (Release)
+      - name: Publish ${{ matrix.name }} image (Release)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.portal
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/chunkforge-portal:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/chunkforge-portal:latest
-
-      - name: Publish Node image (Release)
-        if: startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-portal')
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.node
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/chunkforge-node:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/chunkforge-node:latest
+            ghcr.io/${{ github.repository_owner }}/chunkforge-${{ matrix.name }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/chunkforge-${{ matrix.name }}:latest

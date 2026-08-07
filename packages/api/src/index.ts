@@ -17,7 +17,7 @@ import { registerPlatformRoutes } from './routes/platform'
 import { registerFileHubRoutes } from './routes/filehub'
 import { attachCoreEvents, registerEventSocket } from './events'
 import { registerCors } from './cors'
-import { portalRelay } from './portalRelay'
+import { registerNodeForwarding } from './nodeForwarding'
 
 export interface CoreApiOptions {
   /** Where instances, runtimes, and settings live. */
@@ -37,7 +37,14 @@ export interface CoreApiOptions {
    * same-origin only, which is what a Docker panel serving its own UI wants.
    */
   allowedOrigins?: string[]
-  servePortal?: boolean
+  /**
+   * Serve the Chunkforge web UI from this API. Chunkforge Web turns this on and
+   * points `uiRoot` at its built bundle; the desktop shell leaves it off,
+   * because Electron loads the renderer itself.
+   */
+  serveWebUi?: boolean
+  /** Directory holding the built Chunkforge UI. Required with `serveWebUi`. */
+  uiRoot?: string
 }
 
 export interface RunningCoreApi {
@@ -90,11 +97,12 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   await app.register(cookie)
   await app.register(websocket)
 
-  const portalRoot = join(dirname(fileURLToPath(import.meta.url)), '../portal-dist')
-  const servePortal = options.servePortal ?? existsSync(portalRoot)
-  if (servePortal && existsSync(portalRoot)) {
+  const uiRoot =
+    options.uiRoot ?? join(dirname(fileURLToPath(import.meta.url)), '../../web/dist')
+  const serveWebUi = (options.serveWebUi ?? false) && existsSync(uiRoot)
+  if (serveWebUi) {
     await app.register(fastifyStatic, {
-      root: portalRoot,
+      root: uiRoot,
       wildcard: false,
       // We serve '/' ourselves for SPA fallback; leaving static index enabled
       // registers another GET '/' and crashes startup with duplicated route.
@@ -107,6 +115,9 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
 
   await registerAuth(app)
   await registerAuthRoutes(app)
+  // Must precede the server routes: a request for a server that lives on a node
+  // is answered by that node, and never reaches the handlers below.
+  await registerNodeForwarding(app)
   await registerServerRoutes(app)
   await registerAddonRoutes(app)
   await registerInstanceToolRoutes(app)
@@ -118,7 +129,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
 
   app.get('/api/health', async () => ({ ok: true, version: '0.4.0' }))
 
-  if (servePortal && existsSync(portalRoot)) {
+  if (serveWebUi) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))
     app.get<{ Params: { '*': string } }>('/*', async (request, reply) => {
       const path = String(request.params['*'] ?? '')
@@ -148,7 +159,6 @@ export async function startCoreApi(options: CoreApiOptions): Promise<RunningCore
     url: `http://${host}:${boundPort}`,
     sessionToken: options.localOwner ? await createLocalOwnerSession() : undefined,
     close: async () => {
-      await portalRelay.close()
       await app.close()
     }
   }
@@ -173,3 +183,15 @@ export { authStore } from './auth/store'
 export * from './auth/model'
 export { ChunkforgeClient, ApiError, type ClientOptions } from './client'
 export type { ServerEvent, ServerEventType, ServerEventPayloads } from './eventTypes'
+export {
+  connectToPortal,
+  disconnectFromPortal,
+  refreshPortalStatus,
+  listAllNodes,
+  claimPortalNode,
+  releasePortalNode,
+  provisionInstanceDomain,
+  releaseInstanceDomain,
+  listPortalDomains,
+  callNodeAgent
+} from './portalLink'

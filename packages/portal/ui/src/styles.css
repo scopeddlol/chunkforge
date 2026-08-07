@@ -1,0 +1,21 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  background-color: #0c0a12;
+  color: #f2f0f7;
+}
+
+code,
+.mono {
+  font-family: 'Cascadia Mono', Consolas, 'SF Mono', monospace;
+}

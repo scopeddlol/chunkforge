@@ -26,23 +26,36 @@ export interface Project {
   isDefault?: boolean
 }
 
-/** A host that can run servers. The desktop app is itself a node. */
+/**
+ * A host that can run servers.
+ *
+ * There are exactly two kinds, and the difference is how Chunkforge reaches
+ * them. The `local` node is this machine, driven in-process. A `portal` node is
+ * someone else's machine — a homelab box, a friend's Docker host — which
+ * Chunkforge never connects to directly. It is reached by asking Portal to
+ * forward the call down the socket that node already holds open, which is why
+ * a remote node never needs a port opened on it.
+ */
 export interface Node {
   id: string
   name: string
-  /**
-   * `local` is the in-process runner the desktop and standalone panel use;
-   * `remote` is a paired container reached over the Portal relay.
-   */
-  kind: 'local' | 'remote'
+  kind: 'local' | 'portal'
   /** Populated from the node's heartbeat; absent until it first reports. */
   stats?: NodeStats
   /** Last time the node was heard from, ISO-8601. */
   lastSeenAt?: string
   pairedAt?: string
-  pairingCode?: string
-  status: 'online' | 'offline' | 'pairing'
-  portal?: NodePortalBinding
+  status: 'online' | 'offline'
+  /** Portal's id for this node. Absent on the local node. */
+  portalNodeId?: string
+  /** Whether the node's embedded Core API is up and can take management calls. */
+  agentReady?: boolean
+  /** True once this control plane has claimed the node through Portal. */
+  claimed?: boolean
+  /** Another control plane on the same Portal already owns it. */
+  claimedByOther?: boolean
+  /** Public routes Portal has opened for this node. */
+  tunnels?: PortalTunnelPort[]
 }
 
 export interface NodeStats {
@@ -56,27 +69,30 @@ export interface NodeStats {
   latencyMs?: number
 }
 
-export interface NodePortalBinding {
-  portalUrl: string
-  portalNodeToken?: string
-  connectionStatus: 'disconnected' | 'connecting' | 'connected'
-  lastHandshakeAt?: string
-}
-
 export type TunnelProtocol = 'tcp' | 'udp'
 
+/** One public route Portal has opened, as this control plane sees it. */
 export interface PortalTunnelPort {
   id: string
   label: string
   protocol: TunnelProtocol
+  /** Port on the node the server actually listens on. */
   targetPort: number
+  /** Port Portal accepts player traffic on. */
   publicPort: number
-  host: string
   enabled: boolean
 }
 
-export interface NodeTunnelAnnouncement {
-  ports: PortalTunnelPort[]
+/** A subdomain Portal has allocated to one of this control plane's servers. */
+export interface PortalDomainBinding {
+  hostname: string
+  nodeId: string
+  instanceId?: string
+  protocol: TunnelProtocol
+  targetPort: number
+  publicPort: number
+  /** DNS the operator still has to publish, reported by Portal. */
+  dnsRecords?: Array<{ type: string; name: string; value: string; note: string }>
 }
 
 /** The logical definition of a server, independent of where it runs. */
