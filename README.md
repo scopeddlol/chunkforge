@@ -103,16 +103,17 @@ npm run dev
 Other scripts:
 
 ```bash
-npm run typecheck    # type-check main, preload, and renderer
+npm run typecheck    # type-check every workspace
 npm run build        # compile without packaging
 npm run build:win    # produce a Windows installer in release/
+npm run api          # run the Core API standalone, without the desktop shell
 ```
 
 To cut a release, push a tag — CI builds on Windows and publishes the installer
 to GitHub Releases:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 ## Where your data lives
@@ -122,7 +123,8 @@ Documents\Chunkforge\
   Instances\<server>\        server files, world, plugins, backups
   Runtimes\jdk-<major>\      Java runtimes Chunkforge downloaded
   instances-index.json       tracks servers created outside the default folder
-  settings.json              app settings
+  settings.json              app settings, projects, and known nodes
+  auth.json                  accounts and API tokens (sessions stay in memory)
 ```
 
 Servers can be created anywhere — the wizard has an install-location picker, and
@@ -130,26 +132,39 @@ the index keeps them discoverable.
 
 ## Architecture
 
-Electron main process owns all filesystem, process, and network work. The
-renderer is sandboxed (`contextIsolation`, no `nodeIntegration`) and talks to
-main only through a typed preload bridge. Live state — console output, status
-changes, player joins — is pushed over IPC rather than polled.
+Chunkforge is an npm-workspaces monorepo built around a **Core API**. The domain
+layer has no UI and no Electron dependency, so the same code runs inside the
+desktop app, inside a Docker panel, and on remote nodes.
 
 ```
-src/
-  main/         Electron main process
-    ipc/          IPC handlers by domain
-    services/     server engine, Java, downloads, plugins, files, backups
-    store/        instance and settings persistence
-  preload/      typed contextBridge API
-  renderer/     React + Fluent UI v9
-  shared/       types shared across the boundary
+packages/
+  core/       domain layer — server engine, Java, add-ons, files, backups, stats
+  api/        Fastify HTTP + WebSocket over core, with auth and roles
+  desktop/    Electron shell; embeds the API and renders the UI
 ```
+
+The desktop app starts the Core API in-process on loopback with an
+OS-assigned port, so it still works standalone and offline. The renderer holds no
+privileged bridge — it talks to that API over HTTP with a typed client, exactly
+as a browser would. Live state (console output, status changes, player joins,
+install progress) arrives on a single WebSocket rather than being polled.
+
+**Auth** is multi-user with an ordered role ladder — `viewer` → `member` →
+`admin` → `owner` — plus per-project grants and hashed API tokens. Passwords use
+scrypt from Node's standard library, so self-hosting needs no native build
+toolchain. The desktop shell holds an owner session for the local machine, which
+is why it never shows a login screen.
+
+**Models.** A server's identity, its owner, and its location are separate
+records: `Project` (ownership and permission scope), `Server` (the logical
+definition), `Instance` (that server materialised on a host), and `Node` (a host
+that can run servers). Existing installs are migrated on first launch — the
+migration is additive and idempotent, so nothing is stranded.
 
 ## Tech
 
 TypeScript · Electron · React · [Fluent UI v9](https://react.fluentui.dev/) ·
-Vite · electron-builder
+Fastify · Vite · electron-builder
 
 ## License
 

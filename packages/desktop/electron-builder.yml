@@ -1,0 +1,43 @@
+appId: com.chunkforge.app
+productName: Chunkforge
+copyright: Chunkforge
+
+# npm workspaces hoist electron to the repo root, so electron-builder — which
+# runs from packages/desktop — cannot find it to infer the version. Stating it
+# here is the supported escape hatch. Keep it in step with the electron
+# devDependency in package.json.
+electronVersion: 32.3.3
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**/*
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc,.prettierrc,tsconfig.json,tsconfig.*.json}'
+  - '!scripts/*'
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: Chunkforge-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Chunkforge
+  uninstallDisplayName: Chunkforge
+
+publish:
+  provider: github
+  owner: scopeddlol
+  repo: chunkforge

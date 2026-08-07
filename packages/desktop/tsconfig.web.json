@@ -1,0 +1,23 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/renderer/src/**/*",
+    "src/renderer/src/**/*.tsx",
+    "src/preload/index.d.ts",
+    "../core/src/types/**/*",
+    "../api/src/client.ts",
+    "../api/src/eventTypes.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/renderer/src/*"],
+      "@shared/types": ["../core/src/types/index.ts"],
+      "@chunkforge/core": ["../core/src/types/index.ts"],
+      "@chunkforge/api/client": ["../api/src/client.ts"]
+    },
+    "types": ["vite/client"]
+  }
+}
