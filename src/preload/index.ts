@@ -9,6 +9,7 @@ import type {
   CreateProgressEvent,
   DashboardStats,
   FileEntry,
+  ModpackInstallProgress,
   InstalledPlugin,
   InstanceMetadata,
   InstanceSummary,
@@ -18,6 +19,7 @@ import type {
   PlayersChangedEvent,
   PluginSearchQuery,
   PluginSearchResponse,
+  PluginSearchResult,
   PluginSource,
   PluginVersion,
   ServerGroup,
@@ -94,6 +96,19 @@ const plugins = {
   uninstall: (instanceId: string, filename: string): Promise<void> =>
     ipcRenderer.invoke('plugins:uninstall', instanceId, filename),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('plugins:openExternal', url)
+}
+
+const modpacks = {
+  search: (query: string, limit = 20): Promise<PluginSearchResult[]> =>
+    ipcRenderer.invoke('modpacks:search', query, limit),
+  listVersions: (source: PluginSource, projectId: string): Promise<PluginVersion[]> =>
+    ipcRenderer.invoke('modpacks:listVersions', source, projectId),
+  inspect: (source: PluginSource, downloadUrl: string): Promise<{ serverType: ServerType; minecraftVersion: string }> =>
+    ipcRenderer.invoke('modpacks:inspect', source, downloadUrl),
+  install: (instanceId: string, source: PluginSource, downloadUrl: string): Promise<void> =>
+    ipcRenderer.invoke('modpacks:install', instanceId, source, downloadUrl),
+  onProgress: (callback: (event: ModpackInstallProgress & { instanceId: string }) => void): (() => void) =>
+    subscribe('modpacks:progress', callback)
 }
 
 const settings = {
@@ -189,6 +204,7 @@ const chunkforgeApi = {
   servers,
   plugins,
   settings,
+  modpacks,
   players,
   files,
   backups,

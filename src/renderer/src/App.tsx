@@ -6,6 +6,7 @@ import { TitleBar } from './components/TitleBar'
 import { NavRail, type NavKey } from './components/NavRail'
 import { DashboardPage } from './pages/Dashboard/DashboardPage'
 import { PluginBrowserPage } from './pages/PluginBrowser/PluginBrowserPage'
+import { ModpackPage } from './pages/PluginBrowser/ModpackPage'
 import { SettingsPage } from './pages/Settings/SettingsPage'
 import { SetupWizard } from './pages/SetupWizard/SetupWizard'
 import { InstancePage } from './pages/Instance/InstancePage'
@@ -123,6 +124,7 @@ export function App(): JSX.Element {
         {!overlay && activeNav === 'mods' && (
           <PluginBrowserPage mode="mods" scopedInstanceId={pluginScopeId} />
         )}
+        {!overlay && activeNav === 'modpacks' && <ModpackPage />}
         {!overlay && activeNav === 'settings' && <SettingsPage />}
       </div>
     </FluentProvider>

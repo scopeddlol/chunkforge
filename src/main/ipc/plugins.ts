@@ -9,6 +9,8 @@ import {
   setPluginEnabled,
   uninstallPlugin
 } from '../services/plugins/pluginRegistry'
+import { listModpackVersions, searchModpacks } from '../services/plugins/modpacks'
+import { installModpack, readModpackTarget } from '../services/modpackService'
 import { loadInstanceMetadata } from '../store/instancesStore'
 
 export function registerPluginIpcHandlers(): void {
@@ -44,4 +46,25 @@ export function registerPluginIpcHandlers(): void {
   })
 
   ipcMain.handle('plugins:openExternal', (_, url: string) => shell.openExternal(url))
+
+  // --- Modpacks ---
+  ipcMain.handle('modpacks:search', (_, query: string, limit: number) => searchModpacks(query, limit))
+
+  ipcMain.handle('modpacks:listVersions', (_, source: PluginSource, projectId: string) =>
+    listModpackVersions(source, projectId)
+  )
+
+  ipcMain.handle('modpacks:inspect', (_, source: PluginSource, downloadUrl: string) =>
+    readModpackTarget(source, downloadUrl)
+  )
+
+  ipcMain.handle(
+    'modpacks:install',
+    async (event, instanceId: string, source: PluginSource, downloadUrl: string) => {
+      const metadata = await loadInstanceMetadata(instanceId)
+      await installModpack(source, downloadUrl, metadata.path, (progress) => {
+        event.sender.send('modpacks:progress', { instanceId, ...progress })
+      })
+    }
+  )
 }

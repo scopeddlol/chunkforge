@@ -136,6 +136,12 @@ export interface ServerGroup {
   color: string
 }
 
+export interface ModpackInstallProgress {
+  stage: 'downloading' | 'installing' | 'done'
+  message: string
+  percent: number
+}
+
 export interface DashboardStats {
   cpuPercent: number
   cpuCores: number
