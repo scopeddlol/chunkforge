@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Chunkforge domain layer — server lifecycle, add-ons, backups. No UI, no Electron.",
   "private": true,
   "type": "module",
