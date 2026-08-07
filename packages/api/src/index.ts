@@ -113,7 +113,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
 
   attachCoreEvents()
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.0' }))
+  app.get('/api/health', async () => ({ ok: true, version: '0.4.0' }))
 
   if (servePortal && existsSync(portalRoot)) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))
