@@ -95,7 +95,10 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   if (servePortal && existsSync(portalRoot)) {
     await app.register(fastifyStatic, {
       root: portalRoot,
-      wildcard: false
+      wildcard: false,
+      // We serve '/' ourselves for SPA fallback; leaving static index enabled
+      // registers another GET '/' and crashes startup with duplicated route.
+      index: false
     })
   }
 
