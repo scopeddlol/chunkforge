@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react
 import { makeStyles, tokens, Input, Button } from '@fluentui/react-components'
 import { Send24Regular } from '@fluentui/react-icons'
 import type { LogLineEvent } from '@shared/types'
+import { api, onEvent } from '../api'
 
 const FALLBACK_MAX_LINES = 2000
 
@@ -59,14 +60,16 @@ export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): 
   const maxLinesRef = useRef(FALLBACK_MAX_LINES)
 
   useEffect(() => {
-    window.chunkforge.settings.get().then((settings) => {
-      maxLinesRef.current = settings.consoleScrollbackLines || FALLBACK_MAX_LINES
-    })
+    api()
+      .settings.get()
+      .then((settings) => {
+        maxLinesRef.current = settings.consoleScrollbackLines || FALLBACK_MAX_LINES
+      })
   }, [])
 
   useEffect(() => {
     setLines([])
-    return window.chunkforge.servers.onLog((event) => {
+    return onEvent('log', (event) => {
       if (event.instanceId !== instanceId) return
       setLines((prev) => {
         const next = [...prev, event]
@@ -84,7 +87,7 @@ export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): 
   function submitCommand(): void {
     const trimmed = command.trim()
     if (!trimmed) return
-    window.chunkforge.servers.sendCommand(instanceId, trimmed)
+    void api().servers.command(instanceId, trimmed)
     setCommand('')
   }
 

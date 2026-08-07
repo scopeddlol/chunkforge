@@ -66,11 +66,11 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
   const [defaultRoot, setDefaultRoot] = useState('')
 
   useEffect(() => {
-    window.chunkforge.servers.getDefaultInstancesRoot().then(setDefaultRoot)
+    window.native.getDefaultInstancesRoot().then(setDefaultRoot)
   }, [])
 
   async function handleBrowse(): Promise<void> {
-    const picked = await window.chunkforge.servers.pickInstallLocation()
+    const picked = await window.native.pickFolder('Choose where this server is created')
     if (picked) onChange({ installLocation: picked })
   }
 

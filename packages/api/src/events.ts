@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { instanceManager } from '@chunkforge/core'
+import type { ServerEvent } from './eventTypes'
 
 /**
  * Chunkforge's live data is already event-driven inside core — the instance
@@ -8,18 +9,7 @@ import { instanceManager } from '@chunkforge/core'
  * desktop, web, and mobile clients all consume the same stream instead of
  * polling.
  */
-export interface ServerEvent {
-  type:
-    | 'log'
-    | 'status'
-    | 'players'
-    | 'create-progress'
-    | 'modpack-progress'
-    | 'backup-created'
-    | 'backup-failed'
-    | 'filehub-upload'
-  payload: unknown
-}
+export type { ServerEvent, ServerEventType, ServerEventPayloads } from './eventTypes'
 
 /** Minimal shape we need from a WebSocket, so this file doesn't depend on ws types. */
 interface EventSocket {
@@ -41,7 +31,15 @@ export function broadcast(event: ServerEvent): void {
   }
 }
 
+// The instance manager is a process-wide singleton, so attaching twice would
+// duplicate every log line. Constructing the API more than once is legitimate
+// (tests, an embedded restart), so guard rather than assume a single call.
+let coreEventsAttached = false
+
 export function attachCoreEvents(): void {
+  if (coreEventsAttached) return
+  coreEventsAttached = true
+
   instanceManager.on('log', (payload) => broadcast({ type: 'log', payload }))
   instanceManager.on('status-changed', (payload) => broadcast({ type: 'status', payload }))
   instanceManager.on('players-changed', (payload) => broadcast({ type: 'players', payload }))

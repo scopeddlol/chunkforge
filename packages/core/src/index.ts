@@ -74,3 +74,4 @@ export {
   slugifyInstanceName
 } from './store/instancesStore'
 export { getSettings, loadSettings, saveSettings } from './store/settingsStore'
+export { runMigrations, migrateInstance, CURRENT_SCHEMA_VERSION } from './store/migrations'

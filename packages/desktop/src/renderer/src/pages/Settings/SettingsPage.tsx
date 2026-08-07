@@ -30,6 +30,7 @@ import {
 import { ChunkforgeMark } from '../../components/ChunkforgeMark'
 import { FileHubPanel } from './FileHubPanel'
 import { ThemePicker } from './ThemePicker'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
@@ -90,10 +91,12 @@ export function SettingsPage(): JSX.Element {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    window.chunkforge.settings.get().then((settings) => {
-      setSaved(settings)
-      setDraft(settings)
-    })
+    api()
+      .settings.get()
+      .then((settings) => {
+        setSaved(settings)
+        setDraft(settings)
+      })
   }, [])
 
   const dirty = useMemo(
@@ -109,7 +112,7 @@ export function SettingsPage(): JSX.Element {
     if (!draft) return
     setSaving(true)
     try {
-      const updated = await window.chunkforge.settings.update(draft)
+      const updated = await api().settings.update(draft)
       setSaved(updated)
       setDraft(updated)
       // Theme and other cross-cutting settings are read elsewhere on demand.
@@ -122,7 +125,7 @@ export function SettingsPage(): JSX.Element {
   async function scanJava(): Promise<void> {
     setScanning(true)
     try {
-      setJavaRuntimes(await window.chunkforge.settings.detectJava())
+      setJavaRuntimes(await api().java())
     } finally {
       setScanning(false)
     }
@@ -194,7 +197,7 @@ export function SettingsPage(): JSX.Element {
                 <Button
                   icon={<FolderOpen20Regular />}
                   onClick={async () => {
-                    const picked = await window.chunkforge.settings.pickFolder('Choose default server location')
+                    const picked = await window.native.pickFolder('Choose default server location')
                     if (picked) patch({ defaultInstallLocation: picked })
                   }}
                 >
@@ -260,7 +263,7 @@ export function SettingsPage(): JSX.Element {
             </Field>
             <Link
               appearance="subtle"
-              onClick={() => window.chunkforge.plugins.openExternal('https://console.curseforge.com/')}
+              onClick={() => window.native.openExternal('https://console.curseforge.com/')}
             >
               Get a key at console.curseforge.com <Open16Regular />
             </Link>
@@ -271,7 +274,7 @@ export function SettingsPage(): JSX.Element {
           <FileHubPanel
             settings={draft}
             onPatch={async (p) => {
-              const updated = await window.chunkforge.settings.update(p)
+              const updated = await api().settings.update(p)
               setSaved(updated)
               setDraft((prev) => (prev ? { ...prev, ...p } : prev))
             }}
@@ -310,7 +313,7 @@ export function SettingsPage(): JSX.Element {
             <Text weight="semibold" className={styles.panelTitle}>
               Storage
             </Text>
-            <Button icon={<FolderOpen20Regular />} onClick={() => window.chunkforge.settings.openDataFolder()}>
+            <Button icon={<FolderOpen20Regular />} onClick={() => window.native.openDataFolder()}>
               Open Chunkforge Data Folder
             </Button>
           </div>

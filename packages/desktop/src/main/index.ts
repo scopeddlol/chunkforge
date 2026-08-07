@@ -55,7 +55,11 @@ app.whenReady().then(async () => {
   // loopback on an OS-assigned port keeps it off the network and collision-free.
   coreApi = await startCoreApi({
     dataRoot: join(app.getPath('documents'), 'Chunkforge'),
-    host: '127.0.0.1'
+    host: '127.0.0.1',
+    localOwner: true,
+    // The renderer is a different origin from the API in both modes: a
+    // file:// document reports `null`, and in development it is served by Vite.
+    allowedOrigins: ['null', process.env['ELECTRON_RENDERER_URL'] ?? ''].filter(Boolean)
   })
 
   app.on('browser-window-created', (_, window) => {
@@ -65,8 +69,10 @@ app.whenReady().then(async () => {
   const mainWindow = createMainWindow()
   registerNativeIpcHandlers(mainWindow)
 
-  // The renderer needs to know where its embedded API is listening.
+  // The renderer needs to know where its embedded API is listening, and the
+  // session that authenticates it as the machine's owner.
   ipcMain.handle('native:apiUrl', () => coreApi?.url ?? null)
+  ipcMain.handle('native:apiToken', () => coreApi?.sessionToken ?? null)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

@@ -14,6 +14,7 @@ import { Search20Regular, Add20Regular, Checkmark20Filled, Dismiss16Regular } fr
 import { modServerTypes, type PluginSearchResult, type QueuedPlugin } from '@shared/types'
 import { SourceBadge } from '../../../components/SourceBadge'
 import type { WizardState } from '../wizardState'
+import { api } from '../../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '14px', minHeight: 0, maxWidth: '640px' },
@@ -69,7 +70,7 @@ export function PluginsStep({ state, onChange }: PluginsStepProps): JSX.Element 
     async (query: string) => {
       setLoading(true)
       try {
-        const response = await window.chunkforge.plugins.search({
+        const response = await api().addons.search({
           query,
           sources: [],
           gameVersion: state.minecraftVersion || undefined,

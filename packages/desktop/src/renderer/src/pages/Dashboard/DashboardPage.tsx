@@ -30,6 +30,7 @@ import { InstanceCard } from './InstanceCard'
 import { InstanceTable } from './InstanceTable'
 import { AnalyticsPanel } from './AnalyticsPanel'
 import { GroupDialog } from './GroupDialog'
+import { api, onEvent } from '../../api'
 
 const useStyles = makeStyles({
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', padding: '28px 36px', overflow: 'auto' },
@@ -107,28 +108,30 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 
   const loadGroups = useCallback(() => {
-    window.chunkforge.groups.list().then(setGroups)
+    api().groups.list().then(setGroups)
   }, [])
 
   useEffect(() => {
     refresh()
     loadGroups()
-    window.chunkforge.settings.get().then((s) => setView(s.dashboardView))
+    api()
+      .settings.get()
+      .then((s) => setView(s.dashboardView))
   }, [refresh, loadGroups])
 
   useEffect(() => {
-    return window.chunkforge.servers.onStatusChanged((event) =>
+    return onEvent('status', (event) =>
       applyStatus(event.instanceId, event.status)
     )
   }, [applyStatus])
 
   async function changeView(next: DashboardView): Promise<void> {
     setView(next)
-    await window.chunkforge.settings.update({ dashboardView: next })
+    await api().settings.update({ dashboardView: next })
   }
 
   function handleStart(id: string): void {
-    window.chunkforge.servers.start(id)
+    void api().servers.start(id)
   }
 
   function handleStop(id: string): void {
@@ -137,7 +140,7 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
   }
 
   async function bulk(groupId: string, action: 'start' | 'stop'): Promise<void> {
-    await window.chunkforge.groups.bulk(groupId, action)
+    await api().groups.bulk(groupId, action)
     refresh()
   }
 
@@ -229,7 +232,7 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
                       </MenuItem>
                       <MenuItem
                         onClick={async () => {
-                          await window.chunkforge.groups.delete(group.id)
+                          await api().groups.remove(group.id)
                           setActiveGroup(null)
                           loadGroups()
                           refresh()

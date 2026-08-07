@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react
 import { makeStyles, tokens, Text, Input, Button, mergeClasses } from '@fluentui/react-components'
 import { Send20Regular, Chat24Regular } from '@fluentui/react-icons'
 import type { ChatMessage } from '@shared/types'
+import { api, onEvent } from '../../api'
 
 const MAX_MESSAGES = 500
 
@@ -82,7 +83,7 @@ export function ChatTab({ instanceId, serverRunning }: ChatTabProps): JSX.Elemen
 
   useEffect(() => {
     setMessages([])
-    return window.chunkforge.servers.onLog((event) => {
+    return onEvent('log', (event) => {
       if (event.instanceId !== instanceId) return
       const parsed: ChatMessage[] = []
       for (const line of event.line.split('\n')) {
@@ -105,7 +106,7 @@ export function ChatTab({ instanceId, serverRunning }: ChatTabProps): JSX.Elemen
   function send(): void {
     const text = draft.trim()
     if (!text) return
-    window.chunkforge.players.say(instanceId, text)
+    void api().players.say(instanceId, text)
     setDraft('')
   }
 

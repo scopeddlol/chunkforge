@@ -21,11 +21,15 @@ import { requireRole } from '../auth/plugin'
  * Live process state always wins over what was persisted, since the stored
  * status is only accurate at the moment it was written.
  */
-function withLiveState<T extends { id: string }>(metadata: T): T & { status: string; playersOnline: number } {
+function withLiveState<T extends { id: string }>(
+  metadata: T
+): T & { status: string; playersOnline: number; onlinePlayers: string[] } {
+  const onlinePlayers = instanceManager.getOnlinePlayers(metadata.id)
   return {
     ...metadata,
     status: instanceManager.getStatus(metadata.id),
-    playersOnline: instanceManager.getOnlinePlayers(metadata.id).length
+    playersOnline: onlinePlayers.length,
+    onlinePlayers
   }
 }
 

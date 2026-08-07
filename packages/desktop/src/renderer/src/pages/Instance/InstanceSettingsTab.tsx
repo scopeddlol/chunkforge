@@ -23,6 +23,7 @@ import { FolderOpen20Regular, Save20Regular, Delete20Regular } from '@fluentui/r
 import type { InstanceMetadata, InstanceToggles } from '@shared/types'
 import { IconPanel } from './IconPanel'
 import { StartupPanel } from './StartupPanel'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '18px', overflowY: 'auto', paddingBottom: '20px' },
@@ -73,7 +74,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
   async function save(): Promise<void> {
     setSaving(true)
     try {
-      const updated = await window.chunkforge.servers.updateSettings(metadata.id, {
+      const updated = await api().servers.update(metadata.id, {
         name: draft.name,
         port: draft.port,
         minRamMb: draft.minRamMb,
@@ -220,7 +221,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
         <div className={styles.actions}>
           <Button
             icon={<FolderOpen20Regular />}
-            onClick={() => window.chunkforge.servers.openFolder(metadata.id)}
+            onClick={() => window.native.openFolder(metadata.id)}
           >
             Open Folder
           </Button>
@@ -259,7 +260,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
               <Button
                 appearance="primary"
                 onClick={async () => {
-                  await window.chunkforge.servers.delete(metadata.id, deleteFiles)
+                  await api().servers.remove(metadata.id, deleteFiles)
                   setConfirmDelete(false)
                   onDeleted()
                 }}

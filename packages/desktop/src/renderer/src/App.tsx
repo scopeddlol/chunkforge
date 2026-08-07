@@ -11,6 +11,7 @@ import { SettingsPage } from './pages/Settings/SettingsPage'
 import { SetupWizard } from './pages/SetupWizard/SetupWizard'
 import { InstancePage } from './pages/Instance/InstancePage'
 import { useInstancesStore } from './state/instancesStore'
+import { api } from './api'
 
 const useStyles = makeStyles({
   shell: {
@@ -36,12 +37,14 @@ function useResolvedTheme(): ChunkforgeTheme {
   const [preference, setPreference] = useState<ThemePreference>('system')
 
   useEffect(() => {
-    window.chunkforge.theme.getSystemTheme().then(setSystemTheme)
-    return window.chunkforge.theme.onSystemThemeChanged(setSystemTheme)
+    window.native.theme.getSystemTheme().then(setSystemTheme)
+    return window.native.theme.onSystemThemeChanged(setSystemTheme)
   }, [])
 
   const loadPreference = useCallback(() => {
-    window.chunkforge.settings.get().then((settings) => setPreference(settings.themePreference))
+    api()
+      .settings.get()
+      .then((settings) => setPreference(settings.themePreference))
   }, [])
 
   useEffect(loadPreference, [loadPreference])
@@ -89,7 +92,7 @@ export function App(): JSX.Element {
 
   // Mod servers should land on the Mods browser, plugin servers on Plugins.
   const handleBrowsePlugins = useCallback(async (instanceId: string) => {
-    const metadata = await window.chunkforge.servers.getMetadata(instanceId)
+    const metadata = await api().servers.get(instanceId)
     setPluginScopeId(instanceId)
     setOverlay(null)
     setActiveNav(serverTypeCategory[metadata.serverType] === 'mods' ? 'mods' : 'plugins')

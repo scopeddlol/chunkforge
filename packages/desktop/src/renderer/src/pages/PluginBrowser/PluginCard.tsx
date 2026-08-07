@@ -149,7 +149,7 @@ export function PluginCard({ plugin, onInstall, canInstall }: PluginCardProps): 
             size="small"
             icon={<Open16Regular />}
             title="Open source page"
-            onClick={() => window.chunkforge.plugins.openExternal(plugin.sourceUrl)}
+            onClick={() => window.native.openExternal(plugin.sourceUrl)}
           />
           <Button
             appearance="primary"

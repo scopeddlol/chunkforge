@@ -9,6 +9,7 @@ import {
   loadInstanceMetadata,
   saveInstanceMetadata,
   saveSettings,
+  DEFAULT_PROJECT_ID,
   type AppSettings,
   type ServerGroup
 } from '@chunkforge/core'
@@ -41,6 +42,16 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     }
   )
 
+  // ---- projects and nodes ----
+  //
+  // Projects are the new name for groups, and carry the same ids, so the two
+  // surfaces describe one set of records. Reads are served from both while the
+  // UI moves across.
+
+  app.get('/api/projects', { preHandler: requireRole('viewer') }, async () => getSettings().projects)
+
+  app.get('/api/nodes', { preHandler: requireRole('viewer') }, async () => getSettings().nodes)
+
   // ---- groups ----
 
   app.get('/api/groups', { preHandler: requireRole('viewer') }, async () => getSettings().serverGroups)
@@ -54,7 +65,11 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         name: request.body.name,
         color: request.body.color
       }
-      await saveSettings({ serverGroups: [...getSettings().serverGroups, group] })
+      const settings = getSettings()
+      await saveSettings({
+        serverGroups: [...settings.serverGroups, group],
+        projects: [...settings.projects, { ...group, createdAt: new Date().toISOString() }]
+      })
       return group
     }
   )
@@ -63,10 +78,17 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     '/api/groups/:id',
     { preHandler: requireRole('member') },
     async (request) => {
-      const next = getSettings().serverGroups.map((g) =>
-        g.id === request.params.id ? { ...g, name: request.body.name, color: request.body.color } : g
+      const { name, color } = request.body
+      const settings = getSettings()
+      const next = settings.serverGroups.map((g) =>
+        g.id === request.params.id ? { ...g, name, color } : g
       )
-      await saveSettings({ serverGroups: next })
+      await saveSettings({
+        serverGroups: next,
+        projects: settings.projects.map((p) =>
+          p.id === request.params.id ? { ...p, name, color } : p
+        )
+      })
       return next
     }
   )
@@ -76,10 +98,18 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     { preHandler: requireRole('member') },
     async (request) => {
       const { id } = request.params
-      await saveSettings({ serverGroups: getSettings().serverGroups.filter((g) => g.id !== id) })
-      // Detach the group from any server still referencing it.
+      const settings = getSettings()
+      await saveSettings({
+        serverGroups: settings.serverGroups.filter((g) => g.id !== id),
+        // The default project is structural — servers fall back to it — so it is
+        // never removed even if a group shared its id.
+        projects: settings.projects.filter((p) => p.id !== id || p.isDefault)
+      })
+      // Re-home any server still referencing the deleted group.
       for (const instance of await listInstanceMetadata()) {
-        if (instance.groupId === id) await saveInstanceMetadata({ ...instance, groupId: null })
+        if (instance.groupId === id) {
+          await saveInstanceMetadata({ ...instance, groupId: null, projectId: DEFAULT_PROJECT_ID })
+        }
       }
       return { ok: true }
     }
@@ -91,7 +121,11 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     async (request) => {
       const metadata = await loadInstanceMetadata(request.body.instanceId)
       const groupId = request.params.id === 'none' ? null : request.params.id
-      await saveInstanceMetadata({ ...metadata, groupId })
+      await saveInstanceMetadata({
+        ...metadata,
+        groupId,
+        projectId: groupId ?? DEFAULT_PROJECT_ID
+      })
       return { ok: true }
     }
   )

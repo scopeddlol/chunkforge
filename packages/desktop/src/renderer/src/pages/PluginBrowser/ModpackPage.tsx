@@ -32,6 +32,7 @@ import {
 } from '@shared/types'
 import { SourceBadge } from '../../components/SourceBadge'
 import { useInstancesStore } from '../../state/instancesStore'
+import { api, onEvent } from '../../api'
 
 const useStyles = makeStyles({
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '28px 36px 0' },
@@ -110,7 +111,7 @@ export function ModpackPage(): JSX.Element {
   const search = useCallback(async (query: string) => {
     setLoading(true)
     try {
-      setResults(await window.chunkforge.modpacks.search(query))
+      setResults(await api().modpacks.search(query))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -124,7 +125,7 @@ export function ModpackPage(): JSX.Element {
   }, [search, instances.length, refresh])
 
   useEffect(() => {
-    return window.chunkforge.modpacks.onProgress((event) => setProgress(event))
+    return onEvent('modpack-progress', (event) => setProgress(event))
   }, [])
 
   async function openInstall(pack: PluginSearchResult): Promise<void> {
@@ -136,7 +137,7 @@ export function ModpackPage(): JSX.Element {
     setError(null)
     setInstanceId(instances[0]?.id ?? null)
     try {
-      const list = await window.chunkforge.modpacks.listVersions(pack.source, pack.id)
+      const list = await api().modpacks.versions(pack.source, pack.id)
       setVersions(list)
       setVersionId(list.find((v) => v.downloadUrl)?.id ?? list[0]?.id ?? null)
     } catch (err) {
@@ -152,8 +153,8 @@ export function ModpackPage(): JSX.Element {
     if (!target || !selectedVersion?.downloadUrl) return
     let cancelled = false
     setPackTarget(null)
-    window.chunkforge.modpacks
-      .inspect(target.source, selectedVersion.downloadUrl)
+    api()
+      .modpacks.inspect(target.source, selectedVersion.downloadUrl)
       .then((t) => !cancelled && setPackTarget(t))
       .catch((err: Error) => !cancelled && setError(err.message))
     return () => {
@@ -171,7 +172,7 @@ export function ModpackPage(): JSX.Element {
     if (!target || !selectedVersion?.downloadUrl || !instanceId) return
     setError(null)
     try {
-      await window.chunkforge.modpacks.install(instanceId, target.source, selectedVersion.downloadUrl)
+      await api().modpacks.install(instanceId, target.source, selectedVersion.downloadUrl)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -243,7 +244,7 @@ export function ModpackPage(): JSX.Element {
                       appearance="subtle"
                       size="small"
                       icon={<Open16Regular />}
-                      onClick={() => window.chunkforge.plugins.openExternal(pack.sourceUrl)}
+                      onClick={() => window.native.openExternal(pack.sourceUrl)}
                     />
                     <Button
                       appearance="primary"

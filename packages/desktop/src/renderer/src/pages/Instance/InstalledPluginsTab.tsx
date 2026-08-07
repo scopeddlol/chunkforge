@@ -11,6 +11,7 @@ import {
 } from '@fluentui/react-components'
 import { Delete20Regular, AddCircle24Regular, AppsAddIn24Regular } from '@fluentui/react-icons'
 import { serverTypeCategory, type InstalledPlugin, type ServerType } from '@shared/types'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: 0 },
@@ -65,8 +66,8 @@ export function InstalledPluginsTab({
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    window.chunkforge.plugins
-      .listInstalled(instanceId)
+    api()
+      .addons.installed(instanceId)
       .then(setPlugins)
       .catch((err: Error) => setError(err.message))
   }, [instanceId])
@@ -74,12 +75,12 @@ export function InstalledPluginsTab({
   useEffect(load, [load])
 
   async function toggle(plugin: InstalledPlugin): Promise<void> {
-    await window.chunkforge.plugins.setEnabled(instanceId, plugin.filename, !plugin.enabled)
+    await api().addons.setEnabled(instanceId, plugin.filename, !plugin.enabled)
     load()
   }
 
   async function remove(plugin: InstalledPlugin): Promise<void> {
-    await window.chunkforge.plugins.uninstall(instanceId, plugin.filename)
+    await api().addons.uninstall(instanceId, plugin.filename)
     load()
   }
 

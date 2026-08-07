@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from 'react'
 import { makeStyles, tokens, Text } from '@fluentui/react-components'
 import type { DashboardStats } from '@shared/types'
 import { statusColors } from '../../theme/chunkforgeTheme'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   grid: {
@@ -96,9 +97,11 @@ export function AnalyticsPanel(): JSX.Element | null {
   useEffect(() => {
     let cancelled = false
     const poll = (): void => {
-      window.chunkforge.stats.dashboard().then((next) => {
-        if (!cancelled) setStats(next)
-      })
+      api()
+        .stats()
+        .then((next) => {
+          if (!cancelled) setStats(next)
+        })
     }
     poll()
     // CPU is a delta between samples, so it needs repeated polling to mean anything.

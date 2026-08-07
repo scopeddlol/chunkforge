@@ -25,6 +25,7 @@ import {
   CloudArrowUp20Regular
 } from '@fluentui/react-icons'
 import type { BackupEntry, BackupSchedule } from '@shared/types'
+import { api, onEvent } from '../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: 0 },
@@ -81,8 +82,8 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
   const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
 
   const load = useCallback(() => {
-    window.chunkforge.backups
-      .list(instanceId)
+    api()
+      .backups.list(instanceId)
       .then(setBackups)
       .catch((err: Error) => setError(err.message))
   }, [instanceId])
@@ -90,24 +91,26 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
   useEffect(load, [load])
 
   useEffect(() => {
-    window.chunkforge.filehub.status().then((status) => setFileHubReady(status.connected))
-    window.chunkforge.backups.getSchedule(instanceId).then(setSchedule)
+    api()
+      .filehub.status()
+      .then((status) => setFileHubReady(status.connected))
+    api().backups.getSchedule(instanceId).then(setSchedule)
   }, [instanceId])
 
-  // Scheduled runs happen in the main process, so the list refreshes on notice.
+  // Scheduled runs happen server-side, so the list refreshes on notice.
   useEffect(() => {
-    return window.chunkforge.backups.onAutoCreated((event) => {
+    return onEvent('backup-created', (event) => {
       if (event.instanceId === instanceId) load()
     })
   }, [instanceId, load])
 
   async function saveSchedule(next: BackupSchedule): Promise<void> {
     setSchedule(next)
-    await window.chunkforge.backups.setSchedule(instanceId, next)
+    await api().backups.setSchedule(instanceId, next)
   }
 
   useEffect(() => {
-    return window.chunkforge.filehub.onUploadProgress((event) => {
+    return onEvent('filehub-upload', (event) => {
       if (event.instanceId !== instanceId) return
       setUploadPercent(event.percent)
       if (event.done) {
@@ -122,7 +125,7 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
     setUploadPercent(0)
     setError(null)
     try {
-      await window.chunkforge.filehub.uploadBackup(instanceId, backup.filename)
+      await api().filehub.upload(instanceId, backup.filename)
     } catch (err) {
       setError((err as Error).message)
       setUploading(null)
@@ -133,9 +136,9 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
     setBusy(true)
     setError(null)
     try {
-      const created = await window.chunkforge.backups.create(instanceId)
+      const created = await api().backups.create(instanceId)
       load()
-      const settings = await window.chunkforge.settings.get()
+      const settings = await api().settings.get()
       if (settings.fileHub.uploadBackupsAutomatically && fileHubReady) {
         upload(created)
       }
@@ -150,7 +153,7 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
     setBusy(true)
     setError(null)
     try {
-      await window.chunkforge.backups.restore(instanceId, backup.filename)
+      await api().backups.restore(instanceId, backup.filename)
       setRestoreTarget(null)
       load()
     } catch (err) {
@@ -161,7 +164,7 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
   }
 
   async function remove(backup: BackupEntry): Promise<void> {
-    await window.chunkforge.backups.delete(instanceId, backup.filename)
+    await api().backups.remove(instanceId, backup.filename)
     load()
   }
 

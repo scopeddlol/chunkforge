@@ -12,6 +12,7 @@ import { ResourcesStep } from './steps/ResourcesStep'
 import { TogglesStep } from './steps/TogglesStep'
 import { PluginsStep } from './steps/PluginsStep'
 import { ReviewStep } from './steps/ReviewStep'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   root: {
@@ -52,7 +53,7 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
   // Seed from the saved "new server defaults" without blocking first paint.
   useEffect(() => {
     let cancelled = false
-    window.chunkforge.settings.get().then((settings) => {
+    void api().settings.get().then((settings) => {
       if (cancelled) return
       setState((prev) => ({
         ...prev,

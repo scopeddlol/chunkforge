@@ -34,6 +34,7 @@ import { PlayersTab } from './PlayersTab'
 import { ChatTab } from './ChatTab'
 import { FilesTab } from './FilesTab'
 import { BackupsTab } from './BackupsTab'
+import { api, onEvent } from '../../api'
 
 const useStyles = makeStyles({
   root: {
@@ -81,7 +82,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
 
   useEffect(() => {
     let cancelled = false
-    window.chunkforge.servers.getMetadata(instanceId).then((data) => {
+    api().servers.get(instanceId).then((data) => {
       if (!cancelled) {
         setMetadata(data)
         setStatus(data.status)
@@ -93,7 +94,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
   }, [instanceId])
 
   useEffect(() => {
-    return window.chunkforge.servers.onStatusChanged((event) => {
+    return onEvent('status', (event) => {
       if (event.instanceId !== instanceId) return
       setStatus(event.status)
       applyStatus(event.instanceId, event.status)
@@ -101,8 +102,10 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
   }, [instanceId, applyStatus])
 
   useEffect(() => {
-    window.chunkforge.players.online(instanceId).then(setOnlinePlayers)
-    return window.chunkforge.players.onChanged((event) => {
+    api()
+      .servers.get(instanceId)
+      .then((data) => setOnlinePlayers(data.onlinePlayers ?? []))
+    return onEvent('players', (event) => {
       if (event.instanceId === instanceId) setOnlinePlayers(event.players)
     })
   }, [instanceId])
@@ -154,7 +157,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             appearance="subtle"
             icon={<FolderOpen20Regular />}
             title="Open server folder"
-            onClick={() => window.chunkforge.servers.openFolder(metadata.id)}
+            onClick={() => window.native.openFolder(metadata.id)}
           />
           <Button
             appearance="primary"
@@ -163,7 +166,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             onClick={() =>
               isRunning
                 ? requestStop(instanceId, metadata.name)
-                : window.chunkforge.servers.start(instanceId)
+                : api().servers.start(instanceId)
             }
           >
             {isRunning ? 'Stop Server' : isBusy ? 'Working…' : 'Start Server'}

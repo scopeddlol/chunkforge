@@ -25,6 +25,7 @@ import { sourceColors } from '../../components/SourceBadge'
 import { useInstancesStore } from '../../state/instancesStore'
 import { PluginCard } from './PluginCard'
 import { InstallDialog } from './InstallDialog'
+import { api } from '../../api'
 
 const allSources: PluginSource[] = ['modrinth', 'hangar', 'spiget', 'curseforge']
 
@@ -124,7 +125,7 @@ export function PluginBrowserPage({
     async (query: string, sources: PluginSource[], version: string, loader: string) => {
       setLoading(true)
       try {
-        const response = await window.chunkforge.plugins.search({
+        const response = await api().addons.search({
           query,
           sources,
           gameVersion: version || undefined,
@@ -146,12 +147,15 @@ export function PluginBrowserPage({
   // the page is never empty on first open.
   useEffect(() => {
     let cancelled = false
-    window.chunkforge.settings.get().then((settings) => {
-      if (cancelled) return
-      const enabled = settings.enabledPluginSources.length > 0 ? settings.enabledPluginSources : allSources
-      setActiveSources(enabled)
-      runSearch('', enabled, '', mode === 'mods' ? 'fabric' : '')
-    })
+    api()
+      .settings.get()
+      .then((settings) => {
+        if (cancelled) return
+        const enabled =
+          settings.enabledPluginSources.length > 0 ? settings.enabledPluginSources : allSources
+        setActiveSources(enabled)
+        runSearch('', enabled, '', mode === 'mods' ? 'fabric' : '')
+      })
     return () => {
       cancelled = true
     }

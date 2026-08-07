@@ -12,6 +12,7 @@ import {
 import { Rocket24Regular } from '@fluentui/react-icons'
 import type { CreateProgressEvent, InstanceMetadata } from '@shared/types'
 import { toCreateInstanceConfig, type WizardState } from '../wizardState'
+import { api, onEvent } from '../../../api'
 
 const useStyles = makeStyles({
   root: {
@@ -57,14 +58,14 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
 
   useEffect(() => {
     if (!creating) return undefined
-    return window.chunkforge.servers.onCreateProgress((event) => setProgress(event))
+    return onEvent('create-progress', (event) => setProgress(event))
   }, [creating])
 
   async function handleCreate(): Promise<void> {
     setCreating(true)
     setError(null)
     try {
-      const metadata = await window.chunkforge.servers.create(toCreateInstanceConfig(state))
+      const metadata = await api().servers.create(toCreateInstanceConfig(state))
 
       // A modpack replaces the whole mod set, so it goes on before anything
       // queued individually.
@@ -76,7 +77,7 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
           percent: 0
         })
         try {
-          await window.chunkforge.modpacks.install(
+          await api().modpacks.install(
             metadata.id,
             state.modpack.source,
             state.modpack.downloadUrl
@@ -99,10 +100,10 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
           percent: Math.round((index / state.initialPlugins.length) * 100)
         })
         try {
-          const versions = await window.chunkforge.plugins.listVersions(queued.source, queued.projectId)
+          const versions = await api().addons.versions(queued.source, queued.projectId)
           const installable = versions.find((v) => v.downloadUrl)
           if (!installable) throw new Error('no downloadable version')
-          await window.chunkforge.plugins.install(metadata.id, installable, queued.name)
+          await api().addons.install(metadata.id, installable, queued.name)
         } catch {
           failed.push(queued.name)
         }

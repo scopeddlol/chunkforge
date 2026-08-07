@@ -22,6 +22,7 @@ import {
   ArrowClockwise20Regular
 } from '@fluentui/react-icons'
 import type { PlayerEntry } from '@shared/types'
+import { api, onEvent } from '../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: 0 },
@@ -71,8 +72,8 @@ export function PlayersTab({ instanceId, serverRunning }: PlayersTabProps): JSX.
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    window.chunkforge.players
-      .list(instanceId)
+    api()
+      .players.list(instanceId)
       .then(setPlayers)
       .catch((err: Error) => setError(err.message))
   }, [instanceId])
@@ -81,7 +82,7 @@ export function PlayersTab({ instanceId, serverRunning }: PlayersTabProps): JSX.
 
   // Join/leave events refresh the roster without polling.
   useEffect(() => {
-    return window.chunkforge.players.onChanged((event) => {
+    return onEvent('players', (event) => {
       if (event.instanceId === instanceId) load()
     })
   }, [instanceId, load])
@@ -89,7 +90,7 @@ export function PlayersTab({ instanceId, serverRunning }: PlayersTabProps): JSX.
   async function act(action: string, name: string): Promise<void> {
     setError(null)
     try {
-      await window.chunkforge.players.action(instanceId, action, name)
+      await api().players.action(instanceId, action, name)
       // The server writes ops/whitelist files a beat after the command runs.
       setTimeout(load, 400)
     } catch (err) {

@@ -7,7 +7,9 @@ import type {
   InstalledPlugin,
   InstanceMetadata,
   InstanceSummary,
+  Node,
   PlayerEntry,
+  Project,
   PluginSearchQuery,
   PluginSearchResponse,
   PluginSearchResult,
@@ -18,7 +20,9 @@ import type {
   DashboardStats,
   VersionCatalogEntry
 } from '@chunkforge/core'
-import type { ServerEvent } from './events'
+import type { ServerEvent } from './eventTypes'
+
+export type { ServerEvent, ServerEventType, ServerEventPayloads } from './eventTypes'
 
 export interface ClientOptions {
   /** Base URL of the Core API, e.g. http://127.0.0.1:8080 */
@@ -221,6 +225,16 @@ export class ChunkforgeClient {
       this.post<{ total: number; failed: number }>(`/api/groups/${id}/bulk`, { action })
   }
 
+  // Projects and nodes are read-only for now: projects are still written
+  // through the groups surface, and nodes arrive by pairing rather than by API.
+  projects = {
+    list: () => this.get<Project[]>('/api/projects')
+  }
+
+  nodes = {
+    list: () => this.get<Node[]>('/api/nodes')
+  }
+
   filehub = {
     status: () =>
       this.get<{ configured: boolean; connected: boolean; username: string | null; message: string | null }>(
@@ -250,7 +264,10 @@ export class ChunkforgeClient {
 
     const connect = (): void => {
       if (closed) return
-      const url = this.baseUrl.replace(/^http/, 'ws') + '/api/events'
+      // The handshake can't carry an Authorization header, so a bearer caller
+      // passes its token in the query; cookie callers need neither.
+      const query = this.token ? `?token=${encodeURIComponent(this.token)}` : ''
+      const url = this.baseUrl.replace(/^http/, 'ws') + '/api/events' + query
       socket = new WebSocket(url)
       socket.onmessage = (message) => {
         try {

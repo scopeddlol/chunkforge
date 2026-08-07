@@ -31,11 +31,11 @@ export function IconPanel({ metadata, onChanged }: IconPanelProps): JSX.Element 
   const [icon, setIcon] = useState<string | null>(null)
 
   useEffect(() => {
-    window.chunkforge.servers.getIcon(metadata.id).then(setIcon)
+    window.native.getIcon(metadata.id).then(setIcon)
   }, [metadata.id])
 
   async function choose(): Promise<void> {
-    const next = await window.chunkforge.servers.pickIcon(metadata.id)
+    const next = await window.native.pickIcon(metadata.id)
     if (next) {
       setIcon(next)
       onChanged()
@@ -43,7 +43,7 @@ export function IconPanel({ metadata, onChanged }: IconPanelProps): JSX.Element 
   }
 
   async function clear(): Promise<void> {
-    await window.chunkforge.servers.clearIcon(metadata.id)
+    await window.native.clearIcon(metadata.id)
     setIcon(null)
     onChanged()
   }

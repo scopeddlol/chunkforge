@@ -11,6 +11,7 @@ import {
 } from '@fluentui/react-components'
 import { Save20Regular, ArrowUndo20Regular } from '@fluentui/react-icons'
 import { LAUNCH_TOKENS, type InstanceMetadata } from '@shared/types'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   panel: {
@@ -90,7 +91,7 @@ export function StartupPanel({ metadata, onSaved }: StartupPanelProps): JSX.Elem
     setSaving(true)
     setError(null)
     try {
-      const updated = await window.chunkforge.servers.updateSettings(metadata.id, { launchArgs: args })
+      const updated = await api().servers.update(metadata.id, { launchArgs: args })
       onSaved(updated)
     } catch (err) {
       setError((err as Error).message)

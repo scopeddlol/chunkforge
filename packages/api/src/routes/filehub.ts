@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import {
   FileHubClient,
   FileHubError,
+  backupScheduler,
   getSettings,
   loadInstanceMetadata,
   saveInstanceMetadata,
@@ -15,6 +16,66 @@ function clientFromSettings(): FileHubClient | null {
   const { fileHub } = getSettings()
   if (!fileHub?.baseUrl) return null
   return new FileHubClient(fileHub.baseUrl, fileHub.sessionCookie)
+}
+
+/**
+ * Uploads a backup archive, filing it under a FileHub folder named after the
+ * server so archives from different servers don't pile up together. The folder
+ * id is remembered on the instance to avoid re-resolving it every time.
+ *
+ * Shared by the manual upload route and the scheduler, which must take exactly
+ * the same path — a scheduled upload that behaved differently from a manual one
+ * would be a nasty thing to debug.
+ */
+export async function uploadBackup(instanceId: string, filename: string): Promise<void> {
+  const client = clientFromSettings()
+  const { fileHub } = getSettings()
+
+  const emit = (percent: number, done: boolean, error: string | null): void => {
+    broadcast({ type: 'filehub-upload', payload: { instanceId, filename, percent, done, error } })
+  }
+
+  if (!client || !fileHub?.sessionCookie) {
+    throw new Error('Sign in to FileHub first (Settings → FileHub)')
+  }
+
+  const metadata = await loadInstanceMetadata(instanceId)
+  const archivePath = join(metadata.path, 'chunkforge-backups', filename)
+
+  try {
+    let folderId = metadata.fileHubFolderId ?? null
+    if (!folderId) {
+      folderId = await client.ensureFolder(metadata.name, fileHub.folderId)
+      await saveInstanceMetadata({ ...metadata, fileHubFolderId: folderId })
+    }
+
+    await client.uploadFile(archivePath, {
+      parentId: folderId,
+      onProgress: (percent) => emit(percent, false, null)
+    })
+    emit(100, true, null)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Upload failed'
+    emit(0, true, message)
+    throw new Error(message)
+  }
+}
+
+// The scheduler is a process-wide singleton, so its listeners must be attached
+// once even if the API is constructed more than once (tests, embedded restarts).
+let schedulerAttached = false
+
+function attachBackupScheduler(): void {
+  if (schedulerAttached) return
+  schedulerAttached = true
+
+  // Scheduled backups reuse the same upload path as the manual button.
+  backupScheduler.on('upload-requested', ({ instanceId, filename }) => {
+    void uploadBackup(instanceId, filename).catch(() => undefined)
+  })
+  backupScheduler.on('backup-created', (payload) => broadcast({ type: 'backup-created', payload }))
+  backupScheduler.on('backup-failed', (payload) => broadcast({ type: 'backup-failed', payload }))
+  backupScheduler.start()
 }
 
 export async function registerFileHubRoutes(app: FastifyInstance): Promise<void> {
@@ -93,41 +154,14 @@ export async function registerFileHubRoutes(app: FastifyInstance): Promise<void>
     '/api/servers/:id/filehub/upload',
     { preHandler: requireRole('member') },
     async (request, reply) => {
-      const client = clientFromSettings()
-      const { fileHub } = getSettings()
-      if (!client || !fileHub?.sessionCookie) {
-        return reply.code(409).send({ error: 'Sign in to FileHub first (Settings → FileHub)' })
-      }
-
-      const instanceId = request.params.id
-      const { filename } = request.body
-      const metadata = await loadInstanceMetadata(instanceId)
-      const archivePath = join(metadata.path, 'chunkforge-backups', filename)
-
-      const emit = (percent: number, done: boolean, error: string | null): void => {
-        broadcast({ type: 'filehub-upload', payload: { instanceId, filename, percent, done, error } })
-      }
-
       try {
-        // Each server's archives go into a folder named after it, resolved once
-        // and then remembered on the instance.
-        let folderId = metadata.fileHubFolderId ?? null
-        if (!folderId) {
-          folderId = await client.ensureFolder(metadata.name, fileHub.folderId)
-          await saveInstanceMetadata({ ...metadata, fileHubFolderId: folderId })
-        }
-
-        await client.uploadFile(archivePath, {
-          parentId: folderId,
-          onProgress: (percent) => emit(percent, false, null)
-        })
-        emit(100, true, null)
+        await uploadBackup(request.params.id, request.body.filename)
         return { ok: true }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Upload failed'
-        emit(0, true, message)
-        return reply.code(502).send({ error: message })
+        return reply.code(502).send({ error: (err as Error).message })
       }
     }
   )
+
+  attachBackupScheduler()
 }

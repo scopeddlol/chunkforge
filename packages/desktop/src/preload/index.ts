@@ -17,6 +17,8 @@ function subscribe<T>(channel: string, callback: (payload: T) => void): () => vo
 const nativeApi = {
   /** Base URL of the embedded Core API this window should talk to. */
   apiUrl: (): Promise<string | null> => ipcRenderer.invoke('native:apiUrl'),
+  /** Owner session for that API. Null in a browser build, which signs in normally. */
+  apiToken: (): Promise<string | null> => ipcRenderer.invoke('native:apiToken'),
 
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

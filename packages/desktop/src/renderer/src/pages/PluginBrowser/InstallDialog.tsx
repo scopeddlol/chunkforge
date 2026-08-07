@@ -26,6 +26,7 @@ import {
   type PluginSource,
   type PluginVersion
 } from '@shared/types'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   body: {
@@ -97,8 +98,8 @@ export function InstallDialog({
     setVersions(null)
     setSelectedVersionId(null)
 
-    window.chunkforge.plugins
-      .listVersions(choice.source, choice.id)
+    api()
+      .addons.versions(choice.source, choice.id)
       .then((result) => {
         if (cancelled) return
         setVersions(result)
@@ -126,7 +127,7 @@ export function InstallDialog({
     setInstalling(true)
     setError(null)
     try {
-      await window.chunkforge.plugins.install(instanceId, selectedVersion, plugin.name)
+      await api().addons.install(instanceId, selectedVersion, plugin.name)
       setDone(true)
       onInstalled()
     } catch (err) {
@@ -237,7 +238,7 @@ export function InstallDialog({
             {selectedVersion?.externalUrl && (
               <Button
                 icon={<Open16Regular />}
-                onClick={() => window.chunkforge.plugins.openExternal(selectedVersion.externalUrl as string)}
+                onClick={() => window.native.openExternal(selectedVersion.externalUrl as string)}
               >
                 Open download page
               </Button>

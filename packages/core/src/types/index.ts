@@ -1,3 +1,9 @@
+import { LOCAL_NODE_ID, type Node, type Project } from './models'
+
+// The platform models live in their own module but are part of the same public
+// surface, so callers keep importing everything from one place.
+export * from './models'
+
 export type ServerType = 'vanilla' | 'paper' | 'purpur' | 'spigot' | 'forge' | 'fabric' | 'neoforge'
 
 export const serverTypeLabels: Record<ServerType, string> = {
@@ -52,17 +58,32 @@ export interface InstanceSummary {
   minecraftVersion: string
   status: InstanceStatus
   playersOnline: number
+  /**
+   * Names of the players currently connected. Derived from the live process, so
+   * it is absent when a summary is read straight off disk.
+   */
+  onlinePlayers?: string[]
   maxPlayers: number
   ramAllocatedMb: number
   accentColor: string
   createdAt: string
   /** Custom thumbnail as a data: URL. Falls back to generated artwork when unset. */
   iconDataUrl?: string | null
+  /** @deprecated Superseded by `projectId`; still written for older builds. */
   groupId?: string | null
+  /** Owning project. Stamped by migration on records that predate projects. */
+  projectId?: string
+  /** Node this instance runs on. `local` until remote nodes are paired. */
+  nodeId?: string
 }
 
 export interface InstanceMetadata extends InstanceSummary {
   port: number
+  /**
+   * On-disk schema generation. Lets the migration recognise records it has
+   * already touched instead of rewriting every file on every boot.
+   */
+  schemaVersion?: number
   javaPath: string | null
   /** Java major version this server requires, per the upstream project's own metadata. */
   javaMajor?: number
@@ -141,6 +162,10 @@ export interface SelectedModpack {
   minecraftVersion: string
 }
 
+/**
+ * @deprecated Being replaced by `Project`, which adds ownership and permission
+ * scope. Kept as the on-disk name so existing settings files keep loading.
+ */
 export interface ServerGroup {
   id: string
   name: string
@@ -362,7 +387,11 @@ export interface AppSettings {
   confirmBeforeStop: boolean
   consoleScrollbackLines: number
   fileHub: FileHubSettings
+  /** @deprecated Migrated into `projects`; retained so older builds still read. */
   serverGroups: ServerGroup[]
+  projects: Project[]
+  /** Known hosts. Always contains the local node; remote ones are added by pairing. */
+  nodes: Node[]
   dashboardView: DashboardView
 }
 
@@ -377,6 +406,8 @@ export const defaultAppSettings: AppSettings = {
   confirmBeforeStop: true,
   consoleScrollbackLines: 2000,
   serverGroups: [],
+  projects: [],
+  nodes: [{ id: LOCAL_NODE_ID, name: 'This machine', kind: 'local' }],
   dashboardView: 'grid',
   fileHub: {
     baseUrl: '',

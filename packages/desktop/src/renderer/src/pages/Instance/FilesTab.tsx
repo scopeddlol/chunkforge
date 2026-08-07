@@ -28,6 +28,7 @@ import {
   FolderOpen20Regular
 } from '@fluentui/react-icons'
 import type { FileEntry } from '@shared/types'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1, minHeight: 0 },
@@ -88,8 +89,8 @@ export function FilesTab({ instanceId }: FilesTabProps): JSX.Element {
   const load = useCallback(
     (target: string) => {
       setError(null)
-      window.chunkforge.files
-        .list(instanceId, target)
+      api()
+        .files.list(instanceId, target)
         .then(setEntries)
         .catch((err: Error) => setError(err.message))
     },
@@ -108,8 +109,8 @@ export function FilesTab({ instanceId }: FilesTabProps): JSX.Element {
       return
     }
     try {
-      const contents = await window.chunkforge.files.read(instanceId, entry.relativePath)
-      setEditing({ path: entry.relativePath, contents, dirty: false })
+      const { content } = await api().files.read(instanceId, entry.relativePath)
+      setEditing({ path: entry.relativePath, contents: content, dirty: false })
     } catch (err) {
       setError((err as Error).message)
     }
@@ -119,7 +120,7 @@ export function FilesTab({ instanceId }: FilesTabProps): JSX.Element {
     if (!editing) return
     setSaving(true)
     try {
-      await window.chunkforge.files.write(instanceId, editing.path, editing.contents)
+      await api().files.write(instanceId, editing.path, editing.contents)
       setEditing({ ...editing, dirty: false })
     } catch (err) {
       setError((err as Error).message)
@@ -130,7 +131,7 @@ export function FilesTab({ instanceId }: FilesTabProps): JSX.Element {
 
   async function remove(entry: FileEntry): Promise<void> {
     try {
-      await window.chunkforge.files.delete(instanceId, entry.relativePath)
+      await api().files.remove(instanceId, entry.relativePath)
       load(path)
     } catch (err) {
       setError((err as Error).message)
@@ -203,7 +204,7 @@ export function FilesTab({ instanceId }: FilesTabProps): JSX.Element {
           appearance="subtle"
           icon={<FolderOpen20Regular />}
           title="Open in Explorer"
-          onClick={() => window.chunkforge.servers.openFolder(instanceId)}
+          onClick={() => window.native.openFolder(instanceId)}
         />
       </div>
 

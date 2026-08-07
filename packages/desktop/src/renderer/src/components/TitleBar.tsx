@@ -68,8 +68,8 @@ export function TitleBar(): JSX.Element {
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
-    window.chunkforge.window.isMaximized().then(setMaximized)
-    return window.chunkforge.window.onMaximizedChanged(setMaximized)
+    window.native.window.isMaximized().then(setMaximized)
+    return window.native.window.onMaximizedChanged(setMaximized)
   }, [])
 
   return (
@@ -84,21 +84,21 @@ export function TitleBar(): JSX.Element {
       <div className={styles.controls} style={noDragStyle}>
         <button
           className={styles.controlButton}
-          onClick={() => window.chunkforge.window.minimize()}
+          onClick={() => window.native.window.minimize()}
           aria-label="Minimize"
         >
           <Subtract24Regular fontSize={16} />
         </button>
         <button
           className={styles.controlButton}
-          onClick={() => window.chunkforge.window.maximizeToggle()}
+          onClick={() => window.native.window.maximizeToggle()}
           aria-label={maximized ? 'Restore' : 'Maximize'}
         >
           {maximized ? <SquareMultiple24Regular fontSize={16} /> : <Square24Regular fontSize={16} />}
         </button>
         <button
           className={mergeClasses(styles.controlButton, styles.closeButton)}
-          onClick={() => window.chunkforge.window.close()}
+          onClick={() => window.native.window.close()}
           aria-label="Close"
         >
           <Dismiss24Regular fontSize={16} />

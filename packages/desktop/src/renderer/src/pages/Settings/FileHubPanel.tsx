@@ -16,6 +16,7 @@ import {
 } from '@fluentui/react-components'
 import { CloudArrowUp20Regular, PlugDisconnected20Regular } from '@fluentui/react-icons'
 import { defaultAppSettings, type AppSettings, type FileHubStatus } from '@shared/types'
+import { api } from '../../api'
 
 const useStyles = makeStyles({
   panel: {
@@ -54,11 +55,11 @@ export function FileHubPanel({ settings, onPatch }: FileHubPanelProps): JSX.Elem
   const [folders, setFolders] = useState<Array<{ id: string; name: string }>>([])
 
   const refreshStatus = async (): Promise<void> => {
-    const next = await window.chunkforge.filehub.status()
+    const next = await api().filehub.status()
     setStatus(next)
     if (next.connected) {
-      window.chunkforge.filehub
-        .listFolders()
+      api()
+        .filehub.folders()
         .then(setFolders)
         .catch(() => setFolders([]))
     }
@@ -72,7 +73,7 @@ export function FileHubPanel({ settings, onPatch }: FileHubPanelProps): JSX.Elem
     setBusy(true)
     setMessage(null)
     try {
-      const result = await window.chunkforge.filehub.login(
+      const result = await api().filehub.login(
         baseUrl,
         username,
         password,
@@ -93,7 +94,7 @@ export function FileHubPanel({ settings, onPatch }: FileHubPanelProps): JSX.Elem
   }
 
   async function signOut(): Promise<void> {
-    await window.chunkforge.filehub.logout()
+    await api().filehub.logout()
     setFolders([])
     await refreshStatus()
   }

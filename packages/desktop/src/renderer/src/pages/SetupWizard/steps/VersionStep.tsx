@@ -10,6 +10,7 @@ import {
 } from '@fluentui/react-components'
 import type { VersionCatalogEntry } from '@shared/types'
 import type { WizardState } from '../wizardState'
+import { api } from '../../../api'
 
 const useStyles = makeStyles({
   root: {
@@ -74,8 +75,8 @@ export function VersionStep({ state, onChange }: VersionStepProps): JSX.Element 
     setVersions(null)
     setError(null)
 
-    window.chunkforge.servers
-      .listVersions(state.serverType)
+    api()
+      .servers.versions(state.serverType)
       .then((result) => {
         if (cancelled) return
         setVersions(result)

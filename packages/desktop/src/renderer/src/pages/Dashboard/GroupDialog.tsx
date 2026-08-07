@@ -17,6 +17,7 @@ import {
 } from '@fluentui/react-components'
 import { Checkmark16Filled } from '@fluentui/react-icons'
 import type { InstanceSummary } from '@shared/types'
+import { api } from '../../api'
 
 const GROUP_COLORS = ['#8B5CF6', '#2EBD59', '#3E9CF2', '#E0459C', '#E0475E', '#E0C22E', '#22B8CF', '#F97316']
 
@@ -66,10 +67,10 @@ export function GroupDialog({ open, instances, onClose, onSaved }: GroupDialogPr
     if (!name.trim()) return
     setSaving(true)
     try {
-      const group = await window.chunkforge.groups.create(name.trim(), color)
+      const group = await api().groups.create(name.trim(), color)
       // Assignments are sequential so a failure part-way still leaves the rest intact.
       for (const id of selected) {
-        await window.chunkforge.groups.assign(id, group.id)
+        await api().groups.assign(id, group.id)
       }
       onSaved()
       onClose()

@@ -20,6 +20,7 @@ import {
 } from '@shared/types'
 import { SourceBadge } from '../../../components/SourceBadge'
 import type { WizardState } from '../wizardState'
+import { api } from '../../../api'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '660px', minHeight: 0 },
@@ -82,7 +83,7 @@ export function ModpackPickerStep({ state, onChange }: ModpackPickerStepProps): 
     setLoading(true)
     setError(null)
     try {
-      setResults(await window.chunkforge.modpacks.search(query, 15))
+      setResults(await api().modpacks.search(query, 15))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -103,11 +104,11 @@ export function ModpackPickerStep({ state, onChange }: ModpackPickerStepProps): 
     setResolving(pack.id)
     setError(null)
     try {
-      const versions = await window.chunkforge.modpacks.listVersions(pack.source, pack.id)
+      const versions = await api().modpacks.versions(pack.source, pack.id)
       const version = versions.find((v) => v.downloadUrl)
       if (!version?.downloadUrl) throw new Error('This pack has no downloadable server version.')
 
-      const target = await window.chunkforge.modpacks.inspect(pack.source, version.downloadUrl)
+      const target = await api().modpacks.inspect(pack.source, version.downloadUrl)
       const selected: SelectedModpack = {
         source: pack.source,
         projectId: pack.id,

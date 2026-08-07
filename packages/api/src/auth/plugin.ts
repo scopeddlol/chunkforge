@@ -20,11 +20,17 @@ declare module 'fastify' {
 export async function authenticate(request: FastifyRequest): Promise<void> {
   const header = request.headers.authorization
   if (header?.startsWith('Bearer ')) {
-    const resolved = await authStore.resolveApiToken(header.slice(7))
+    const presented = header.slice(7)
+    const resolved = await authStore.resolveApiToken(presented)
     if (resolved) {
       request.user = resolved.user
       if (resolved.record.kind === 'node') request.nodeId = resolved.record.nodeId
+      return
     }
+    // A session is also a bearer credential. The desktop shell authenticates
+    // this way because it has no cookie jar of its own to put one in.
+    const user = authStore.resolveSession(presented)
+    if (user) request.user = user
     return
   }
 
@@ -32,6 +38,18 @@ export async function authenticate(request: FastifyRequest): Promise<void> {
   if (cookie) {
     const user = authStore.resolveSession(cookie)
     if (user) request.user = user
+    return
+  }
+
+  // Browsers cannot set headers on a WebSocket handshake, so the event stream
+  // alone also accepts the session in the query string. Restricting it to that
+  // one path keeps tokens out of logs for every other request.
+  if (request.url.startsWith('/api/events')) {
+    const token = (request.query as { token?: string } | undefined)?.token
+    if (token) {
+      const user = authStore.resolveSession(token) ?? (await authStore.resolveApiToken(token))?.user
+      if (user) request.user = user
+    }
   }
 }
 

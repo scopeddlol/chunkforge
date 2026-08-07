@@ -9,6 +9,7 @@ import {
   Button,
   Text
 } from '@fluentui/react-components'
+import { api } from '../api'
 
 interface PendingStop {
   instanceId: string
@@ -27,9 +28,9 @@ export function useConfirmStop(): {
   const [pending, setPending] = useState<PendingStop | null>(null)
 
   const requestStop = useCallback(async (instanceId: string, name: string) => {
-    const settings = await window.chunkforge.settings.get()
+    const settings = await api().settings.get()
     if (!settings.confirmBeforeStop) {
-      await window.chunkforge.servers.stop(instanceId)
+      await api().servers.stop(instanceId)
       return
     }
     setPending({ instanceId, name })
@@ -39,7 +40,7 @@ export function useConfirmStop(): {
     if (!pending) return
     const { instanceId } = pending
     setPending(null)
-    await window.chunkforge.servers.stop(instanceId)
+    await api().servers.stop(instanceId)
   }, [pending])
 
   const dialog = (
