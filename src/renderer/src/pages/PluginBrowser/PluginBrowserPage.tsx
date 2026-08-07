@@ -9,6 +9,9 @@ import {
   Spinner,
   MessageBar,
   MessageBarBody,
+  Field,
+  Dropdown,
+  Option,
   mergeClasses
 } from '@fluentui/react-components'
 import { Search24Regular, ArrowClockwise20Regular } from '@fluentui/react-icons'
@@ -24,6 +27,17 @@ import { PluginCard } from './PluginCard'
 import { InstallDialog } from './InstallDialog'
 
 const allSources: PluginSource[] = ['modrinth', 'hangar', 'spiget', 'curseforge']
+
+// Empty value means no loader filter at all.
+const loaderOptions = [
+  { value: '', label: 'Any' },
+  { value: 'paper', label: 'Paper' },
+  { value: 'spigot', label: 'Spigot' },
+  { value: 'bukkit', label: 'Bukkit' },
+  { value: 'purpur', label: 'Purpur' },
+  { value: 'fabric', label: 'Fabric' },
+  { value: 'forge', label: 'Forge' }
+]
 
 const useStyles = makeStyles({
   root: {
@@ -75,7 +89,9 @@ const useStyles = makeStyles({
     padding: '64px 0',
     color: tokens.colorNeutralForeground3
   },
-  warnings: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }
+  warnings: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' },
+  filters: { display: 'flex', gap: '12px', alignItems: 'flex-end', marginBottom: '16px', flexWrap: 'wrap' },
+  filterField: { minWidth: '150px' }
 })
 
 interface PluginBrowserPageProps {
@@ -92,16 +108,24 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
   const [errors, setErrors] = useState<{ source: PluginSource; message: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [installTarget, setInstallTarget] = useState<PluginSearchResult | null>(null)
+  const [versionFilter, setVersionFilter] = useState('')
+  const [loaderFilter, setLoaderFilter] = useState('')
 
   useEffect(() => {
     if (instances.length === 0) refresh()
   }, [instances.length, refresh])
 
   const runSearch = useCallback(
-    async (query: string, sources: PluginSource[]) => {
+    async (query: string, sources: PluginSource[], version: string, loader: string) => {
       setLoading(true)
       try {
-        const response = await window.chunkforge.plugins.search({ query, sources, limit: 20 })
+        const response = await window.chunkforge.plugins.search({
+          query,
+          sources,
+          gameVersion: version || undefined,
+          loader: loader || undefined,
+          limit: 20
+        })
         setResults(response.results)
         setErrors(response.errors)
       } catch (err) {
@@ -121,7 +145,7 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
       if (cancelled) return
       const enabled = settings.enabledPluginSources.length > 0 ? settings.enabledPluginSources : allSources
       setActiveSources(enabled)
-      runSearch('', enabled)
+      runSearch('', enabled, '', '')
     })
     return () => {
       cancelled = true
@@ -133,11 +157,11 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
       ? activeSources.filter((s) => s !== source)
       : [...activeSources, source]
     setActiveSources(next)
-    runSearch(term, next)
+    runSearch(term, next, versionFilter, loaderFilter)
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
-    if (e.key === 'Enter') runSearch(term, activeSources)
+    if (e.key === 'Enter') runSearch(term, activeSources, versionFilter, loaderFilter)
   }
 
   const scopedInstance: InstanceSummary | undefined = scopedInstanceId
@@ -164,14 +188,14 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
           onChange={(_, data) => setTerm(data.value)}
           onKeyDown={handleKeyDown}
         />
-        <Button appearance="primary" onClick={() => runSearch(term, activeSources)} disabled={loading}>
+        <Button appearance="primary" onClick={() => runSearch(term, activeSources, versionFilter, loaderFilter)} disabled={loading}>
           Search
         </Button>
         <Button
           appearance="subtle"
           icon={<ArrowClockwise20Regular />}
           title="Refresh"
-          onClick={() => runSearch(term, activeSources)}
+          onClick={() => runSearch(term, activeSources, versionFilter, loaderFilter)}
         />
       </div>
 
@@ -191,6 +215,49 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
             </button>
           )
         })}
+      </div>
+
+      <div className={styles.filters}>
+        <Field label="Minecraft version" className={styles.filterField}>
+          <Input
+            size="small"
+            value={versionFilter}
+            placeholder="Any"
+            onChange={(_, d) => setVersionFilter(d.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </Field>
+        <Field label="Loader" className={styles.filterField}>
+          <Dropdown
+            size="small"
+            value={loaderOptions.find((o) => o.value === loaderFilter)?.label ?? 'Any'}
+            selectedOptions={[loaderFilter]}
+            onOptionSelect={(_, d) => {
+              const next = d.optionValue ?? ''
+              setLoaderFilter(next)
+              runSearch(term, activeSources, versionFilter, next)
+            }}
+          >
+            {loaderOptions.map((option) => (
+              <Option key={option.value || 'any'} value={option.value}>
+                {option.label}
+              </Option>
+            ))}
+          </Dropdown>
+        </Field>
+        {(versionFilter || loaderFilter) && (
+          <Button
+            size="small"
+            appearance="subtle"
+            onClick={() => {
+              setVersionFilter('')
+              setLoaderFilter('')
+              runSearch(term, activeSources, '', '')
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
       </div>
 
       {errors.length > 0 && (

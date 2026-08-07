@@ -37,12 +37,18 @@ export const modrinthProvider: PluginProvider = {
 
   isAvailable: () => true,
 
-  async search(query, gameVersion, limit) {
+  async search(query, filters, limit) {
+    const { gameVersion, loader } = filters
     // Modrinth facets are AND-ed across groups, OR-ed within a group.
-    // Restricted to plugins: including project_type:mod floods the results with
-    // client-side mods (Sodium, Iris) that are useless on a server.
-    const facets: string[][] = [['project_type:plugin']]
+    // Mods are included only when a mod loader is selected; otherwise they flood
+    // results with client-side mods (Sodium, Iris) that are useless on a server.
+    const isModLoader = loader === 'fabric' || loader === 'forge' || loader === 'neoforge'
+    const facets: string[][] = [isModLoader ? ['project_type:mod'] : ['project_type:plugin']]
+    // Mod listings otherwise fill up with client-only projects (Sodium, Iris)
+    // that do nothing on a server.
+    if (isModLoader) facets.push(['server_side:required', 'server_side:optional'])
     if (gameVersion) facets.push([`versions:${gameVersion}`])
+    if (loader) facets.push([`categories:${loader}`])
 
     const params = new URLSearchParams({
       query,

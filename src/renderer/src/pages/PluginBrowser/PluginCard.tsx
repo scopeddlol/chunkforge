@@ -57,6 +57,7 @@ const useStyles = makeStyles({
     gap: '8px',
     justifyContent: 'space-between'
   },
+  badges: { display: 'flex', gap: '4px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' },
   name: {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -119,7 +120,14 @@ export function PluginCard({ plugin, onInstall, canInstall }: PluginCardProps): 
             <Text weight="semibold" className={styles.name}>
               {plugin.name}
             </Text>
-            <SourceBadge source={plugin.source} />
+            <div className={styles.badges}>
+              <SourceBadge source={plugin.source} />
+              {/* The same project often exists on several sources; the extra
+                  badges show where else it can be pulled from. */}
+              {plugin.alternatives?.map((alt) => (
+                <SourceBadge key={alt.source} source={alt.source} />
+              ))}
+            </div>
           </div>
           <Text size={200} className={styles.author}>
             by {plugin.author}

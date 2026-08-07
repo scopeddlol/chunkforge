@@ -91,7 +91,17 @@ export async function resolveServerRequirements(
     switch (serverType) {
       case 'paper':
         return await resolvePaperRequirements(version)
+      case 'purpur':
+      case 'spigot':
+        // Purpur is a Paper fork and Spigot tracks the same Minecraft builds,
+        // so Paper's published minimum is authoritative for both. Neither
+        // publishes Paper's tuning flags, so those aren't inherited.
+        return { javaMajor: (await resolvePaperRequirements(version)).javaMajor, jvmFlags: [] }
       case 'vanilla':
+      case 'forge':
+      case 'fabric':
+        // Mod loaders run the same Minecraft server underneath, so Mojang's
+        // declared Java version applies.
         return await resolveVanillaRequirements(version)
       default:
         return { javaMajor: requiredJavaMajorFallback(version), jvmFlags: [] }

@@ -1,5 +1,24 @@
 export type ServerType = 'vanilla' | 'paper' | 'purpur' | 'spigot' | 'forge' | 'fabric'
 
+export const serverTypeLabels: Record<ServerType, string> = {
+  vanilla: 'Vanilla',
+  paper: 'Paper',
+  purpur: 'Purpur',
+  spigot: 'Spigot',
+  forge: 'Forge',
+  fabric: 'Fabric'
+}
+
+/** Loaders that load Bukkit-style plugins rather than mods. */
+export const pluginServerTypes: ServerType[] = ['paper', 'purpur', 'spigot']
+export const modServerTypes: ServerType[] = ['forge', 'fabric']
+
+/** Placeholders substituted into launchArgs at spawn time. */
+export const LAUNCH_TOKENS = {
+  minRam: '{MIN_RAM}',
+  maxRam: '{MAX_RAM}'
+} as const
+
 export type InstanceStatus = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed'
 
 export interface InstanceSummary {
@@ -15,6 +34,7 @@ export interface InstanceSummary {
   createdAt: string
   /** Custom thumbnail as a data: URL. Falls back to generated artwork when unset. */
   iconDataUrl?: string | null
+  groupId?: string | null
 }
 
 export interface InstanceMetadata extends InstanceSummary {
@@ -24,6 +44,12 @@ export interface InstanceMetadata extends InstanceSummary {
   javaMajor?: number
   /** Server-recommended JVM tuning flags (Paper publishes these). */
   jvmFlags?: string[]
+  /**
+   * Full java argument list, with {MIN_RAM}/{MAX_RAM} substituted at spawn.
+   * Editable from the instance's Startup settings — Forge in particular needs
+   * an @args-file launch rather than a plain -jar.
+   */
+  launchArgs?: string[]
   minRamMb: number
   maxRamMb: number
   eulaAccepted: boolean
@@ -64,6 +90,23 @@ export interface CreateInstanceConfig {
   accentColor: string
   /** Parent directory to create the server's folder in. Defaults to the Chunkforge Instances root when omitted. */
   installLocation: string | null
+  /** Installs Geyser + Floodgate so Bedrock clients can join. */
+  enableGeyser?: boolean
+  groupId?: string | null
+  /** Plugins queued in the wizard, installed once the server exists. */
+  initialPlugins?: QueuedPlugin[]
+}
+
+export interface QueuedPlugin {
+  source: PluginSource
+  projectId: string
+  name: string
+}
+
+export interface ServerGroup {
+  id: string
+  name: string
+  color: string
 }
 
 export interface VersionCatalogEntry {
@@ -150,6 +193,13 @@ export const pluginSourceLabels: Record<PluginSource, string> = {
   curseforge: 'CurseForge'
 }
 
+export interface PluginAlternative {
+  source: PluginSource
+  id: string
+  downloads: number
+  sourceUrl: string
+}
+
 export interface PluginSearchResult {
   source: PluginSource
   id: string
@@ -160,6 +210,8 @@ export interface PluginSearchResult {
   author: string
   sourceUrl: string
   categories: string[]
+  /** Same project found on other sources; picked from at download time. */
+  alternatives?: PluginAlternative[]
 }
 
 export interface PluginVersion {
@@ -185,7 +237,10 @@ export interface PluginSearchQuery {
   query: string
   sources: PluginSource[]
   gameVersion?: string
+  loader?: string
   limit?: number
+  /** Defaults to true; set false to see one card per source. */
+  mergeSources?: boolean
 }
 
 export interface PluginSearchResponse {
@@ -194,7 +249,18 @@ export interface PluginSearchResponse {
   errors: { source: PluginSource; message: string }[]
 }
 
-export type ThemePreference = 'system' | 'dark' | 'light'
+export type ThemeId =
+  | 'oled'
+  | 'midnight'
+  | 'nebula'
+  | 'forest'
+  | 'ember'
+  | 'slate'
+  | 'light'
+  | 'parchment'
+
+/** 'system' follows Windows and picks OLED Violet or Light accordingly. */
+export type ThemePreference = 'system' | ThemeId
 
 export interface FileHubSettings {
   /** Base URL of a self-hosted FileHub instance, e.g. https://files.example.com */

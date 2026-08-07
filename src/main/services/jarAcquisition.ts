@@ -1,6 +1,7 @@
 import { join } from 'path'
 import type { ServerType, VersionCatalogEntry } from '../../shared/types'
 import { downloadFile } from './downloadFile'
+import { installLoader, listLoaderVersions, type LoaderInstallResult } from './loaders'
 
 interface MojangManifest {
   latest: { release: string; snapshot: string }
@@ -71,7 +72,7 @@ export async function listVersions(serverType: ServerType): Promise<VersionCatal
     case 'paper':
       return listPaperVersions()
     default:
-      throw new Error(`Version listing for "${serverType}" isn't implemented yet`)
+      return listLoaderVersions(serverType)
   }
 }
 
@@ -112,18 +113,27 @@ async function downloadPaperJar(
   return jarPath
 }
 
-export async function downloadServerJar(
+/**
+ * Fetches (and where necessary installs) the server for a given type.
+ * Loaders that need more than a jar drop — Forge's installer, Spigot's
+ * BuildTools — report back any launch args the default form can't express.
+ */
+export async function acquireServer(
   serverType: ServerType,
   version: string,
   destDir: string,
+  javaPath: string,
+  jvmFlags: string[],
   onProgress?: (percent: number | null) => void
-): Promise<string> {
+): Promise<LoaderInstallResult> {
   switch (serverType) {
     case 'vanilla':
-      return downloadVanillaJar(version, destDir, onProgress)
+      await downloadVanillaJar(version, destDir, onProgress)
+      return {}
     case 'paper':
-      return downloadPaperJar(version, destDir, onProgress)
+      await downloadPaperJar(version, destDir, onProgress)
+      return {}
     default:
-      throw new Error(`Jar acquisition for "${serverType}" isn't implemented yet`)
+      return installLoader(serverType, version, destDir, javaPath, jvmFlags, onProgress)
   }
 }

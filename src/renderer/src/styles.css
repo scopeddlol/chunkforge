@@ -37,3 +37,22 @@ button {
 body > .fui-FluentProvider {
   background-color: transparent;
 }
+
+/*
+ * Popup surfaces normally sit one elevation step above the page. Chunkforge's
+ * dark themes pin colorNeutralBackground1 to a near-black page surface, which
+ * Fluent also uses for these surfaces — leaving dropdowns and menus painted the
+ * same colour as the panel behind them, with only a faint shadow to separate.
+ * The active theme publishes an explicitly lifted surface via these variables.
+ */
+body > .fui-FluentProvider .fui-Listbox,
+body > .fui-FluentProvider .fui-MenuPopover,
+body > .fui-FluentProvider .fui-PopoverSurface,
+body > .fui-FluentProvider .fui-DialogSurface,
+body > .fui-FluentProvider .fui-TooltipContent {
+  background-color: var(--cf-popup-bg);
+  border: 1px solid var(--cf-popup-border);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+}

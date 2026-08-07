@@ -55,13 +55,18 @@ const useStyles = makeStyles({
   }
 })
 
-const options: { type: ServerType; label: string; blurb: string; available: boolean }[] = [
-  { type: 'paper', label: 'Paper', blurb: 'High-performance, plugin-friendly. Recommended default.', available: true },
-  { type: 'vanilla', label: 'Vanilla', blurb: "Mojang's unmodified server.", available: true },
-  { type: 'purpur', label: 'Purpur', blurb: 'Paper fork with extra gameplay knobs.', available: false },
-  { type: 'spigot', label: 'Spigot', blurb: 'Classic plugin server, built from source.', available: false },
-  { type: 'forge', label: 'Forge', blurb: 'The original Minecraft modding platform.', available: false },
-  { type: 'fabric', label: 'Fabric', blurb: 'Lightweight, fast-updating mod loader.', available: false }
+const options: { type: ServerType; label: string; blurb: string; note?: string }[] = [
+  { type: 'paper', label: 'Paper', blurb: 'High-performance, plugin-friendly. Recommended default.' },
+  { type: 'vanilla', label: 'Vanilla', blurb: "Mojang's unmodified server." },
+  { type: 'purpur', label: 'Purpur', blurb: 'Paper fork with extra gameplay knobs.' },
+  { type: 'fabric', label: 'Fabric', blurb: 'Lightweight, fast-updating mod loader.' },
+  { type: 'forge', label: 'Forge', blurb: 'The original Minecraft modding platform.', note: 'Runs installer' },
+  {
+    type: 'spigot',
+    label: 'Spigot',
+    blurb: "Classic plugin server. Can't be redistributed, so it compiles locally.",
+    note: 'Slow build'
+  }
 ]
 
 interface ServerTypeStepProps {
@@ -82,17 +87,16 @@ export function ServerTypeStep({ state, onChange }: ServerTypeStepProps): JSX.El
             <button
               key={option.type}
               type="button"
-              disabled={!option.available}
-              className={mergeClasses(
-                styles.card,
-                selected && styles.cardSelected,
-                !option.available && styles.cardDisabled
-              )}
+              className={mergeClasses(styles.card, selected && styles.cardSelected)}
               onClick={() => onChange({ serverType: option.type, minecraftVersion: '' })}
             >
               <div className={styles.cardHeader}>
                 <Text weight="semibold">{option.label}</Text>
-                {!option.available && <Badge appearance="tint" color="informative">Coming soon</Badge>}
+                {option.note && (
+                  <Badge appearance="tint" color="warning">
+                    {option.note}
+                  </Badge>
+                )}
               </div>
               <Text size={200} className={styles.blurb}>
                 {option.blurb}

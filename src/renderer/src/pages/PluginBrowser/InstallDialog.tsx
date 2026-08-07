@@ -19,7 +19,13 @@ import {
   Badge
 } from '@fluentui/react-components'
 import { Open16Regular } from '@fluentui/react-icons'
-import type { InstanceSummary, PluginSearchResult, PluginVersion } from '@shared/types'
+import {
+  pluginSourceLabels,
+  type InstanceSummary,
+  type PluginSearchResult,
+  type PluginSource,
+  type PluginVersion
+} from '@shared/types'
 
 const useStyles = makeStyles({
   body: { display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '380px' },
@@ -46,26 +52,55 @@ export function InstallDialog({
   const [versions, setVersions] = useState<PluginVersion[] | null>(null)
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
   const [instanceId, setInstanceId] = useState<string | null>(preselectedInstanceId)
+  const [chosenSource, setChosenSource] = useState<PluginSource | null>(null)
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
+  // Every place this plugin can be fetched from, primary first.
+  const sourceChoices = plugin
+    ? [
+        { source: plugin.source, id: plugin.id, downloads: plugin.downloads },
+        ...(plugin.alternatives ?? []).map((a) => ({
+          source: a.source,
+          id: a.id,
+          downloads: a.downloads
+        }))
+      ]
+    : []
+
   useEffect(() => {
     if (!plugin) return
-    setVersions(null)
-    setSelectedVersionId(null)
     setError(null)
     setDone(false)
     setInstanceId(preselectedInstanceId ?? instances[0]?.id ?? null)
+    setChosenSource(plugin.source)
+  }, [plugin, preselectedInstanceId, instances])
+
+  // Versions are per-source, so they reload whenever the source changes.
+  useEffect(() => {
+    if (!plugin || !chosenSource) return
+    const choice = sourceChoices.find((c) => c.source === chosenSource)
+    if (!choice) return
+
+    let cancelled = false
+    setVersions(null)
+    setSelectedVersionId(null)
 
     window.chunkforge.plugins
-      .listVersions(plugin.source, plugin.id)
+      .listVersions(choice.source, choice.id)
       .then((result) => {
+        if (cancelled) return
         setVersions(result)
         setSelectedVersionId(result[0]?.id ?? null)
       })
-      .catch((err: Error) => setError(err.message))
-  }, [plugin, preselectedInstanceId, instances])
+      .catch((err: Error) => !cancelled && setError(err.message))
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plugin, chosenSource])
 
   const selectedInstance = instances.find((i) => i.id === instanceId)
   const selectedVersion = versions?.find((v) => v.id === selectedVersionId) ?? null
@@ -106,6 +141,22 @@ export function InstallDialog({
               <MessageBar intent="success">
                 <MessageBarBody>Installed to {selectedInstance?.name}. Restart the server to load it.</MessageBarBody>
               </MessageBar>
+            )}
+
+            {sourceChoices.length > 1 && (
+              <Field label="Download from" hint="This plugin is published on more than one site.">
+                <Dropdown
+                  value={chosenSource ? pluginSourceLabels[chosenSource] : ''}
+                  selectedOptions={chosenSource ? [chosenSource] : []}
+                  onOptionSelect={(_, d) => setChosenSource((d.optionValue as PluginSource) ?? null)}
+                >
+                  {sourceChoices.map((choice) => (
+                    <Option key={choice.source} value={choice.source}>
+                      {`${pluginSourceLabels[choice.source]} — ${choice.downloads.toLocaleString()} downloads`}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Field>
             )}
 
             <Field label="Install to server">

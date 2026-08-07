@@ -1,4 +1,10 @@
-import { defaultToggles, type CreateInstanceConfig, type InstanceToggles, type ServerType } from '@shared/types'
+import {
+  defaultToggles,
+  type CreateInstanceConfig,
+  type InstanceToggles,
+  type QueuedPlugin,
+  type ServerType
+} from '@shared/types'
 
 export interface WizardState {
   serverType: ServerType
@@ -10,6 +16,9 @@ export interface WizardState {
   maxRamMb: number
   toggles: InstanceToggles
   installLocation: string | null
+  enableGeyser: boolean
+  groupId: string | null
+  initialPlugins: QueuedPlugin[]
 }
 
 export const wizardSteps = [
@@ -46,12 +55,14 @@ export function createInitialWizardState(defaults?: {
     minRamMb: defaults?.defaultMinRamMb ?? 2048,
     maxRamMb: defaults?.defaultMaxRamMb ?? 4096,
     toggles: { ...defaultToggles },
-    installLocation: defaults?.defaultInstallLocation ?? null
+    installLocation: defaults?.defaultInstallLocation ?? null,
+    enableGeyser: false,
+    groupId: null,
+    initialPlugins: []
   }
 }
 
 export function toCreateInstanceConfig(state: WizardState): CreateInstanceConfig {
-  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation } =
-    state
-  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation }
+  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins } = state
+  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins }
 }

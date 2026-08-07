@@ -10,8 +10,10 @@ import type {
   LogLineEvent,
   StatusChangedEvent
 } from '../../shared/types'
+import { LAUNCH_TOKENS } from '../../shared/types'
 import { ensureJavaRuntime } from './javaManager'
-import { downloadServerJar } from './jarAcquisition'
+import { acquireServer } from './jarAcquisition'
+import { defaultLaunchArgs, installGeyser } from './loaders'
 import { resolveServerRequirements } from './minecraftVersions'
 import { renderEula, renderServerProperties } from './serverProperties'
 import { resolveInstanceDir, saveInstanceMetadata, slugifyInstanceName } from '../store/instancesStore'
@@ -108,20 +110,32 @@ class InstanceManager extends EventEmitter {
       }
     })
 
-    this.emitProgress({
-      instanceId: id,
-      stage: 'downloading-server',
-      message: `Downloading ${config.serverType} ${config.minecraftVersion}…`,
-      percent: 0
-    })
-    await downloadServerJar(config.serverType, config.minecraftVersion, dir, (percent) => {
+    const isSlowBuild = config.serverType === 'spigot'
+    const acquireMessage = isSlowBuild
+      ? 'Compiling Spigot with BuildTools — this takes several minutes…'
+      : `Downloading ${config.serverType} ${config.minecraftVersion}…`
+
+    this.emitProgress({ instanceId: id, stage: 'downloading-server', message: acquireMessage, percent: 0 })
+    const acquired = await acquireServer(
+      config.serverType,
+      config.minecraftVersion,
+      dir,
+      javaPath,
+      requirements.jvmFlags,
+      (percent) => {
+        this.emitProgress({ instanceId: id, stage: 'downloading-server', message: acquireMessage, percent })
+      }
+    )
+
+    if (config.enableGeyser) {
       this.emitProgress({
         instanceId: id,
         stage: 'downloading-server',
-        message: `Downloading ${config.serverType} ${config.minecraftVersion}…`,
-        percent
+        message: 'Installing Geyser and Floodgate for Bedrock crossplay…',
+        percent: null
       })
-    })
+      await installGeyser(dir)
+    }
 
     this.emitProgress({ instanceId: id, stage: 'accepting-eula', message: 'Accepting Minecraft EULA…', percent: null })
     await writeFile(join(dir, 'eula.txt'), renderEula(), 'utf-8')
@@ -146,7 +160,9 @@ class InstanceManager extends EventEmitter {
       path: dir,
       toggles: config.toggles,
       javaMajor: majorJava,
-      jvmFlags: requirements.jvmFlags
+      jvmFlags: requirements.jvmFlags,
+      launchArgs: acquired.launchArgs ?? defaultLaunchArgs(config.serverType, requirements.jvmFlags),
+      groupId: config.groupId ?? null
     }
     await saveInstanceMetadata(metadata)
 
@@ -204,14 +220,20 @@ class InstanceManager extends EventEmitter {
       return
     }
 
-    const args = [
-      `-Xms${metadata.minRamMb}M`,
-      `-Xmx${metadata.maxRamMb}M`,
+    // Older instances predate launchArgs; fall back to the classic -jar form.
+    const template = metadata.launchArgs ?? [
+      `-Xms${LAUNCH_TOKENS.minRam}M`,
+      `-Xmx${LAUNCH_TOKENS.maxRam}M`,
       ...(metadata.jvmFlags ?? []),
       '-jar',
       'server.jar',
       'nogui'
     ]
+    const args = template.map((arg) =>
+      arg
+        .replaceAll(LAUNCH_TOKENS.minRam, String(metadata.minRamMb))
+        .replaceAll(LAUNCH_TOKENS.maxRam, String(metadata.maxRamMb))
+    )
     const child = spawn(metadata.javaPath, args, { cwd: metadata.path })
 
     const entry: RunningProcess = { child, expectedStop: false, players: new Set() }

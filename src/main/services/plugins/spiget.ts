@@ -20,7 +20,7 @@ export const spigetProvider: PluginProvider = {
 
   isAvailable: () => true,
 
-  async search(query, _gameVersion, limit) {
+  async search(query, _filters, limit) {
     const params = new URLSearchParams({
       size: String(limit),
       sort: '-downloads',

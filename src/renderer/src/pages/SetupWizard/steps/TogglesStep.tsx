@@ -10,6 +10,7 @@ import {
   Option,
   Slider
 } from '@fluentui/react-components'
+import { pluginServerTypes } from '@shared/types'
 import type { WizardState } from '../wizardState'
 import { WizardPanel } from '../WizardPanel'
 
@@ -52,6 +53,8 @@ interface TogglesStepProps {
 export function TogglesStep({ state, onChange }: TogglesStepProps): JSX.Element {
   const styles = useStyles()
   const toggles = state.toggles
+  // Geyser is a Bukkit-style plugin, so it only applies to plugin servers.
+  const supportsGeyser = pluginServerTypes.includes(state.serverType)
 
   function patchToggles(patch: Partial<WizardState['toggles']>): void {
     onChange({ toggles: { ...toggles, ...patch } })
@@ -85,6 +88,16 @@ export function TogglesStep({ state, onChange }: TogglesStepProps): JSX.Element 
             onChange={(_, data) => patchToggles({ commandBlocksEnabled: data.checked })}
           />
         </div>
+
+        {supportsGeyser && (
+          <Field hint="Installs Geyser and Floodgate so Bedrock players — mobile, console, Windows 10/11 — can join this Java server.">
+            <Switch
+              label="Bedrock crossplay (Geyser)"
+              checked={state.enableGeyser}
+              onChange={(_, data) => onChange({ enableGeyser: data.checked })}
+            />
+          </Field>
+        )}
 
         <Field label="Difficulty">
           <Dropdown

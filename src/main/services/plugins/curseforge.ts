@@ -50,7 +50,8 @@ export const curseForgeProvider: PluginProvider = {
 
   isAvailable: () => apiKey() !== null,
 
-  async search(query, gameVersion, limit) {
+  async search(query, filters, limit) {
+    const { gameVersion } = filters
     const params = new URLSearchParams({
       gameId: String(MINECRAFT_GAME_ID),
       classId: String(BUKKIT_PLUGINS_CLASS_ID),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import { FluentProvider, makeStyles } from '@fluentui/react-components'
 import type { InstanceMetadata, ThemePreference } from '@shared/types'
-import { chunkforgeDarkTheme, chunkforgeLightTheme } from './theme/chunkforgeTheme'
+import { getTheme, type ChunkforgeTheme } from './theme/chunkforgeTheme'
 import { TitleBar } from './components/TitleBar'
 import { NavRail, type NavKey } from './components/NavRail'
 import { DashboardPage } from './pages/Dashboard/DashboardPage'
@@ -25,8 +25,12 @@ const useStyles = makeStyles({
   }
 })
 
-/** Resolves the effective theme from the saved preference plus the OS setting. */
-function useResolvedTheme(): 'light' | 'dark' {
+/**
+ * Resolves the active theme from the saved preference plus the OS setting, and
+ * republishes its popup surface colours as CSS variables — portal content is
+ * rendered outside our React tree, so it can't read them from the provider.
+ */
+function useResolvedTheme(): ChunkforgeTheme {
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('dark')
   const [preference, setPreference] = useState<ThemePreference>('system')
 
@@ -35,11 +39,30 @@ function useResolvedTheme(): 'light' | 'dark' {
     return window.chunkforge.theme.onSystemThemeChanged(setSystemTheme)
   }, [])
 
-  useEffect(() => {
+  const loadPreference = useCallback(() => {
     window.chunkforge.settings.get().then((settings) => setPreference(settings.themePreference))
   }, [])
 
-  return preference === 'system' ? systemTheme : preference
+  useEffect(loadPreference, [loadPreference])
+
+  // Settings writes this key when the theme changes, so the whole app restyles
+  // without a reload.
+  useEffect(() => {
+    const onChanged = (): void => loadPreference()
+    window.addEventListener('chunkforge:settings-changed', onChanged)
+    return () => window.removeEventListener('chunkforge:settings-changed', onChanged)
+  }, [loadPreference])
+
+  const resolved = getTheme(preference === 'system' ? (systemTheme === 'dark' ? 'oled' : 'light') : preference)
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--cf-popup-bg', resolved.popupBackground)
+    root.style.setProperty('--cf-popup-border', resolved.popupBorder)
+    document.body.style.backgroundColor = resolved.theme.colorNeutralBackground2
+  }, [resolved])
+
+  return resolved
 }
 
 type Overlay = { kind: 'wizard' } | { kind: 'instance'; instanceId: string } | null
@@ -70,10 +93,7 @@ export function App(): JSX.Element {
   }, [])
 
   return (
-    <FluentProvider
-      theme={resolvedTheme === 'dark' ? chunkforgeDarkTheme : chunkforgeLightTheme}
-      className={styles.shell}
-    >
+    <FluentProvider theme={resolvedTheme.theme} className={styles.shell}>
       <TitleBar />
       <div className={styles.body}>
         <NavRail active={activeNav} onSelect={handleSelectNav} />

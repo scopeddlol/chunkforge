@@ -38,8 +38,10 @@ export const hangarProvider: PluginProvider = {
 
   isAvailable: () => true,
 
-  async search(query, _gameVersion, limit) {
+  async search(query, filters, limit) {
     const params = new URLSearchParams({ limit: String(limit), offset: '0' })
+    // Hangar filters by the Minecraft version a project declares support for.
+    if (filters.gameVersion) params.set('version', filters.gameVersion)
     if (query) params.set('query', query)
     else params.set('sort', '-downloads')
 

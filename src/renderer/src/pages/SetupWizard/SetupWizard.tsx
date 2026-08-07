@@ -93,7 +93,7 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
         {stepIndex === 2 && <NameLocationStep state={state} onChange={onChange} />}
         {stepIndex === 3 && <ResourcesStep state={state} onChange={onChange} />}
         {stepIndex === 4 && <TogglesStep state={state} onChange={onChange} />}
-        {stepIndex === 5 && <PluginsStep />}
+        {stepIndex === 5 && <PluginsStep state={state} onChange={onChange} />}
         {stepIndex === 6 && <ReviewStep state={state} onCreated={onCreated} />}
       </div>
 

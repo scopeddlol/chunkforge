@@ -5,6 +5,7 @@ import type {
   InstalledPlugin,
   PluginSearchQuery,
   PluginSearchResponse,
+  PluginSearchResult,
   PluginSource,
   PluginVersion
 } from '../../../shared/types'
@@ -45,7 +46,11 @@ export async function searchPlugins(query: PluginSearchQuery): Promise<PluginSea
         return { source, error: `${source} is not configured` as string | null, results: [] }
       }
       try {
-        const results = await provider.search(query.query, query.gameVersion, limit)
+        const results = await provider.search(
+          query.query,
+          { gameVersion: query.gameVersion, loader: query.loader },
+          limit
+        )
         return { source, error: null, results }
       } catch (err) {
         return { source, error: (err as Error).message, results: [] }
@@ -55,20 +60,74 @@ export async function searchPlugins(query: PluginSearchQuery): Promise<PluginSea
 
   // Interleave sources so no single one dominates the top of the grid.
   const buckets = settled.map((s) => s.results)
-  const results: PluginSearchResponse['results'] = []
+  const interleaved: PluginSearchResult[] = []
   const maxLen = Math.max(0, ...buckets.map((b) => b.length))
   for (let i = 0; i < maxLen; i++) {
     for (const bucket of buckets) {
-      if (bucket[i]) results.push(bucket[i])
+      if (bucket[i]) interleaved.push(bucket[i])
     }
   }
 
   return {
-    results,
+    results: query.mergeSources === false ? interleaved : mergeByIdentity(interleaved),
     errors: settled
       .filter((s) => s.error !== null)
       .map((s) => ({ source: s.source, message: s.error as string }))
   }
+}
+
+// Platform suffixes and filler words that differ between listings of the same
+// project — e.g. "WorldEdit" vs "WorldEdit for Bukkit".
+const NAME_NOISE = /\b(bukkit|spigot|paper|papermc|folia|plugin|mod|reloaded|continued|fork|for|the|minecraft|mc)\b/g
+
+/** Normalises a plugin name so the same project from different sources collides. */
+function identityKey(result: PluginSearchResult): string {
+  return result.name
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(NAME_NOISE, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim()
+}
+
+/**
+ * Collapses the same plugin found on several sources into one entry, keeping
+ * every source as an alternative so the user picks at download time. The entry
+ * with the most downloads supplies the display metadata.
+ */
+function mergeByIdentity(results: PluginSearchResult[]): PluginSearchResult[] {
+  const groups = new Map<string, PluginSearchResult[]>()
+  for (const result of results) {
+    const key = identityKey(result)
+    // Names that normalise to nothing can't be matched reliably; keep separate.
+    if (!key) {
+      groups.set(`${result.source}:${result.id}`, [result])
+      continue
+    }
+    const existing = groups.get(key)
+    if (existing) existing.push(result)
+    else groups.set(key, [result])
+  }
+
+  const merged: PluginSearchResult[] = []
+  for (const group of groups.values()) {
+    const ranked = [...group].sort((a, b) => b.downloads - a.downloads)
+    const primary = ranked[0]
+    merged.push({
+      ...primary,
+      // Combined download count reads as the project's real reach.
+      downloads: ranked.reduce((sum, r) => sum + r.downloads, 0),
+      alternatives: ranked.slice(1).map((r) => ({
+        source: r.source,
+        id: r.id,
+        downloads: r.downloads,
+        sourceUrl: r.sourceUrl
+      }))
+    })
+  }
+
+  return merged.sort((a, b) => b.downloads - a.downloads)
 }
 
 export async function listPluginVersions(source: PluginSource, projectId: string): Promise<PluginVersion[]> {

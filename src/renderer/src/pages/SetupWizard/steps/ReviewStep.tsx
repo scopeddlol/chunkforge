@@ -53,6 +53,7 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
   const [creating, setCreating] = useState(false)
   const [progress, setProgress] = useState<CreateProgressEvent | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
 
   useEffect(() => {
     if (!creating) return undefined
@@ -64,6 +65,30 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
     setError(null)
     try {
       const metadata = await window.chunkforge.servers.create(toCreateInstanceConfig(state))
+
+      // Queued plugins install after the server exists, so a single failure
+      // leaves a usable server rather than aborting creation.
+      const failed: string[] = []
+      for (const [index, queued] of state.initialPlugins.entries()) {
+        setProgress({
+          instanceId: metadata.id,
+          stage: 'done',
+          message: `Installing ${queued.name} (${index + 1}/${state.initialPlugins.length})…`,
+          percent: Math.round((index / state.initialPlugins.length) * 100)
+        })
+        try {
+          const versions = await window.chunkforge.plugins.listVersions(queued.source, queued.projectId)
+          const installable = versions.find((v) => v.downloadUrl)
+          if (!installable) throw new Error('no downloadable version')
+          await window.chunkforge.plugins.install(metadata.id, installable, queued.name)
+        } catch {
+          failed.push(queued.name)
+        }
+      }
+
+      if (failed.length > 0) {
+        setWarning(`Server created, but these couldn't be installed automatically: ${failed.join(', ')}`)
+      }
       onCreated(metadata)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create server.')
@@ -116,6 +141,20 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
           <Text className={styles.label}>Difficulty</Text>
           <Text weight="semibold">{state.toggles.difficulty}</Text>
         </div>
+        {state.enableGeyser && (
+          <div className={styles.row}>
+            <Text className={styles.label}>Crossplay</Text>
+            <Text weight="semibold">Geyser + Floodgate</Text>
+          </div>
+        )}
+        {state.initialPlugins.length > 0 && (
+          <div className={styles.row}>
+            <Text className={styles.label}>Plugins</Text>
+            <Text weight="semibold" style={{ textAlign: 'right' }}>
+              {state.initialPlugins.map((p) => p.name).join(', ')}
+            </Text>
+          </div>
+        )}
         <div className={styles.row}>
           <Text className={styles.label}>Enabled</Text>
           <Text weight="semibold" style={{ textAlign: 'right' }}>
@@ -127,6 +166,11 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
       {error && (
         <MessageBar intent="error">
           <MessageBarBody>{error}</MessageBarBody>
+        </MessageBar>
+      )}
+      {warning && (
+        <MessageBar intent="warning">
+          <MessageBarBody>{warning}</MessageBarBody>
         </MessageBar>
       )}
 

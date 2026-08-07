@@ -1,10 +1,16 @@
 import type { PluginSearchResult, PluginSource, PluginVersion } from '../../../shared/types'
 
+export interface SearchFilters {
+  gameVersion?: string
+  /** Loader id such as "paper" or "fabric"; ignored by sources that don't model it. */
+  loader?: string
+}
+
 export interface PluginProvider {
   readonly source: PluginSource
   /** Whether the provider is usable right now (e.g. CurseForge needs an API key). */
   isAvailable(): boolean
-  search(query: string, gameVersion: string | undefined, limit: number): Promise<PluginSearchResult[]>
+  search(query: string, filters: SearchFilters, limit: number): Promise<PluginSearchResult[]>
   listVersions(projectId: string): Promise<PluginVersion[]>
 }
 
