@@ -1,46 +1,24 @@
 {
-  "name": "chunkforge",
-  "version": "0.2.0",
-  "description": "Chunkforge — Minecraft Server Studio for Windows 11",
-  "main": "./out/main/index.js",
-  "author": "Chunkforge",
-  "homepage": "https://github.com/",
+  "name": "chunkforge-monorepo",
+  "version": "0.3.0",
+  "description": "Chunkforge — self-hostable Minecraft server platform",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/api",
+    "packages/desktop"
+  ],
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build:win": "electron-vite build && electron-builder --win --publish never",
-    "release:win": "electron-vite build && electron-builder --win --publish always"
-  },
-  "dependencies": {
-    "@fluentui/react-components": "^9.54.15",
-    "@fluentui/react-icons": "^2.0.257",
-    "adm-zip": "^0.6.0",
-    "electron-store": "^10.0.0",
-    "electron-updater": "^6.3.9",
-    "node-cron": "^3.0.3",
-    "sharp": "^0.35.3",
-    "zustand": "^4.5.5"
+    "dev": "npm run dev --workspace @chunkforge/desktop",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:win": "npm run build:win --workspace @chunkforge/desktop",
+    "release:win": "npm run release:win --workspace @chunkforge/desktop",
+    "api": "npm run dev --workspace @chunkforge/api"
   },
   "devDependencies": {
-    "@electron-toolkit/preload": "^3.0.1",
-    "@electron-toolkit/tsconfig": "^1.0.1",
-    "@electron-toolkit/utils": "^3.0.0",
-    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.7.5",
-    "@types/react": "^18.3.11",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.2",
-    "electron": "^32.2.0",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
-    "png-to-ico": "^3.0.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.8"
+    "typescript": "^5.6.3"
   }
 }
