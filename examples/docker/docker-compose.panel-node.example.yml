@@ -1,0 +1,27 @@
+services:
+  chunkforge-portal:
+    image: ghcr.io/scopeddlol/chunkforge-portal:${CHUNKFORGE_VERSION:-v0.4.0}
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      CHUNKFORGE_DATA: /data
+      CHUNKFORGE_ALLOWED_ORIGINS: ${CHUNKFORGE_ALLOWED_ORIGINS:-}
+    ports:
+      - "${CHUNKFORGE_PORT:-8080}:8080"
+    volumes:
+      - chunkforge-panel-node-data:/data
+    restart: unless-stopped
+
+  chunkforge-node:
+    image: ghcr.io/scopeddlol/chunkforge-node:${CHUNKFORGE_VERSION:-v0.4.0}
+    depends_on:
+      - chunkforge-portal
+    environment:
+      CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL:-http://chunkforge-portal:8080}
+      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN}
+      CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Chunkforge Local Node}
+      CHUNKFORGE_HEARTBEAT_MS: ${CHUNKFORGE_HEARTBEAT_MS:-15000}
+    restart: unless-stopped
+
+volumes:
+  chunkforge-panel-node-data:
