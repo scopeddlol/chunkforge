@@ -3,6 +3,7 @@ import {
   type CreateInstanceConfig,
   type InstanceToggles,
   type QueuedPlugin,
+  type SelectedModpack,
   type ServerType
 } from '@shared/types'
 
@@ -19,15 +20,18 @@ export interface WizardState {
   enableGeyser: boolean
   groupId: string | null
   initialPlugins: QueuedPlugin[]
+  /** When set, the server is created from this modpack instead of a bare loader. */
+  modpack: SelectedModpack | null
 }
 
 export const wizardSteps = [
   'Server Type',
+  'Modpack',
   'Version',
   'Name & Location',
   'Resources & Network',
   'Toggles',
-  'Plugins',
+  'Add-Ons',
   'Review & Create'
 ] as const
 
@@ -58,11 +62,12 @@ export function createInitialWizardState(defaults?: {
     installLocation: defaults?.defaultInstallLocation ?? null,
     enableGeyser: false,
     groupId: null,
-    initialPlugins: []
+    initialPlugins: [],
+    modpack: null
   }
 }
 
 export function toCreateInstanceConfig(state: WizardState): CreateInstanceConfig {
-  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins } = state
-  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins }
+  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack } = state
+  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack }
 }

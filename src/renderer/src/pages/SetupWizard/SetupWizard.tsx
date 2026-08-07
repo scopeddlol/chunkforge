@@ -5,6 +5,7 @@ import type { InstanceMetadata } from '@shared/types'
 import { WizardStepper } from './WizardStepper'
 import { createInitialWizardState, wizardSteps, type WizardState } from './wizardState'
 import { ServerTypeStep } from './steps/ServerTypeStep'
+import { ModpackPickerStep } from './steps/ModpackPickerStep'
 import { VersionStep } from './steps/VersionStep'
 import { NameLocationStep } from './steps/NameLocationStep'
 import { ResourcesStep } from './steps/ResourcesStep'
@@ -72,7 +73,7 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
 
   const isLastStep = stepIndex === wizardSteps.length - 1
   const canGoNext =
-    (stepIndex !== 1 || state.minecraftVersion !== '') && (stepIndex !== 2 || state.name.trim() !== '')
+    (stepIndex !== 2 || state.minecraftVersion !== '') && (stepIndex !== 3 || state.name.trim() !== '')
 
   return (
     <div className={styles.root}>
@@ -89,12 +90,13 @@ export function SetupWizard({ onClose, onCreated }: SetupWizardProps): JSX.Eleme
 
       <div className={styles.body}>
         {stepIndex === 0 && <ServerTypeStep state={state} onChange={onChange} />}
-        {stepIndex === 1 && <VersionStep state={state} onChange={onChange} />}
-        {stepIndex === 2 && <NameLocationStep state={state} onChange={onChange} />}
-        {stepIndex === 3 && <ResourcesStep state={state} onChange={onChange} />}
-        {stepIndex === 4 && <TogglesStep state={state} onChange={onChange} />}
-        {stepIndex === 5 && <PluginsStep state={state} onChange={onChange} />}
-        {stepIndex === 6 && <ReviewStep state={state} onCreated={onCreated} />}
+        {stepIndex === 1 && <ModpackPickerStep state={state} onChange={onChange} />}
+        {stepIndex === 2 && <VersionStep state={state} onChange={onChange} />}
+        {stepIndex === 3 && <NameLocationStep state={state} onChange={onChange} />}
+        {stepIndex === 4 && <ResourcesStep state={state} onChange={onChange} />}
+        {stepIndex === 5 && <TogglesStep state={state} onChange={onChange} />}
+        {stepIndex === 6 && <PluginsStep state={state} onChange={onChange} />}
+        {stepIndex === 7 && <ReviewStep state={state} onCreated={onCreated} />}
       </div>
 
       <div className={styles.footer}>

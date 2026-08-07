@@ -67,7 +67,21 @@ const useStyles = makeStyles({
   footer: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' },
   muted: { color: tokens.colorNeutralForeground3 },
   centered: { display: 'flex', justifyContent: 'center', padding: '64px 0' },
-  dialogBody: { display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '400px' }
+  // minWidth must yield on narrow windows or the dialog pushes past the viewport.
+  dialogBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    minWidth: 'min(400px, 100%)',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    overflowWrap: 'anywhere'
+  },
+  dialogSurface: { maxWidth: 'min(560px, calc(100vw - 48px))' },
+  dialogTitle: { overflowWrap: 'anywhere' },
+  // Badges size to content; inside a Field they would otherwise stretch full width.
+  inlineBadge: { alignSelf: 'flex-start' },
+  progressBlock: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }
 })
 
 function formatDownloads(count: number): string {
@@ -249,9 +263,9 @@ export function ModpackPage(): JSX.Element {
       </div>
 
       <Dialog open={target !== null} onOpenChange={(_, d) => !d.open && setTarget(null)}>
-        <DialogSurface>
+        <DialogSurface className={styles.dialogSurface}>
           <DialogBody>
-            <DialogTitle>Install {target?.name}</DialogTitle>
+            <DialogTitle className={styles.dialogTitle}>Install {target?.name}</DialogTitle>
             <DialogContent className={styles.dialogBody}>
               {error && (
                 <MessageBar intent="error">
@@ -293,7 +307,7 @@ export function ModpackPage(): JSX.Element {
 
               {packTarget && (
                 <Field label="Pack requires">
-                  <Badge appearance="tint" color={mismatch ? 'warning' : 'success'}>
+                  <Badge className={styles.inlineBadge} appearance="tint" color={mismatch ? 'warning' : 'success'}>
                     {serverTypeLabels[packTarget.serverType]} {packTarget.minecraftVersion}
                   </Badge>
                 </Field>
@@ -309,7 +323,7 @@ export function ModpackPage(): JSX.Element {
               )}
 
               {progress && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className={styles.progressBlock}>
                   <ProgressBar value={progress.percent / 100} />
                   <Text size={200}>{progress.message}</Text>
                 </div>

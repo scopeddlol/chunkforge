@@ -122,12 +122,23 @@ export interface CreateInstanceConfig {
   groupId?: string | null
   /** Plugins queued in the wizard, installed once the server exists. */
   initialPlugins?: QueuedPlugin[]
+  /** Modpack to install over the fresh server, replacing manual mod picking. */
+  modpack?: SelectedModpack | null
 }
 
 export interface QueuedPlugin {
   source: PluginSource
   projectId: string
   name: string
+}
+
+export interface SelectedModpack {
+  source: PluginSource
+  projectId: string
+  name: string
+  downloadUrl: string
+  serverType: ServerType
+  minecraftVersion: string
 }
 
 export interface ServerGroup {

@@ -36,6 +36,18 @@ button {
  */
 body > .fui-FluentProvider {
   background-color: transparent;
+  /*
+   * The portal container spans the whole window, so leaving it hit-testable
+   * made it swallow the very click that opened a popup — Fluent then read that
+   * as a click-outside and closed again, which is why dropdowns only responded
+   * to Enter. The container must be transparent to the mouse; its popup
+   * children opt back in below.
+   */
+  pointer-events: none;
+}
+
+body > .fui-FluentProvider > * {
+  pointer-events: auto;
 }
 
 /*

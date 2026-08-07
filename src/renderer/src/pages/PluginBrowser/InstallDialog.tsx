@@ -28,7 +28,17 @@ import {
 } from '@shared/types'
 
 const useStyles = makeStyles({
-  body: { display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '380px' },
+  body: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    minWidth: 'min(380px, 100%)',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    overflowWrap: 'anywhere'
+  },
+  surface: { maxWidth: 'min(560px, calc(100vw - 48px))' },
+  title: { overflowWrap: 'anywhere' },
   versionMeta: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' },
   hint: { color: tokens.colorNeutralForeground3 }
 })
@@ -128,9 +138,9 @@ export function InstallDialog({
 
   return (
     <Dialog open={plugin !== null} onOpenChange={(_, data) => !data.open && onClose()}>
-      <DialogSurface>
+      <DialogSurface className={styles.surface}>
         <DialogBody>
-          <DialogTitle>Install {plugin?.name}</DialogTitle>
+          <DialogTitle className={styles.title}>Install {plugin?.name}</DialogTitle>
           <DialogContent className={styles.body}>
             {error && (
               <MessageBar intent="error">

@@ -14,8 +14,9 @@ CurseForge in one place.
 
 ## What it does
 
-**Create a server without touching a terminal.** A seven-step wizard walks you
-from server type through version, resources, gameplay toggles, and plugins. It
+**Create a server without touching a terminal.** An eight-step wizard walks you
+from server type through an optional modpack, version, resources, gameplay
+toggles, and add-ons. It
 downloads the right server jar, fetches a matching Java runtime if you don't
 already have one, accepts the EULA, and writes `server.properties` for you.
 
@@ -27,23 +28,36 @@ detail view with seven tabs:
 | **Console** | Live server output with a command input wired to stdin |
 | **Chat** | In-game chat, joins, and leaves parsed from the log, plus broadcast |
 | **Players** | Roster merged from ops/whitelist/bans and the live online set, with op, kick, ban, and whitelist actions |
-| **Plugins** | Installed jars with enable/disable toggles and uninstall |
+| **Add-Ons** | Installed plugins or mods with enable/disable toggles and uninstall |
 | **Files** | Sandboxed file browser with an inline text editor |
 | **Backups** | Zip snapshots of the overworld, nether, and end — with optional upload to FileHub |
 | **Settings** | Editable name, port, RAM, gameplay options, and delete |
 
-**Find plugins anywhere.** One search box queries four sources in parallel.
-Results are interleaved so no single source dominates, each carries a colored
-source badge, and the install dialog checks the plugin's game versions against
-your server before installing.
+**Find add-ons anywhere.** One search box queries four sources in parallel.
+Results are interleaved so no single source dominates, the same project found on
+several sources merges into one card with the download source picked at install
+time, and results filter by Minecraft version and loader. Separate Plugins and
+Mods sections match what your server actually accepts.
+
+**Install whole modpacks.** Browse Modrinth and CurseForge modpacks, install one
+onto an existing server, or start a brand-new server from a pack — Chunkforge
+reads the archive and sets the loader and Minecraft version to match.
+
+**Keep an eye on everything.** The dashboard shows live CPU, memory, running
+servers, players online, backup count, and disk use, with card or table views and
+server groups you can start and stop in bulk.
 
 ## Supported servers
 
-| Type | Status |
-| --- | --- |
-| Paper | Supported |
-| Vanilla | Supported |
-| Purpur, Spigot, Forge, Fabric | Planned |
+| Type | Add-ons | Notes |
+| --- | --- | --- |
+| Paper | Plugins | Recommended default |
+| Purpur | Plugins | Paper fork |
+| Spigot | Plugins | Compiled locally with BuildTools — slow |
+| Vanilla | — | Mojang's unmodified server |
+| Fabric | Mods | |
+| Forge | Mods | Runs the official installer |
+| NeoForge | Mods | Modern Forge fork, faster on new versions |
 
 Java requirements are read live from the upstream projects — Mojang's version
 manifest and Paper's build metadata — rather than guessed from the Minecraft
@@ -66,6 +80,11 @@ Chunkforge can push world backups to a self-hosted
 **Settings → FileHub**, pick a destination folder, and optionally have every new
 backup upload automatically. Uploads are chunked and resumable. Only the session
 token is stored — your password is never written to disk.
+
+## Themes
+
+Eight built-in themes — OLED Violet, Midnight, Nebula, Forest, Ember, Slate,
+Light, and Parchment — selectable under Settings, or set to follow Windows.
 
 ## Install
 
@@ -93,7 +112,7 @@ To cut a release, push a tag — CI builds on Windows and publishes the installe
 to GitHub Releases:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 ## Where your data lives

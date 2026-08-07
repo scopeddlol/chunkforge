@@ -66,6 +66,28 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
     try {
       const metadata = await window.chunkforge.servers.create(toCreateInstanceConfig(state))
 
+      // A modpack replaces the whole mod set, so it goes on before anything
+      // queued individually.
+      if (state.modpack) {
+        setProgress({
+          instanceId: metadata.id,
+          stage: 'done',
+          message: `Installing ${state.modpack.name}…`,
+          percent: 0
+        })
+        try {
+          await window.chunkforge.modpacks.install(
+            metadata.id,
+            state.modpack.source,
+            state.modpack.downloadUrl
+          )
+        } catch (err) {
+          setWarning(
+            `Server created, but the modpack didn't install: ${(err as Error).message}. You can retry from the Modpacks page.`
+          )
+        }
+      }
+
       // Queued plugins install after the server exists, so a single failure
       // leaves a usable server rather than aborting creation.
       const failed: string[] = []
@@ -141,6 +163,14 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
           <Text className={styles.label}>Difficulty</Text>
           <Text weight="semibold">{state.toggles.difficulty}</Text>
         </div>
+        {state.modpack && (
+          <div className={styles.row}>
+            <Text className={styles.label}>Modpack</Text>
+            <Text weight="semibold" style={{ textAlign: 'right' }}>
+              {state.modpack.name}
+            </Text>
+          </div>
+        )}
         {state.enableGeyser && (
           <div className={styles.row}>
             <Text className={styles.label}>Crossplay</Text>
