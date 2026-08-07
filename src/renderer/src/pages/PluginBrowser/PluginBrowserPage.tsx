@@ -95,10 +95,15 @@ const useStyles = makeStyles({
 })
 
 interface PluginBrowserPageProps {
+  /** Plugin mode searches Bukkit-style plugins; mod mode searches loader mods. */
+  mode?: 'plugins' | 'mods'
   scopedInstanceId?: string | null
 }
 
-export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPageProps): JSX.Element {
+export function PluginBrowserPage({
+  mode = 'plugins',
+  scopedInstanceId = null
+}: PluginBrowserPageProps): JSX.Element {
   const styles = useStyles()
   const { instances, refresh } = useInstancesStore()
 
@@ -109,7 +114,7 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
   const [loading, setLoading] = useState(false)
   const [installTarget, setInstallTarget] = useState<PluginSearchResult | null>(null)
   const [versionFilter, setVersionFilter] = useState('')
-  const [loaderFilter, setLoaderFilter] = useState('')
+  const [loaderFilter, setLoaderFilter] = useState(mode === 'mods' ? 'fabric' : '')
 
   useEffect(() => {
     if (instances.length === 0) refresh()
@@ -145,7 +150,7 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
       if (cancelled) return
       const enabled = settings.enabledPluginSources.length > 0 ? settings.enabledPluginSources : allSources
       setActiveSources(enabled)
-      runSearch('', enabled, '', '')
+      runSearch('', enabled, '', mode === 'mods' ? 'fabric' : '')
     })
     return () => {
       cancelled = true
@@ -171,11 +176,13 @@ export function PluginBrowserPage({ scopedInstanceId = null }: PluginBrowserPage
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <Title2>Plugins &amp; Mods</Title2>
+        <Title2>{mode === 'mods' ? 'Mods' : 'Plugins'}</Title2>
         <Text className={styles.subtitle} block>
           {scopedInstance
             ? `Browsing for ${scopedInstance.name}`
-            : 'Search Modrinth, Hangar, SpigotMC, and CurseForge in one place.'}
+            : mode === 'mods'
+              ? 'Mods for Fabric, Forge, and NeoForge servers.'
+              : 'Search Modrinth, Hangar, SpigotMC, and CurseForge in one place.'}
         </Text>
       </div>
 

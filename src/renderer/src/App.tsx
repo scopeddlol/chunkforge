@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import { FluentProvider, makeStyles } from '@fluentui/react-components'
-import type { InstanceMetadata, ThemePreference } from '@shared/types'
+import { serverTypeCategory, type InstanceMetadata, type ThemePreference } from '@shared/types'
 import { getTheme, type ChunkforgeTheme } from './theme/chunkforgeTheme'
 import { TitleBar } from './components/TitleBar'
 import { NavRail, type NavKey } from './components/NavRail'
@@ -77,7 +77,7 @@ export function App(): JSX.Element {
 
   function handleSelectNav(key: NavKey): void {
     setOverlay(null)
-    if (key !== 'plugins') setPluginScopeId(null)
+    if (key !== 'plugins' && key !== 'mods') setPluginScopeId(null)
     setActiveNav(key)
   }
 
@@ -86,10 +86,12 @@ export function App(): JSX.Element {
     setOverlay({ kind: 'instance', instanceId: metadata.id })
   }
 
-  const handleBrowsePlugins = useCallback((instanceId: string) => {
+  // Mod servers should land on the Mods browser, plugin servers on Plugins.
+  const handleBrowsePlugins = useCallback(async (instanceId: string) => {
+    const metadata = await window.chunkforge.servers.getMetadata(instanceId)
     setPluginScopeId(instanceId)
     setOverlay(null)
-    setActiveNav('plugins')
+    setActiveNav(serverTypeCategory[metadata.serverType] === 'mods' ? 'mods' : 'plugins')
   }, [])
 
   return (
@@ -115,7 +117,12 @@ export function App(): JSX.Element {
             onOpenInstance={(id) => setOverlay({ kind: 'instance', instanceId: id })}
           />
         )}
-        {!overlay && activeNav === 'plugins' && <PluginBrowserPage scopedInstanceId={pluginScopeId} />}
+        {!overlay && activeNav === 'plugins' && (
+          <PluginBrowserPage mode="plugins" scopedInstanceId={pluginScopeId} />
+        )}
+        {!overlay && activeNav === 'mods' && (
+          <PluginBrowserPage mode="mods" scopedInstanceId={pluginScopeId} />
+        )}
         {!overlay && activeNav === 'settings' && <SettingsPage />}
       </div>
     </FluentProvider>

@@ -7,6 +7,7 @@ import { registerPluginIpcHandlers } from './ipc/plugins'
 import { registerSettingsIpcHandlers } from './ipc/settings'
 import { registerInstanceToolIpcHandlers } from './ipc/instanceTools'
 import { registerFileHubIpcHandlers } from './ipc/filehub'
+import { registerDashboardIpcHandlers } from './ipc/dashboard'
 import { loadSettings } from './store/settingsStore'
 
 // Lets tooling attach to the renderer during development for real diagnostics
@@ -70,6 +71,7 @@ app.whenReady().then(async () => {
   registerSettingsIpcHandlers(mainWindow)
   registerInstanceToolIpcHandlers(mainWindow)
   registerFileHubIpcHandlers(mainWindow)
+  registerDashboardIpcHandlers()
 
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
   ipcMain.handle('window:maximizeToggle', () =>

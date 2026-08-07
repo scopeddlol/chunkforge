@@ -1,4 +1,4 @@
-export type ServerType = 'vanilla' | 'paper' | 'purpur' | 'spigot' | 'forge' | 'fabric'
+export type ServerType = 'vanilla' | 'paper' | 'purpur' | 'spigot' | 'forge' | 'fabric' | 'neoforge'
 
 export const serverTypeLabels: Record<ServerType, string> = {
   vanilla: 'Vanilla',
@@ -6,12 +6,36 @@ export const serverTypeLabels: Record<ServerType, string> = {
   purpur: 'Purpur',
   spigot: 'Spigot',
   forge: 'Forge',
-  fabric: 'Fabric'
+  fabric: 'Fabric',
+  neoforge: 'NeoForge'
 }
 
-/** Loaders that load Bukkit-style plugins rather than mods. */
+/** What kind of add-ons a server type accepts. Drives the browser and tabs. */
+export type ServerCategory = 'vanilla' | 'plugins' | 'mods'
+
+export const serverTypeCategory: Record<ServerType, ServerCategory> = {
+  vanilla: 'vanilla',
+  paper: 'plugins',
+  purpur: 'plugins',
+  spigot: 'plugins',
+  forge: 'mods',
+  fabric: 'mods',
+  neoforge: 'mods'
+}
+
+export const serverCategoryLabels: Record<ServerCategory, string> = {
+  vanilla: 'Vanilla',
+  plugins: 'Plugins',
+  mods: 'Mods'
+}
+
 export const pluginServerTypes: ServerType[] = ['paper', 'purpur', 'spigot']
-export const modServerTypes: ServerType[] = ['forge', 'fabric']
+export const modServerTypes: ServerType[] = ['forge', 'fabric', 'neoforge']
+
+/** Where add-ons are installed for a given server type. */
+export function addOnFolder(serverType: ServerType): string {
+  return serverTypeCategory[serverType] === 'mods' ? 'mods' : 'plugins'
+}
 
 /** Placeholders substituted into launchArgs at spawn time. */
 export const LAUNCH_TOKENS = {
@@ -110,6 +134,22 @@ export interface ServerGroup {
   id: string
   name: string
   color: string
+}
+
+export interface DashboardStats {
+  cpuPercent: number
+  cpuCores: number
+  totalMemoryBytes: number
+  usedMemoryBytes: number
+  /** Sum of max heap across running servers. */
+  allocatedMemoryBytes: number
+  serverCount: number
+  runningCount: number
+  playersOnline: number
+  backupCount: number
+  backupBytes: number
+  diskBytes: number
+  uptimeSeconds: number
 }
 
 export interface VersionCatalogEntry {
@@ -268,6 +308,8 @@ export interface PluginSearchResponse {
   errors: { source: PluginSource; message: string }[]
 }
 
+export type DashboardView = 'grid' | 'table'
+
 export type ThemeId =
   | 'oled'
   | 'midnight'
@@ -303,6 +345,8 @@ export interface AppSettings {
   confirmBeforeStop: boolean
   consoleScrollbackLines: number
   fileHub: FileHubSettings
+  serverGroups: ServerGroup[]
+  dashboardView: DashboardView
 }
 
 export const defaultAppSettings: AppSettings = {
@@ -315,6 +359,8 @@ export const defaultAppSettings: AppSettings = {
   enabledPluginSources: ['modrinth', 'hangar', 'spiget', 'curseforge'],
   confirmBeforeStop: true,
   consoleScrollbackLines: 2000,
+  serverGroups: [],
+  dashboardView: 'grid',
   fileHub: {
     baseUrl: '',
     username: '',

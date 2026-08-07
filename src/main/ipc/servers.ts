@@ -44,7 +44,14 @@ export function registerServerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle('servers:getMetadata', async (_, id: string) => {
-    return loadInstanceMetadata(id)
+    // The persisted status is whatever was written at creation and goes stale
+    // the moment a server starts, so live process state always wins.
+    const metadata = await loadInstanceMetadata(id)
+    return {
+      ...metadata,
+      status: instanceManager.getStatus(id),
+      playersOnline: instanceManager.getOnlinePlayers(id).length
+    }
   })
 
   ipcMain.handle('servers:create', async (_, config: CreateInstanceConfig) => {

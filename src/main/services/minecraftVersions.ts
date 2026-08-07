@@ -99,6 +99,7 @@ export async function resolveServerRequirements(
         return { javaMajor: (await resolvePaperRequirements(version)).javaMajor, jvmFlags: [] }
       case 'vanilla':
       case 'forge':
+      case 'neoforge':
       case 'fabric':
         // Mod loaders run the same Minecraft server underneath, so Mojang's
         // declared Java version applies.

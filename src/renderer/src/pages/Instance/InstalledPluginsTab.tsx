@@ -10,7 +10,7 @@ import {
   MessageBarBody
 } from '@fluentui/react-components'
 import { Delete20Regular, AddCircle24Regular, AppsAddIn24Regular } from '@fluentui/react-icons'
-import type { InstalledPlugin } from '@shared/types'
+import { serverTypeCategory, type InstalledPlugin, type ServerType } from '@shared/types'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: 0 },
@@ -47,15 +47,19 @@ function formatSize(bytes: number): string {
 
 interface InstalledPluginsTabProps {
   instanceId: string
+  serverType: ServerType
   serverRunning: boolean
   onBrowse: () => void
 }
 
 export function InstalledPluginsTab({
   instanceId,
+  serverType,
   serverRunning,
   onBrowse
 }: InstalledPluginsTabProps): JSX.Element {
+  // Wording follows the server type: mod loaders install mods, not plugins.
+  const noun = serverTypeCategory[serverType] === 'mods' ? 'mod' : 'plugin'
   const styles = useStyles()
   const [plugins, setPlugins] = useState<InstalledPlugin[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -87,7 +91,7 @@ export function InstalledPluginsTab({
     )
   }
 
-  if (!plugins) return <Spinner size="tiny" label="Reading plugins folder…" />
+  if (!plugins) return <Spinner size="tiny" label={`Reading ${noun}s folder…`} />
 
   return (
     <div className={styles.root}>
@@ -95,19 +99,19 @@ export function InstalledPluginsTab({
         <Text className={styles.hint} size={200}>
           {serverRunning
             ? 'Server is running — changes apply after a restart.'
-            : `${plugins.length} plugin${plugins.length === 1 ? '' : 's'} installed.`}
+            : `${plugins.length} ${noun}${plugins.length === 1 ? '' : 's'} installed.`}
         </Text>
         <Button appearance="primary" size="small" icon={<AddCircle24Regular />} onClick={onBrowse}>
-          Browse Plugins
+          {`Browse ${noun === 'mod' ? 'Mods' : 'Plugins'}`}
         </Button>
       </div>
 
       {plugins.length === 0 ? (
         <div className={styles.empty}>
           <AppsAddIn24Regular fontSize={32} />
-          <Text>No plugins installed yet.</Text>
+          <Text>{`No ${noun}s installed yet.`}</Text>
           <Button appearance="primary" icon={<AddCircle24Regular />} onClick={onBrowse}>
-            Browse Plugins
+            {`Browse ${noun === 'mod' ? 'Mods' : 'Plugins'}`}
           </Button>
         </div>
       ) : (

@@ -125,20 +125,100 @@ async function installForge(
     { onProgress }
   )
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(javaPath, ['-jar', 'forge-installer.jar', '--installServer'], { cwd: destDir })
-    let output = ''
-    child.stdout.on('data', (c: Buffer) => (output += c.toString()))
-    child.stderr.on('data', (c: Buffer) => (output += c.toString()))
-    child.on('error', reject)
-    child.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`Forge installer failed (${code}): ${output.slice(-400)}`))
-    )
-  })
+  await runInstaller(javaPath, destDir, 'forge-installer.jar', 'Forge')
 
   await rm(installerPath, { force: true })
   await rm(join(destDir, 'forge-installer.jar.log'), { force: true })
   return forgeVersion
+}
+
+/** Runs a loader's installer jar in server mode, surfacing its output on failure. */
+function runInstaller(
+  javaPath: string,
+  cwd: string,
+  jarName: string,
+  label: string
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(javaPath, ['-jar', jarName, '--installServer'], { cwd })
+    let output = ''
+    const capture = (c: Buffer): void => {
+      output = (output + c.toString()).slice(-4000)
+    }
+    child.stdout.on('data', capture)
+    child.stderr.on('data', capture)
+    child.on('error', reject)
+    child.on('close', (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`${label} installer failed (${code}): ${output.slice(-400)}`))
+    )
+  })
+}
+
+// ---------------------------------------------------------------- NeoForge
+
+const NEOFORGE_VERSIONS_URL =
+  'https://maven.neoforged.net/api/maven/versions/releases/net%2Fneoforged%2Fneoforge'
+
+/**
+ * NeoForge build versions encode the Minecraft version they target, but the
+ * encoding changed with Mojang's new scheme:
+ *   3 parts — "21.1.9"     -> MC 1.21.1  (patch 0 means MC 1.<minor>)
+ *   4 parts — "26.1.2.94"  -> MC 26.1.2
+ */
+function neoforgeToMinecraft(version: string): string | null {
+  const core = version.split('-')[0]
+  const parts = core.split('.')
+  if (parts.length >= 4) return parts.slice(0, 3).join('.')
+  if (parts.length === 3) {
+    const [minor, patch] = parts
+    return patch === '0' ? `1.${minor}` : `1.${minor}.${patch}`
+  }
+  return null
+}
+
+async function neoforgeBuilds(): Promise<string[]> {
+  const data = await fetchJson<{ versions: string[] }>(NEOFORGE_VERSIONS_URL)
+  return data.versions.filter((v) => !/beta|alpha|rc/i.test(v))
+}
+
+async function neoforgeVersions(): Promise<VersionCatalogEntry[]> {
+  const builds = await neoforgeBuilds()
+  const mcVersions: string[] = []
+  for (const build of builds) {
+    const mc = neoforgeToMinecraft(build)
+    if (mc && !mcVersions.includes(mc)) mcVersions.push(mc)
+  }
+  return toCatalog(mcVersions.reverse())
+}
+
+/** Newest NeoForge build targeting a given Minecraft version. */
+async function latestNeoforgeBuild(minecraftVersion: string): Promise<string> {
+  const builds = await neoforgeBuilds()
+  const matching = builds.filter((b) => neoforgeToMinecraft(b) === minecraftVersion)
+  const latest = matching.at(-1)
+  if (!latest) throw new Error(`No NeoForge build published for Minecraft ${minecraftVersion}`)
+  return latest
+}
+
+async function installNeoForge(
+  version: string,
+  destDir: string,
+  javaPath: string,
+  onProgress?: (percent: number | null) => void
+): Promise<string> {
+  const build = await latestNeoforgeBuild(version)
+  const installerPath = join(destDir, 'neoforge-installer.jar')
+  await downloadFile(
+    `https://maven.neoforged.net/releases/net/neoforged/neoforge/${build}/neoforge-${build}-installer.jar`,
+    installerPath,
+    { onProgress }
+  )
+
+  await runInstaller(javaPath, destDir, 'neoforge-installer.jar', 'NeoForge')
+  await rm(installerPath, { force: true })
+  return build
 }
 
 // ---------------------------------------------------------------- Spigot
@@ -224,6 +304,8 @@ export async function listLoaderVersions(serverType: ServerType): Promise<Versio
       return fabricVersions()
     case 'forge':
       return forgeVersions()
+    case 'neoforge':
+      return neoforgeVersions()
     case 'spigot':
       return spigotVersions()
     default:
@@ -254,6 +336,22 @@ export async function installLoader(
     case 'spigot':
       await buildSpigot(version, destDir, javaPath, onProgress)
       return {}
+    case 'neoforge': {
+      const build = await installNeoForge(version, destDir, javaPath, onProgress)
+      const argsFile = join(destDir, 'libraries', 'net', 'neoforged', 'neoforge', build, 'win_args.txt')
+      if (!existsSync(argsFile)) {
+        throw new Error('NeoForge installed but its launch args file is missing')
+      }
+      return {
+        launchArgs: [
+          `-Xms${LAUNCH_TOKENS.minRam}M`,
+          `-Xmx${LAUNCH_TOKENS.maxRam}M`,
+          ...jvmFlags,
+          `@libraries/net/neoforged/neoforge/${build}/win_args.txt`,
+          'nogui'
+        ]
+      }
+    }
     case 'forge': {
       const forgeVersion = await installForge(version, destDir, javaPath, onProgress)
       const argsFile = join(

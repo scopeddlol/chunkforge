@@ -7,6 +7,7 @@ import type {
   CreateInstanceConfig,
   FileHubStatus,
   CreateProgressEvent,
+  DashboardStats,
   FileEntry,
   InstalledPlugin,
   InstanceMetadata,
@@ -19,6 +20,7 @@ import type {
   PluginSearchResponse,
   PluginSource,
   PluginVersion,
+  ServerGroup,
   ServerType,
   StatusChangedEvent,
   VersionCatalogEntry
@@ -162,8 +164,27 @@ const filehub = {
     subscribe('filehub:upload-progress', callback)
 }
 
+const stats = {
+  dashboard: (): Promise<DashboardStats> => ipcRenderer.invoke('stats:dashboard')
+}
+
+const groups = {
+  list: (): Promise<ServerGroup[]> => ipcRenderer.invoke('groups:list'),
+  create: (name: string, color: string): Promise<ServerGroup> =>
+    ipcRenderer.invoke('groups:create', name, color),
+  rename: (id: string, name: string, color: string): Promise<ServerGroup[]> =>
+    ipcRenderer.invoke('groups:rename', id, name, color),
+  delete: (id: string): Promise<void> => ipcRenderer.invoke('groups:delete', id),
+  assign: (instanceId: string, groupId: string | null): Promise<void> =>
+    ipcRenderer.invoke('groups:assign', instanceId, groupId),
+  bulk: (groupId: string, action: 'start' | 'stop'): Promise<{ total: number; failed: number }> =>
+    ipcRenderer.invoke('groups:bulk', groupId, action)
+}
+
 const chunkforgeApi = {
   window: windowControls,
+  stats,
+  groups,
   theme,
   servers,
   plugins,

@@ -7,14 +7,17 @@ import {
   AppsAddIn24Filled,
   Settings24Regular,
   Settings24Filled,
+  Box24Regular,
+  Box24Filled,
   bundleIcon
 } from '@fluentui/react-icons'
 
 const DashboardIcon = bundleIcon(Grid24Filled, Grid24Regular)
 const PluginsIcon = bundleIcon(AppsAddIn24Filled, AppsAddIn24Regular)
+const ModsIcon = bundleIcon(Box24Filled, Box24Regular)
 const SettingsIcon = bundleIcon(Settings24Filled, Settings24Regular)
 
-export type NavKey = 'dashboard' | 'plugins' | 'settings'
+export type NavKey = 'dashboard' | 'plugins' | 'mods' | 'settings'
 
 const useStyles = makeStyles({
   root: {
@@ -78,6 +81,7 @@ const useStyles = makeStyles({
 const items: { key: NavKey; label: string; Icon: typeof DashboardIcon }[] = [
   { key: 'dashboard', label: 'Servers', Icon: DashboardIcon },
   { key: 'plugins', label: 'Plugins', Icon: PluginsIcon },
+  { key: 'mods', label: 'Mods', Icon: ModsIcon },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon }
 ]
 

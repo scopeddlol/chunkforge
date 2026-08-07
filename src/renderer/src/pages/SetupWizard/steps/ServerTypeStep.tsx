@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { makeStyles, tokens, Text, Title3, Badge, mergeClasses } from '@fluentui/react-components'
-import type { ServerType } from '@shared/types'
+import { serverCategoryLabels, serverTypeCategory, type ServerType } from '@shared/types'
 import type { WizardState } from '../wizardState'
 
 const useStyles = makeStyles({
@@ -55,12 +55,21 @@ const useStyles = makeStyles({
   }
 })
 
+// Category badge colours: plugins brand-purple, mods informative, vanilla subtle.
+const categoryColor = { vanilla: 'subtle', plugins: 'brand', mods: 'informative' } as const
+
 const options: { type: ServerType; label: string; blurb: string; note?: string }[] = [
   { type: 'paper', label: 'Paper', blurb: 'High-performance, plugin-friendly. Recommended default.' },
   { type: 'vanilla', label: 'Vanilla', blurb: "Mojang's unmodified server." },
   { type: 'purpur', label: 'Purpur', blurb: 'Paper fork with extra gameplay knobs.' },
   { type: 'fabric', label: 'Fabric', blurb: 'Lightweight, fast-updating mod loader.' },
   { type: 'forge', label: 'Forge', blurb: 'The original Minecraft modding platform.', note: 'Runs installer' },
+  {
+    type: 'neoforge',
+    label: 'NeoForge',
+    blurb: 'Modern Forge fork with faster support for new Minecraft versions.',
+    note: 'Runs installer'
+  },
   {
     type: 'spigot',
     label: 'Spigot',
@@ -92,6 +101,9 @@ export function ServerTypeStep({ state, onChange }: ServerTypeStepProps): JSX.El
             >
               <div className={styles.cardHeader}>
                 <Text weight="semibold">{option.label}</Text>
+                <Badge appearance="outline" color={categoryColor[serverTypeCategory[option.type]]}>
+                  {serverCategoryLabels[serverTypeCategory[option.type]]}
+                </Badge>
                 {option.note && (
                   <Badge appearance="tint" color="warning">
                     {option.note}

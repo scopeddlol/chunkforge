@@ -22,25 +22,25 @@ export function registerPluginIpcHandlers(): void {
 
   ipcMain.handle('plugins:listInstalled', async (_, instanceId: string) => {
     const metadata = await loadInstanceMetadata(instanceId)
-    return listInstalledPlugins(metadata.path)
+    return listInstalledPlugins(metadata.path, metadata.serverType)
   })
 
   ipcMain.handle(
     'plugins:install',
     async (_, instanceId: string, version: PluginVersion, fallbackName: string) => {
       const metadata = await loadInstanceMetadata(instanceId)
-      return installPlugin(metadata.path, version, fallbackName)
+      return installPlugin(metadata.path, metadata.serverType, version, fallbackName)
     }
   )
 
   ipcMain.handle('plugins:setEnabled', async (_, instanceId: string, filename: string, enabled: boolean) => {
     const metadata = await loadInstanceMetadata(instanceId)
-    await setPluginEnabled(metadata.path, filename, enabled)
+    await setPluginEnabled(metadata.path, metadata.serverType, filename, enabled)
   })
 
   ipcMain.handle('plugins:uninstall', async (_, instanceId: string, filename: string) => {
     const metadata = await loadInstanceMetadata(instanceId)
-    await uninstallPlugin(metadata.path, filename)
+    await uninstallPlugin(metadata.path, metadata.serverType, filename)
   })
 
   ipcMain.handle('plugins:openExternal', (_, url: string) => shell.openExternal(url))

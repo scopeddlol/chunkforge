@@ -7,8 +7,10 @@ import type {
   PluginSearchResponse,
   PluginSearchResult,
   PluginSource,
-  PluginVersion
+  PluginVersion,
+  ServerType
 } from '../../../shared/types'
+import { addOnFolder } from '../../../shared/types'
 import { downloadFile } from '../downloadFile'
 import type { PluginProvider } from './provider'
 import { modrinthProvider } from './modrinth'
@@ -134,12 +136,16 @@ export async function listPluginVersions(source: PluginSource, projectId: string
   return providers[source].listVersions(projectId)
 }
 
-function pluginsDir(instancePath: string): string {
-  return join(instancePath, 'plugins')
+/** Mods and plugins live in different folders, so callers pass the server type. */
+function addOnsDir(instancePath: string, serverType: ServerType): string {
+  return join(instancePath, addOnFolder(serverType))
 }
 
-export async function listInstalledPlugins(instancePath: string): Promise<InstalledPlugin[]> {
-  const dir = pluginsDir(instancePath)
+export async function listInstalledPlugins(
+  instancePath: string,
+  serverType: ServerType
+): Promise<InstalledPlugin[]> {
+  const dir = addOnsDir(instancePath, serverType)
   if (!existsSync(dir)) return []
 
   const entries = await readdir(dir, { withFileTypes: true })
@@ -161,6 +167,7 @@ export async function listInstalledPlugins(instancePath: string): Promise<Instal
 
 export async function installPlugin(
   instancePath: string,
+  serverType: ServerType,
   version: PluginVersion,
   fallbackName: string,
   onProgress?: (percent: number | null) => void
@@ -169,7 +176,7 @@ export async function installPlugin(
     throw new Error('This plugin has to be downloaded from its own site.')
   }
 
-  const dir = pluginsDir(instancePath)
+  const dir = addOnsDir(instancePath, serverType)
   await mkdir(dir, { recursive: true })
 
   const filename = version.filename ?? `${fallbackName.replace(/[^\w.-]+/g, '-')}.jar`
@@ -185,10 +192,11 @@ export async function installPlugin(
 
 export async function setPluginEnabled(
   instancePath: string,
+  serverType: ServerType,
   filename: string,
   enabled: boolean
 ): Promise<void> {
-  const dir = pluginsDir(instancePath)
+  const dir = addOnsDir(instancePath, serverType)
   const current = join(dir, filename)
   if (!existsSync(current)) throw new Error(`Plugin not found: ${filename}`)
 
@@ -199,6 +207,10 @@ export async function setPluginEnabled(
   if (current !== target) await rename(current, target)
 }
 
-export async function uninstallPlugin(instancePath: string, filename: string): Promise<void> {
-  await rm(join(pluginsDir(instancePath), filename), { force: true })
+export async function uninstallPlugin(
+  instancePath: string,
+  serverType: ServerType,
+  filename: string
+): Promise<void> {
+  await rm(join(addOnsDir(instancePath, serverType), filename), { force: true })
 }

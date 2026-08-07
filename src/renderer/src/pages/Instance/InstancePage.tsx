@@ -186,7 +186,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
           {onlinePlayers.length > 0 ? `Players (${onlinePlayers.length})` : 'Players'}
         </Tab>
         <Tab value="plugins" icon={<AppsAddIn20Regular />}>
-          Plugins
+          Add-Ons
         </Tab>
         <Tab value="files" icon={<Folder20Regular />}>
           Files
@@ -206,6 +206,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
         {tab === 'plugins' && (
           <InstalledPluginsTab
             instanceId={instanceId}
+            serverType={metadata.serverType}
             serverRunning={isRunning}
             onBrowse={() => onBrowsePlugins(instanceId)}
           />
