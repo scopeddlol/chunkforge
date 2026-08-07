@@ -51,7 +51,9 @@ const servers = {
   onStatusChanged: (callback: (event: StatusChangedEvent) => void): (() => void) =>
     subscribe('servers:status-changed', callback),
   onCreateProgress: (callback: (event: CreateProgressEvent) => void): (() => void) =>
-    subscribe('servers:create-progress', callback)
+    subscribe('servers:create-progress', callback),
+  getDefaultInstancesRoot: (): Promise<string> => ipcRenderer.invoke('servers:getDefaultInstancesRoot'),
+  pickInstallLocation: (): Promise<string | null> => ipcRenderer.invoke('servers:pickInstallLocation')
 }
 
 const chunkforgeApi = {

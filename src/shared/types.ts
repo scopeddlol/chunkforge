@@ -56,6 +56,8 @@ export interface CreateInstanceConfig {
   maxRamMb: number
   toggles: InstanceToggles
   accentColor: string
+  /** Parent directory to create the server's folder in. Defaults to the Chunkforge Instances root when omitted. */
+  installLocation: string | null
 }
 
 export interface VersionCatalogEntry {

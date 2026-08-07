@@ -14,7 +14,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 660,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1B1B1F' : '#FAF7F2',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#F7F5FC',
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
     // Windows 11 22H2+ Mica material; falls back gracefully on older builds.

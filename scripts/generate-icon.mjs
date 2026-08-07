@@ -13,16 +13,16 @@ const buildDir = path.join(__dirname, '..', 'build')
 // obsidian rounded-square backdrop for the standalone app icon.
 const svg = `
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="112" fill="#1B1B1F" />
+  <rect width="512" height="512" rx="112" fill="#1C1039" />
   <g transform="translate(48 48) scale(9)">
-    <path d="M24 3 L44 14.5 V33.5 L24 45 L4 33.5 V14.5 Z" fill="#1B1B1F" />
-    <path d="M24 3 L44 14.5 L24 26 L4 14.5 Z" fill="#F2A87C" />
-    <path d="M24 26 L44 14.5 V33.5 L24 45 Z" fill="#CF4718" />
-    <path d="M24 26 L4 14.5 V33.5 L24 45 Z" fill="#E8793A" />
+    <path d="M24 3 L44 14.5 V33.5 L24 45 L4 33.5 V14.5 Z" fill="#000000" />
+    <path d="M24 3 L44 14.5 L24 26 L4 14.5 Z" fill="#CBA3FB" />
+    <path d="M24 26 L44 14.5 V33.5 L24 45 Z" fill="#7D4FD1" />
+    <path d="M24 26 L4 14.5 V33.5 L24 45 Z" fill="#A374F8" />
     <path
       d="M27 9 L18 21 L23 21 L20 30 L31 17 L25.5 17 Z"
-      fill="#FCE3D2"
-      stroke="#1B1B1F"
+      fill="#EDDBFE"
+      stroke="#000000"
       stroke-width="0.75"
       stroke-linejoin="round"
     />

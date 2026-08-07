@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
-import { writeFile } from 'fs/promises'
+import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
 import type {
   CreateInstanceConfig,
@@ -14,7 +14,7 @@ import { ensureJavaRuntime } from './javaManager'
 import { downloadServerJar } from './jarAcquisition'
 import { requiredJavaMajor } from './minecraftVersions'
 import { renderEula, renderServerProperties } from './serverProperties'
-import { instancePath, saveInstanceMetadata, slugifyInstanceName } from '../store/instancesStore'
+import { resolveInstanceDir, saveInstanceMetadata, slugifyInstanceName } from '../store/instancesStore'
 
 interface RunningProcess {
   child: ChildProcessWithoutNullStreams
@@ -44,9 +44,10 @@ class InstanceManager extends EventEmitter {
 
   async createInstance(config: CreateInstanceConfig): Promise<InstanceMetadata> {
     const id = slugifyInstanceName(config.name)
-    const dir = instancePath(id)
+    const dir = resolveInstanceDir(id, config.installLocation)
 
     this.emitProgress({ instanceId: id, stage: 'preparing', message: 'Setting up server folder…', percent: null })
+    await mkdir(dir, { recursive: true })
 
     const majorJava = requiredJavaMajor(config.minecraftVersion)
     this.emitProgress({

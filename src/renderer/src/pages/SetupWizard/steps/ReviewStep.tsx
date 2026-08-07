@@ -99,6 +99,10 @@ export function ReviewStep({ state, onCreated }: ReviewStepProps): JSX.Element {
           <Text weight="semibold">{state.name || 'Untitled Server'}</Text>
         </div>
         <div className={styles.row}>
+          <Text className={styles.label}>Location</Text>
+          <Text weight="semibold">{state.installLocation ?? 'Default'}</Text>
+        </div>
+        <div className={styles.row}>
           <Text className={styles.label}>RAM</Text>
           <Text weight="semibold">
             {(state.minRamMb / 1024).toFixed(1)}–{(state.maxRamMb / 1024).toFixed(1)} GB

@@ -52,9 +52,11 @@ async function listPaperVersions(): Promise<VersionCatalogEntry[]> {
   const groups = Object.values(project.versions)
   const flattened = groups.flatMap((group) => [...group].reverse())
   // Version strings for RCs/pre-releases/alphas carry a "-" suffix (e.g.
-  // "26.2-rc-2"); prefer the newest plain release as the recommended pick.
-  const recommendedId = flattened.find((id) => !id.includes('-')) ?? flattened[0]
-  return flattened.map((id) => ({
+  // "26.2-rc-2"); sort plain releases first so the list leads with what
+  // most people want, with prereleases still available further down.
+  const sorted = [...flattened].sort((a, b) => Number(a.includes('-')) - Number(b.includes('-')))
+  const recommendedId = sorted.find((id) => !id.includes('-')) ?? sorted[0]
+  return sorted.map((id) => ({
     id,
     label: id,
     isRecommended: id === recommendedId,

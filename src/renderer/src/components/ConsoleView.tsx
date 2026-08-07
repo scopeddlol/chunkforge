@@ -16,7 +16,8 @@ const useStyles = makeStyles({
   logPanel: {
     flexGrow: 1,
     overflowY: 'auto',
-    backgroundColor: '#101012',
+    backgroundColor: '#000000',
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusLarge,
     padding: '12px 14px',
     fontFamily: "Cascadia Code, Consolas, 'Courier New', monospace",

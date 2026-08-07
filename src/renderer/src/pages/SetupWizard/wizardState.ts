@@ -9,6 +9,7 @@ export interface WizardState {
   minRamMb: number
   maxRamMb: number
   toggles: InstanceToggles
+  installLocation: string | null
 }
 
 export const wizardSteps = [
@@ -22,10 +23,10 @@ export const wizardSteps = [
 ] as const
 
 export const accentSwatches = [
-  '#E8793A', // forge amber (brand default)
+  '#8B5CF6', // brand violet (default)
   '#2EBD59', // emerald
   '#3E9CF2', // sky blue
-  '#B15EE0', // amethyst
+  '#E0459C', // magenta
   '#E0475E', // ember red
   '#E0C22E' // gold
 ]
@@ -39,11 +40,13 @@ export function createInitialWizardState(): WizardState {
     port: 25565,
     minRamMb: 2048,
     maxRamMb: 4096,
-    toggles: { ...defaultToggles }
+    toggles: { ...defaultToggles },
+    installLocation: null
   }
 }
 
 export function toCreateInstanceConfig(state: WizardState): CreateInstanceConfig {
-  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles } = state
-  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles }
+  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation } =
+    state
+  return { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation }
 }

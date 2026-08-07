@@ -1,7 +1,8 @@
-import { ipcMain, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import type { CreateInstanceConfig, InstanceSummary } from '../../shared/types'
 import { instanceManager } from '../services/instanceManager'
 import { listVersions } from '../services/jarAcquisition'
+import { instancesRoot } from '../services/paths'
 import { listInstanceMetadata, loadInstanceMetadata, saveInstanceMetadata } from '../store/instancesStore'
 
 function toSummary(metadata: Awaited<ReturnType<typeof listInstanceMetadata>>[number]): InstanceSummary {
@@ -50,5 +51,16 @@ export function registerServerIpcHandlers(mainWindow: BrowserWindow): void {
     metadata.toggles = toggles
     await saveInstanceMetadata(metadata)
     return metadata
+  })
+
+  ipcMain.handle('servers:getDefaultInstancesRoot', () => instancesRoot())
+
+  ipcMain.handle('servers:pickInstallLocation', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose where to create the server',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
   })
 }
