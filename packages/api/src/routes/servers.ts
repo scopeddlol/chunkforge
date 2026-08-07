@@ -4,6 +4,7 @@ import { join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import {
   instanceManager,
+  autoProvisionInstancePortalHostname,
   listInstanceMetadata,
   listVersions,
   loadInstanceMetadata,
@@ -81,7 +82,8 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: requireRole('member') },
     async (request, reply) => {
       try {
-        return await instanceManager.createInstance(request.body)
+        const created = await instanceManager.createInstance(request.body)
+        return await autoProvisionInstancePortalHostname(created.id)
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

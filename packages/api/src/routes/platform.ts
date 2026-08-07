@@ -4,6 +4,7 @@ import {
   connectDesktopToPortal,
   collectDashboardStats,
   createDesktopConnectorPin,
+  autoProvisionInstancePortalHostname,
   createNodePairingCode,
   detectInstalledJava,
   getPortalStatus,
@@ -89,6 +90,20 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   )
 
   app.get('/api/portal', { preHandler: requireRole('viewer') }, async () => getPortalStatus())
+
+  app.post<{ Params: { id: string }; Body: { force?: boolean } }>(
+    '/api/portal/domains/provision/:id',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      try {
+        return await autoProvisionInstancePortalHostname(request.params.id, {
+          force: Boolean(request.body?.force)
+        })
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
 
   app.post('/api/portal/pin', { preHandler: requireRole('member') }, async () => {
     const result = await createDesktopConnectorPin()
