@@ -1,4 +1,4 @@
-import { LOCAL_NODE_ID, type Node, type Project } from './models'
+import { LOCAL_NODE_ID, type Node, type PortalTunnelPort, type Project } from './models'
 
 // The platform models live in their own module but are part of the same public
 // surface, so callers keep importing everything from one place.
@@ -103,6 +103,7 @@ export interface InstanceMetadata extends InstanceSummary {
   eulaAccepted: boolean
   path: string
   toggles: InstanceToggles
+  exposedPorts?: PortalTunnelPort[]
 }
 
 export interface InstanceToggles {
@@ -145,6 +146,7 @@ export interface CreateInstanceConfig {
   initialPlugins?: QueuedPlugin[]
   /** Modpack to install over the fresh server, replacing manual mod picking. */
   modpack?: SelectedModpack | null
+  exposedPorts?: PortalTunnelPort[]
 }
 
 export interface QueuedPlugin {
@@ -376,6 +378,18 @@ export interface FileHubSettings {
   uploadBackupsAutomatically: boolean
 }
 
+export interface PortalSettings {
+  enabled: boolean
+  publicBaseUrl: string
+  relayBaseUrl: string
+  defaultDomainSuffix: string
+  trustProxy: boolean
+  autoProvisionSubdomains: boolean
+  desktopConnectorPin: string
+  connectionStatus: 'disconnected' | 'connecting' | 'connected'
+  connectedAt?: string
+}
+
 export interface AppSettings {
   themePreference: ThemePreference
   curseForgeApiKey: string
@@ -387,6 +401,7 @@ export interface AppSettings {
   confirmBeforeStop: boolean
   consoleScrollbackLines: number
   fileHub: FileHubSettings
+  portal: PortalSettings
   /** @deprecated Migrated into `projects`; retained so older builds still read. */
   serverGroups: ServerGroup[]
   projects: Project[]
@@ -407,8 +422,18 @@ export const defaultAppSettings: AppSettings = {
   consoleScrollbackLines: 2000,
   serverGroups: [],
   projects: [],
-  nodes: [{ id: LOCAL_NODE_ID, name: 'This machine', kind: 'local' }],
+  nodes: [{ id: LOCAL_NODE_ID, name: 'This machine', kind: 'local', status: 'online' }],
   dashboardView: 'grid',
+  portal: {
+    enabled: false,
+    publicBaseUrl: '',
+    relayBaseUrl: '',
+    defaultDomainSuffix: '',
+    trustProxy: true,
+    autoProvisionSubdomains: true,
+    desktopConnectorPin: '',
+    connectionStatus: 'disconnected'
+  },
   fileHub: {
     baseUrl: '',
     username: '',

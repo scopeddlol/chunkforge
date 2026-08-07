@@ -7,11 +7,14 @@ import { NavRail, type NavKey } from './components/NavRail'
 import { DashboardPage } from './pages/Dashboard/DashboardPage'
 import { PluginBrowserPage } from './pages/PluginBrowser/PluginBrowserPage'
 import { ModpackPage } from './pages/PluginBrowser/ModpackPage'
+import { NodesPage } from './pages/Nodes/NodesPage'
 import { SettingsPage } from './pages/Settings/SettingsPage'
 import { SetupWizard } from './pages/SetupWizard/SetupWizard'
 import { InstancePage } from './pages/Instance/InstancePage'
 import { useInstancesStore } from './state/instancesStore'
 import { api } from './api'
+import { AuthGate } from './pages/Auth/AuthGate'
+import { native } from './native'
 
 const useStyles = makeStyles({
   shell: {
@@ -37,8 +40,9 @@ function useResolvedTheme(): ChunkforgeTheme {
   const [preference, setPreference] = useState<ThemePreference>('system')
 
   useEffect(() => {
-    window.native.theme.getSystemTheme().then(setSystemTheme)
-    return window.native.theme.onSystemThemeChanged(setSystemTheme)
+    const host = native()
+    host.theme.getSystemTheme().then(setSystemTheme)
+    return host.theme.onSystemThemeChanged(setSystemTheme)
   }, [])
 
   const loadPreference = useCallback(() => {
@@ -100,36 +104,41 @@ export function App(): JSX.Element {
 
   return (
     <FluentProvider theme={resolvedTheme.theme} className={styles.shell}>
-      <TitleBar />
-      <div className={styles.body}>
-        <NavRail active={activeNav} onSelect={handleSelectNav} />
+      <AuthGate>
+        <div className={styles.shell}>
+          <TitleBar />
+          <div className={styles.body}>
+            <NavRail active={activeNav} onSelect={handleSelectNav} />
 
-        {overlay?.kind === 'wizard' && (
-          <SetupWizard onClose={() => setOverlay(null)} onCreated={handleInstanceCreated} />
-        )}
-        {overlay?.kind === 'instance' && (
-          <InstancePage
-            instanceId={overlay.instanceId}
-            onBack={() => setOverlay(null)}
-            onBrowsePlugins={handleBrowsePlugins}
-          />
-        )}
+            {overlay?.kind === 'wizard' && (
+              <SetupWizard onClose={() => setOverlay(null)} onCreated={handleInstanceCreated} />
+            )}
+            {overlay?.kind === 'instance' && (
+              <InstancePage
+                instanceId={overlay.instanceId}
+                onBack={() => setOverlay(null)}
+                onBrowsePlugins={handleBrowsePlugins}
+              />
+            )}
 
-        {!overlay && activeNav === 'dashboard' && (
-          <DashboardPage
-            onOpenWizard={() => setOverlay({ kind: 'wizard' })}
-            onOpenInstance={(id) => setOverlay({ kind: 'instance', instanceId: id })}
-          />
-        )}
-        {!overlay && activeNav === 'plugins' && (
-          <PluginBrowserPage mode="plugins" scopedInstanceId={pluginScopeId} />
-        )}
-        {!overlay && activeNav === 'mods' && (
-          <PluginBrowserPage mode="mods" scopedInstanceId={pluginScopeId} />
-        )}
-        {!overlay && activeNav === 'modpacks' && <ModpackPage />}
-        {!overlay && activeNav === 'settings' && <SettingsPage />}
-      </div>
+            {!overlay && activeNav === 'dashboard' && (
+              <DashboardPage
+                onOpenWizard={() => setOverlay({ kind: 'wizard' })}
+                onOpenInstance={(id) => setOverlay({ kind: 'instance', instanceId: id })}
+              />
+            )}
+            {!overlay && activeNav === 'plugins' && (
+              <PluginBrowserPage mode="plugins" scopedInstanceId={pluginScopeId} />
+            )}
+            {!overlay && activeNav === 'mods' && (
+              <PluginBrowserPage mode="mods" scopedInstanceId={pluginScopeId} />
+            )}
+            {!overlay && activeNav === 'modpacks' && <ModpackPage />}
+            {!overlay && activeNav === 'nodes' && <NodesPage />}
+            {!overlay && activeNav === 'settings' && <SettingsPage />}
+          </div>
+        </div>
+      </AuthGate>
     </FluentProvider>
   )
 }

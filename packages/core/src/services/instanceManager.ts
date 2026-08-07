@@ -159,6 +159,26 @@ class InstanceManager extends EventEmitter {
       eulaAccepted: true,
       path: dir,
       toggles: config.toggles,
+      exposedPorts: config.exposedPorts ?? [
+        {
+          id: 'minecraft-default',
+          label: 'Minecraft',
+          protocol: 'tcp',
+          targetPort: config.port,
+          publicPort: config.port,
+          host: '',
+          enabled: true
+        },
+        {
+          id: 'minecraft-query',
+          label: 'Minecraft Query',
+          protocol: 'udp',
+          targetPort: config.port,
+          publicPort: config.port,
+          host: '',
+          enabled: false
+        }
+      ],
       javaMajor: majorJava,
       jvmFlags: requirements.jvmFlags,
       launchArgs: acquired.launchArgs ?? defaultLaunchArgs(config.serverType, requirements.jvmFlags),

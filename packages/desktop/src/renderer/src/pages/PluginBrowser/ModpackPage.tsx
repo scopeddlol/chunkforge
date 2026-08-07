@@ -33,6 +33,7 @@ import {
 import { SourceBadge } from '../../components/SourceBadge'
 import { useInstancesStore } from '../../state/instancesStore'
 import { api, onEvent } from '../../api'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '28px 36px 0' },
@@ -244,7 +245,7 @@ export function ModpackPage(): JSX.Element {
                       appearance="subtle"
                       size="small"
                       icon={<Open16Regular />}
-                      onClick={() => window.native.openExternal(pack.sourceUrl)}
+                      onClick={() => native().openExternal(pack.sourceUrl)}
                     />
                     <Button
                       appearance="primary"

@@ -1,0 +1,11 @@
+services:
+  chunkforge-node:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    environment:
+      CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL}
+      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN}
+      CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Chunkforge Node}
+      CHUNKFORGE_HEARTBEAT_MS: ${CHUNKFORGE_HEARTBEAT_MS:-15000}
+    restart: unless-stopped

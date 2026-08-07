@@ -1,0 +1,39 @@
+name: Docker Images
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-images:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Portal image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.portal
+          push: false
+          load: false
+          tags: chunkforge-portal:ci
+
+      - name: Build Node image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.node
+          push: false
+          load: false
+          tags: chunkforge-node:ci

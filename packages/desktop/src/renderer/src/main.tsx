@@ -25,7 +25,7 @@ initApiClient()
     root.render(
       <div style={{ padding: 32, fontFamily: 'Segoe UI, sans-serif', color: '#E8E6EA' }}>
         <h2>Chunkforge could not start</h2>
-        <p>The local Chunkforge service did not come up.</p>
+        <p>The Chunkforge service did not come up.</p>
         <pre style={{ whiteSpace: 'pre-wrap', opacity: 0.7 }}>{err.message}</pre>
       </div>
     )

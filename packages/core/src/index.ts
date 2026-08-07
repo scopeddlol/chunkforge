@@ -75,3 +75,17 @@ export {
 } from './store/instancesStore'
 export { getSettings, loadSettings, saveSettings } from './store/settingsStore'
 export { runMigrations, migrateInstance, CURRENT_SCHEMA_VERSION } from './store/migrations'
+export {
+  listNodes,
+  createNodePairingCode,
+  pairNodeByCode,
+  updateNodeHeartbeat
+} from './store/nodesStore'
+export {
+  createDesktopConnectorPin,
+  getPortalStatus,
+  connectDesktopToPortal,
+  redeemNodePortalPin,
+  updatePortalNodeHeartbeat,
+  registerPortalNodeTunnels
+} from './store/portalStore'

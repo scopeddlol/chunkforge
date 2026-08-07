@@ -3,6 +3,7 @@ import { makeStyles, tokens, Text, Button } from '@fluentui/react-components'
 import { Image20Regular, Delete20Regular } from '@fluentui/react-icons'
 import type { InstanceMetadata } from '@shared/types'
 import { ServerThumbnail } from '../../components/ServerThumbnail'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   panel: {
@@ -31,11 +32,11 @@ export function IconPanel({ metadata, onChanged }: IconPanelProps): JSX.Element 
   const [icon, setIcon] = useState<string | null>(null)
 
   useEffect(() => {
-    window.native.getIcon(metadata.id).then(setIcon)
+    native().getIcon(metadata.id).then(setIcon)
   }, [metadata.id])
 
   async function choose(): Promise<void> {
-    const next = await window.native.pickIcon(metadata.id)
+    const next = await native().pickIcon(metadata.id)
     if (next) {
       setIcon(next)
       onChanged()
@@ -43,7 +44,7 @@ export function IconPanel({ metadata, onChanged }: IconPanelProps): JSX.Element 
   }
 
   async function clear(): Promise<void> {
-    await window.native.clearIcon(metadata.id)
+    await native().clearIcon(metadata.id)
     setIcon(null)
     onChanged()
   }

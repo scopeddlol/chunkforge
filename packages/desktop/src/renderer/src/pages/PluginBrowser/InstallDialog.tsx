@@ -27,6 +27,7 @@ import {
   type PluginVersion
 } from '@shared/types'
 import { api } from '../../api'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   body: {
@@ -238,7 +239,7 @@ export function InstallDialog({
             {selectedVersion?.externalUrl && (
               <Button
                 icon={<Open16Regular />}
-                onClick={() => window.native.openExternal(selectedVersion.externalUrl as string)}
+                onClick={() => native().openExternal(selectedVersion.externalUrl as string)}
               >
                 Open download page
               </Button>

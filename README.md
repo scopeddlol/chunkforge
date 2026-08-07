@@ -4,9 +4,17 @@
 
 **Forge Your World.**
 
-A Windows 11 desktop app for creating, running, and managing Minecraft servers —
-with a unified plugin browser that searches Modrinth, Hangar, SpigotMC, and
-CurseForge in one place.
+A Minecraft hosting platform with a native Windows desktop app, a shared web
+panel, a self-hosted Chunkforge Portal, and Portal-connected Docker node
+workers.
+
+Chunkforge still works as a standalone desktop app, but it now also includes the
+first end-to-end **Portal + Node** slice:
+
+- **Desktop App** for local management on Windows
+- **Web Panel** served by the Portal for browser-based management
+- **Chunkforge Portal** as the shared control plane and relay entrypoint
+- **Node Workers** as Docker-ran remote hosts that pair into Portal with a pin
 
 </div>
 
@@ -106,7 +114,124 @@ Other scripts:
 npm run typecheck    # type-check every workspace
 npm run build        # compile without packaging
 npm run build:win    # produce a Windows installer in release/
+npm run build:portal # build the browser panel into packages/api/portal-dist
+npm run build:images # build the Portal and Node Docker images
 npm run api          # run the Core API standalone, without the desktop shell
+```
+
+## Nodes and Portal
+
+### Chunkforge Portal
+
+Chunkforge Portal is the self-hosted connector between the desktop app, the web
+panel, and remote nodes.
+
+Current Portal responsibilities:
+
+- serves the shared browser panel
+- stores the main app state and auth for self-hosted usage
+- generates and redeems connector pins
+- accepts node heartbeats and tunnel declarations
+- hosts the first TCP/UDP relay runtime for remote nodes
+
+Run it with Docker Compose:
+
+```bash
+docker compose -f docker-compose.portal.yml up
+```
+
+Or build the image directly:
+
+```bash
+docker build -f Dockerfile.portal -t chunkforge-portal:local .
+```
+
+Then open `http://localhost:8080`, create the first owner account, and configure
+Portal under **Settings → Chunkforge Portal**.
+
+For a local non-Docker panel build:
+
+```bash
+npm run build:portal --workspace @chunkforge/desktop
+npm run start --workspace @chunkforge/api
+```
+
+### Chunkforge Nodes
+
+Chunkforge Nodes are Docker-ran workers that connect back to a Portal with a
+pairing pin. Once paired, they appear in the app and begin reporting CPU,
+memory, and storage telemetry.
+
+Run a node worker with Docker Compose:
+
+```bash
+docker compose -f docker-compose.node.yml up
+```
+
+Or build the image directly:
+
+```bash
+docker build -f Dockerfile.node -t chunkforge-node:local .
+```
+
+Set these environment variables for node workers:
+
+- `CHUNKFORGE_PORTAL_URL`
+- `CHUNKFORGE_PAIRING_PIN`
+- `CHUNKFORGE_NODE_NAME` (optional)
+- `CHUNKFORGE_HEARTBEAT_MS` (optional)
+
+### Current connector flow
+
+1. Start the Portal panel and open **Settings → Chunkforge Portal**.
+2. Set the public Portal URL, then generate the **Desktop/Web connector pin**.
+3. Use **Add Node** in the app and enter the node pairing code.
+4. Start a node worker and point it at the same Portal.
+5. The node redeems the pin, registers its exposed tunnel metadata, and starts
+   sending heartbeats.
+
+The current transport slice supports the first Portal-to-node relay path with
+TCP and UDP tunnel metadata for Minecraft-style workloads, including multi-port
+announcements. It is still an early runtime, not the final production tunnel
+system.
+
+## Build outputs
+
+### Desktop app
+
+Build the desktop shell:
+
+```bash
+npm run build --workspace @chunkforge/desktop
+```
+
+Build the Windows installer:
+
+```bash
+npm run build:win
+```
+
+### Web panel
+
+Build the browser panel that the Portal serves:
+
+```bash
+npm run build:portal
+```
+
+### Docker images
+
+Build both Docker images:
+
+```bash
+npm run build:images
+```
+
+Build them individually:
+
+```bash
+docker build -f Dockerfile.portal -t chunkforge-portal:local .
+docker build -f Dockerfile.node -t chunkforge-node:local .
 ```
 
 To cut a release, push a tag — CI builds on Windows and publishes the installer
@@ -141,6 +266,7 @@ packages/
   core/       domain layer — server engine, Java, add-ons, files, backups, stats
   api/        Fastify HTTP + WebSocket over core, with auth and roles
   desktop/    Electron shell; embeds the API and renders the UI
+  node-worker/ Portal-connected node runtime for remote hosts
 ```
 
 The desktop app starts the Core API in-process on loopback with an

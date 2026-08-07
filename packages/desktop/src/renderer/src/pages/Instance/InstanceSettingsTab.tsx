@@ -24,6 +24,7 @@ import type { InstanceMetadata, InstanceToggles } from '@shared/types'
 import { IconPanel } from './IconPanel'
 import { StartupPanel } from './StartupPanel'
 import { api } from '../../api'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '18px', overflowY: 'auto', paddingBottom: '20px' },
@@ -221,7 +222,7 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
         <div className={styles.actions}>
           <Button
             icon={<FolderOpen20Regular />}
-            onClick={() => window.native.openFolder(metadata.id)}
+            onClick={() => native().openFolder(metadata.id)}
           >
             Open Folder
           </Button>

@@ -29,6 +29,7 @@ import {
 } from '@fluentui/react-icons'
 import type { FileEntry } from '@shared/types'
 import { api } from '../../api'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1, minHeight: 0 },
@@ -204,7 +205,7 @@ export function FilesTab({ instanceId }: FilesTabProps): JSX.Element {
           appearance="subtle"
           icon={<FolderOpen20Regular />}
           title="Open in Explorer"
-          onClick={() => window.native.openFolder(instanceId)}
+          onClick={() => native().openFolder(instanceId)}
         />
       </div>
 

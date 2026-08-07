@@ -4,6 +4,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import type { AppSettings } from '../types/index'
 import { defaultAppSettings } from '../types/index'
+import { LOCAL_NODE_ID } from '../types/models'
 import { chunkforgeRoot } from '../services/paths'
 
 const SETTINGS_FILENAME = 'settings.json'
@@ -21,9 +22,18 @@ function settingsPath(): string {
  * than an undefined the UI would crash on.
  */
 function withDefaults(saved: Partial<AppSettings>): AppSettings {
+  const mergedNodes = (saved.nodes ?? defaultAppSettings.nodes).map((node) => ({
+    ...node,
+    status: node.status ?? (node.id === LOCAL_NODE_ID ? 'online' : 'offline')
+  }))
+  const nodes = mergedNodes.some((node) => node.id === LOCAL_NODE_ID)
+    ? mergedNodes
+    : [...mergedNodes, defaultAppSettings.nodes[0]]
   return {
     ...defaultAppSettings,
     ...saved,
+    nodes,
+    portal: { ...defaultAppSettings.portal, ...(saved.portal ?? {}) },
     fileHub: { ...defaultAppSettings.fileHub, ...(saved.fileHub ?? {}) }
   }
 }
@@ -60,6 +70,7 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
   const next: AppSettings = {
     ...current,
     ...patch,
+    portal: { ...current.portal, ...(patch.portal ?? {}) },
     fileHub: { ...current.fileHub, ...(patch.fileHub ?? {}) }
   }
   await mkdir(chunkforgeRoot(), { recursive: true })

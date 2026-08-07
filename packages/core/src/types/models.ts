@@ -40,6 +40,9 @@ export interface Node {
   /** Last time the node was heard from, ISO-8601. */
   lastSeenAt?: string
   pairedAt?: string
+  pairingCode?: string
+  status: 'online' | 'offline' | 'pairing'
+  portal?: NodePortalBinding
 }
 
 export interface NodeStats {
@@ -51,6 +54,29 @@ export interface NodeStats {
   usedStorageBytes: number
   /** Round-trip time to the panel in milliseconds, used by the scheduler. */
   latencyMs?: number
+}
+
+export interface NodePortalBinding {
+  portalUrl: string
+  portalNodeToken?: string
+  connectionStatus: 'disconnected' | 'connecting' | 'connected'
+  lastHandshakeAt?: string
+}
+
+export type TunnelProtocol = 'tcp' | 'udp'
+
+export interface PortalTunnelPort {
+  id: string
+  label: string
+  protocol: TunnelProtocol
+  targetPort: number
+  publicPort: number
+  host: string
+  enabled: boolean
+}
+
+export interface NodeTunnelAnnouncement {
+  ports: PortalTunnelPort[]
 }
 
 /** The logical definition of a server, independent of where it runs. */

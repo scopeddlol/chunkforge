@@ -1,19 +1,33 @@
 import { randomBytes } from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import {
+  connectDesktopToPortal,
   collectDashboardStats,
+  createDesktopConnectorPin,
+  createNodePairingCode,
   detectInstalledJava,
+  getPortalStatus,
   getSettings,
   instanceManager,
   listInstanceMetadata,
+  listNodes,
   loadInstanceMetadata,
+  pairNodeByCode,
+  redeemNodePortalPin,
+  registerPortalNodeTunnels,
   saveInstanceMetadata,
   saveSettings,
   DEFAULT_PROJECT_ID,
+  updateNodeHeartbeat,
+  updatePortalNodeHeartbeat,
   type AppSettings,
+  type NodeStats,
+  type PortalTunnelPort,
   type ServerGroup
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
+import { broadcast } from '../events'
+import { portalRelay } from '../portalRelay'
 
 export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
   // ---- stats ----
@@ -50,7 +64,98 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
 
   app.get('/api/projects', { preHandler: requireRole('viewer') }, async () => getSettings().projects)
 
-  app.get('/api/nodes', { preHandler: requireRole('viewer') }, async () => getSettings().nodes)
+  app.get('/api/nodes', { preHandler: requireRole('viewer') }, async () => listNodes())
+
+  app.post<{ Body: { code: string } }>(
+    '/api/nodes/pair',
+    { preHandler: requireRole('member') },
+    async (request) => pairNodeByCode(request.body.code)
+  )
+
+  app.post<{ Body: { name?: string } }>(
+    '/api/nodes/pairing-code',
+    { preHandler: requireRole('admin') },
+    async (request) => createNodePairingCode(request.body?.name)
+  )
+
+  app.post<{ Params: { id: string }; Body: NodeStats }>(
+    '/api/nodes/:id/heartbeat',
+    { preHandler: requireRole('admin') },
+    async (request) => {
+      const node = await updateNodeHeartbeat(request.params.id, request.body)
+      broadcast({ type: 'node-updated', payload: node })
+      return node
+    }
+  )
+
+  app.get('/api/portal', { preHandler: requireRole('viewer') }, async () => getPortalStatus())
+
+  app.post('/api/portal/pin', { preHandler: requireRole('member') }, async () => {
+    const result = await createDesktopConnectorPin()
+    broadcast({ type: 'portal-status', payload: result.portal })
+    return result
+  })
+
+  app.post<{ Body: { pin: string } }>(
+    '/api/portal/connect',
+    { preHandler: requireRole('member') },
+    async (request) => {
+      const portal = await connectDesktopToPortal(request.body.pin)
+      broadcast({ type: 'portal-status', payload: portal })
+      return portal
+    }
+  )
+
+  app.post<{ Body: { pin: string; nodeName: string } }>(
+    '/api/portal/nodes/redeem',
+    async (request, reply) => {
+      try {
+        return await redeemNodePortalPin(request.body.pin, request.body.nodeName)
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  app.post<{ Body: { nodeToken: string; stats: NodeStats } }>(
+    '/api/portal/nodes/heartbeat',
+    async (request, reply) => {
+      try {
+        const node = await updatePortalNodeHeartbeat(request.body.nodeToken, request.body.stats)
+        broadcast({ type: 'node-updated', payload: node })
+        return node
+      } catch (err) {
+        return reply.code(401).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  app.post<{ Body: { nodeToken: string; ports: PortalTunnelPort[] } }>(
+    '/api/portal/nodes/tunnels',
+    async (request, reply) => {
+      try {
+        const node = await registerPortalNodeTunnels(request.body.nodeToken, request.body.ports)
+        await portalRelay.registerNodeTunnels(node.id, request.body.ports)
+        broadcast({ type: 'node-updated', payload: node })
+        return node
+      } catch (err) {
+        return reply.code(401).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  app.get('/api/portal/nodes/channel', { websocket: true }, (connection, request) => {
+    const socket = ('socket' in connection ? connection.socket : connection) as {
+      send: (data: string) => void
+      close: (code?: number, reason?: string) => void
+      on: (event: string, listener: (...args: any[]) => void) => void
+    }
+    if (!request.nodeId) {
+      socket.close(1008, 'Node token required')
+      return
+    }
+    portalRelay.registerNodeSocket(request.nodeId, socket)
+  })
 
   // ---- groups ----
 

@@ -10,8 +10,19 @@ const dataRoot = process.env.CHUNKFORGE_DATA ?? join(homedir(), 'Chunkforge')
 const port = Number(process.env.PORT ?? 8080)
 // Containers must bind all interfaces to be reachable from outside.
 const host = process.env.HOST ?? '0.0.0.0'
+const allowedOrigins = (process.env.CHUNKFORGE_ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
 
-const running = await startCoreApi({ dataRoot, port, host, logger: true })
+const running = await startCoreApi({
+  dataRoot,
+  port,
+  host,
+  logger: true,
+  allowedOrigins,
+  servePortal: true
+})
 console.log(`Chunkforge Core API listening on ${running.url}`)
 console.log(`Data root: ${dataRoot}`)
 

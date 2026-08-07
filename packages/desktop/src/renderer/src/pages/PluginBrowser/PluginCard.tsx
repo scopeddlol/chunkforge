@@ -3,6 +3,7 @@ import { makeStyles, tokens, Text, Button } from '@fluentui/react-components'
 import { ArrowDownload20Regular, Open16Regular, AppsAddIn24Regular } from '@fluentui/react-icons'
 import type { PluginSearchResult } from '@shared/types'
 import { SourceBadge } from '../../components/SourceBadge'
+import { native } from '../../native'
 
 const useStyles = makeStyles({
   card: {
@@ -149,7 +150,7 @@ export function PluginCard({ plugin, onInstall, canInstall }: PluginCardProps): 
             size="small"
             icon={<Open16Regular />}
             title="Open source page"
-            onClick={() => window.native.openExternal(plugin.sourceUrl)}
+            onClick={() => native().openExternal(plugin.sourceUrl)}
           />
           <Button
             appearance="primary"

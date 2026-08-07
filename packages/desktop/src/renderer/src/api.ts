@@ -22,8 +22,9 @@ export async function initApiClient(): Promise<ChunkforgeClient> {
   if (client) return client
   // window.native only exists under Electron; a browser build talks to its
   // origin and authenticates with a session cookie instead of a token.
-  const baseUrl = (await window.native?.apiUrl?.()) ?? window.location.origin
-  const token = (await window.native?.apiToken?.()) ?? undefined
+  const nativeApi = window.native
+  const baseUrl = nativeApi?.apiUrl ? ((await nativeApi.apiUrl()) ?? window.location.origin) : window.location.origin
+  const token = nativeApi?.apiToken ? ((await nativeApi.apiToken()) ?? undefined) : undefined
   client = new ChunkforgeClient({ baseUrl, token })
   resolveReady()
   return client
