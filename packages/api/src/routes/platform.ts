@@ -21,6 +21,7 @@ import { requireRole } from '../auth/plugin'
 import { broadcast } from '../events'
 import {
   callNodeAgent,
+  checkDomainLabel,
   claimPortalNode,
   connectToPortal,
   disconnectFromPortal,
@@ -153,6 +154,20 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
 
   app.get('/api/portal/domains', { preHandler: requireRole('viewer') }, async () =>
     listPortalDomains()
+  )
+
+  // Asked as the user types a subdomain, so a name that is already spoken for
+  // is called out before a server is created rather than silently suffixed.
+  app.get<{ Querystring: { label?: string; instanceId?: string } }>(
+    '/api/portal/domains/check',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      try {
+        return await checkDomainLabel(request.query.label ?? '', request.query.instanceId)
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
   )
 
   /**

@@ -1,4 +1,5 @@
 import type { DnsRecord } from './dns'
+import type { LabelAvailability } from './domains'
 import type {
   ClientKind,
   PortalConfig,
@@ -149,6 +150,12 @@ export class PortalClient {
       }),
     renameDomain: (hostname: string, label: string) =>
       this.post<AllocatedDomain>(`/api/client/domains/${encodeURIComponent(hostname)}/rename`, { label }),
+
+    checkDomain: (label: string, instanceId?: string) => {
+      const query = new URLSearchParams({ label })
+      if (instanceId) query.set('instanceId', instanceId)
+      return this.request<LabelAvailability>(`/api/client/domains/check?${query.toString()}`)
+    },
 
     /**
      * Runs a Chunkforge Core API call on a remote node. The path is exactly the
