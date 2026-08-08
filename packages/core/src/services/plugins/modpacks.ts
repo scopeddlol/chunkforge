@@ -1,21 +1,10 @@
 import type { PluginSearchResult, PluginVersion } from '../../types/index'
 import { fetchJson } from './provider'
 import { getSettings } from '../../store/settingsStore'
+import { searchPlugins } from './pluginRegistry'
 
 const MODRINTH = 'https://api.modrinth.com/v2'
 const CURSEFORGE = 'https://api.curseforge.com/v1'
-const MINECRAFT_GAME_ID = 432
-const MODPACKS_CLASS_ID = 4471
-
-interface ModrinthHit {
-  slug: string
-  title: string
-  description: string
-  icon_url: string | null
-  downloads: number
-  author: string
-  categories: string[]
-}
 
 interface ModrinthVersion {
   id: string
@@ -24,16 +13,6 @@ interface ModrinthVersion {
   game_versions: string[]
   loaders: string[]
   files: Array<{ filename: string; url: string; primary: boolean; hashes: { sha1?: string } }>
-}
-
-interface CurseForgeMod {
-  id: number
-  name: string
-  summary: string
-  downloadCount: number
-  logo?: { thumbnailUrl?: string }
-  authors?: Array<{ name: string }>
-  links?: { websiteUrl?: string }
 }
 
 interface CurseForgeFile {
@@ -45,78 +24,35 @@ interface CurseForgeFile {
 }
 
 /** Modpacks are a separate project type, so they get their own search path. */
-export async function searchModpacks(query: string, limit: number): Promise<PluginSearchResult[]> {
-  const results: PluginSearchResult[] = []
-
-  // Server-side facet keeps client-only packs out of a server manager.
-  const facets = JSON.stringify([
-    ['project_type:modpack'],
-    ['server_side:required', 'server_side:optional']
-  ])
-  const params = new URLSearchParams({
+/**
+ * Modpacks, through the same path as everything else.
+ *
+ * This used to carry its own copies of the Modrinth and CurseForge calls,
+ * which meant modpacks quietly missed every improvement the plugin browser
+ * got: no pagination, no normalised platforms or game versions, no
+ * compatibility verdict, and per-source failures swallowed rather than
+ * reported. The providers now understand modpacks as a content kind, so the
+ * registry can answer this and there is one search to maintain instead of two.
+ */
+export async function searchModpacks(
+  query: string,
+  limit: number,
+  options?: { gameVersion?: string; offset?: number }
+): Promise<PluginSearchResult[]> {
+  const response = await searchPlugins({
     query,
-    limit: String(limit),
-    index: query ? 'relevance' : 'downloads',
-    facets
+    // Hangar hosts plugins only and Spiget is Bukkit-only, so neither has
+    // modpacks to offer; asking them would just collect two errors per search.
+    sources: ['modrinth', 'curseforge'],
+    kind: 'modpack',
+    gameVersion: options?.gameVersion,
+    offset: options?.offset,
+    limit,
+    // Packs from different sources are genuinely different builds, so folding
+    // them together by name would hide real choices rather than tidy them.
+    mergeSources: false
   })
-
-  try {
-    const data = await fetchJson<{ hits: ModrinthHit[] }>(`${MODRINTH}/search?${params}`)
-    results.push(
-      ...data.hits.map(
-        (hit): PluginSearchResult => ({
-          source: 'modrinth',
-          id: hit.slug,
-          name: hit.title,
-          summary: hit.description,
-          iconUrl: hit.icon_url,
-          downloads: hit.downloads,
-          author: hit.author,
-          sourceUrl: `https://modrinth.com/modpack/${hit.slug}`,
-          categories: hit.categories ?? []
-        })
-      )
-    )
-  } catch {
-    // Modrinth being down shouldn't hide CurseForge results.
-  }
-
-  const apiKey = getSettings().curseForgeApiKey?.trim()
-  if (apiKey) {
-    try {
-      const cfParams = new URLSearchParams({
-        gameId: String(MINECRAFT_GAME_ID),
-        classId: String(MODPACKS_CLASS_ID),
-        pageSize: String(limit),
-        sortField: query ? '2' : '6',
-        sortOrder: 'desc'
-      })
-      if (query) cfParams.set('searchFilter', query)
-
-      const data = await fetchJson<{ data: CurseForgeMod[] }>(`${CURSEFORGE}/mods/search?${cfParams}`, {
-        headers: { 'x-api-key': apiKey }
-      })
-      results.push(
-        ...data.data.map(
-          (mod): PluginSearchResult => ({
-            source: 'curseforge',
-            id: String(mod.id),
-            name: mod.name,
-            summary: mod.summary,
-            iconUrl: mod.logo?.thumbnailUrl ?? null,
-            downloads: mod.downloadCount ?? 0,
-            author: mod.authors?.[0]?.name ?? 'Unknown',
-            sourceUrl: mod.links?.websiteUrl ?? 'https://www.curseforge.com/minecraft/modpacks',
-            categories: []
-          })
-        )
-      )
-    } catch {
-      // Same reasoning as above.
-    }
-  }
-
-  return results.sort((a, b) => b.downloads - a.downloads)
+  return response.results
 }
 
 export async function listModpackVersions(
