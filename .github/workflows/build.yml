@@ -25,16 +25,27 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Ensure app-builder binary
+      - name: Ensure electron-builder binaries
         shell: pwsh
         run: |
-          $path = "node_modules\app-builder-bin\win\x64\app-builder.exe"
-          if (-not (Test-Path $path)) {
+          # electron-builder shells out to two vendored Windows binaries. Both
+          # can go missing after an `npm install --no-save` re-resolves the
+          # tree, and hoisting moves as packages are added to the workspace —
+          # so each is checked, repaired, and then re-checked in that order,
+          # because repairing the first is itself a re-resolve that can
+          # disturb the second.
+          $appBuilder = "node_modules\app-builder-bin\win\x64\app-builder.exe"
+          $sevenZip = "node_modules\7zip-bin\win\x64\7za.exe"
+
+          if (-not (Test-Path $appBuilder)) {
             npm install --no-save app-builder-bin@5.0.0-alpha.13
           }
-          if (-not (Test-Path $path)) {
-            throw "Missing app-builder binary at $path"
+          if (-not (Test-Path $sevenZip)) {
+            npm install --no-save 7zip-bin@5.2.0
           }
+
+          if (-not (Test-Path $appBuilder)) { throw "Missing app-builder binary at $appBuilder" }
+          if (-not (Test-Path $sevenZip)) { throw "Missing 7-Zip binary at $sevenZip" }
 
       - name: Build desktop installer
         run: npm run build:win
