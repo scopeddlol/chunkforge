@@ -15,7 +15,10 @@ export async function startNodeFromEnvironment(): Promise<RunningNodeAgent> {
   const pairingPin = process.env.CHUNKFORGE_PAIRING_PIN?.trim()
 
   if (!portalUrl) throw new Error('CHUNKFORGE_PORTAL_URL is required.')
-  if (!pairingPin) throw new Error('CHUNKFORGE_PAIRING_PIN is required.')
+  // No pin check here on purpose: a node that has already paired keeps a token
+  // and never needs one again, so demanding a pin every boot would force
+  // operators to keep a spent, expired value in their compose file forever.
+  // startNodeAgent raises a precise error if it turns out a pin was needed.
 
   return startNodeAgent({
     portalUrl,

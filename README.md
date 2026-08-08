@@ -154,6 +154,11 @@ CHUNKFORGE_PAIRING_PIN=<node pin from Portal → Nodes> \
 docker compose -f docker-compose.node.yml up -d
 ```
 
+The pin is a one-time introduction. The node stores the token Portal issues
+back in its data volume, so later restarts reconnect on their own and the pin
+can be dropped from the environment — pins are single-use and expire, so a
+node that re-redeemed on every boot would need a fresh one every restart.
+
 ```bash
 # 3. If you want the browser panel rather than the desktop app
 docker compose -f docker-compose.web.yml up -d

@@ -52,5 +52,6 @@ If that homelab box should also *host* servers rather than only manage them, use
 3. Publish a wildcard `CNAME` for the zone pointing at the Portal's domain.
 4. Generate a **control plane pin**, redeem it in Desktop or Web.
 5. Generate a **node pin** per machine, put it in that node's
-   `CHUNKFORGE_PAIRING_PIN`.
+   `CHUNKFORGE_PAIRING_PIN`. That pin is only needed for the first start —
+   the node keeps the token Portal issues and reconnects by itself after that.
 6. Create a server, pick a node. Its subdomain is allocated automatically.

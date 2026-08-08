@@ -6,10 +6,16 @@ import { startCoreApi, type RunningCoreApi } from '@chunkforge/api'
 import { PortalClient } from '@chunkforge/portal/client'
 import type { AgentRequestFrame, PortalFrame, TrafficFrame } from '@chunkforge/portal/protocol'
 import type { PortalNodeStats, PortalTunnel } from '@chunkforge/portal/types'
+import { loadNodeIdentity, saveNodeIdentity, type NodeIdentity } from './identity'
 
 export interface NodeAgentOptions {
   portalUrl: string
-  pairingPin: string
+  /**
+   * Only needed the first time. Once a node has paired, its stored token is
+   * used and the pin is ignored, so leaving it set in a compose file or a
+   * service config does no harm.
+   */
+  pairingPin?: string
   nodeName: string
   /** Where instances, runtimes, and settings live on this node. */
   dataRoot: string
@@ -50,11 +56,10 @@ export async function startNodeAgent(options: NodeAgentOptions): Promise<Running
   })
   console.log(`Node Core API listening on ${coreApi.url}`)
 
-  const redeemed = await portal.node.redeem(options.pairingPin, options.nodeName)
-  portal.setToken(redeemed.nodeToken)
-  console.log(`Paired with Portal as node ${redeemed.nodeId}`)
+  const identity = await establishIdentity(portal, options)
+  portal.setToken(identity.nodeToken)
 
-  const link = new PortalLink(portal, redeemed.nodeToken, coreApi)
+  const link = new PortalLink(portal, identity.nodeToken, coreApi)
   link.connect()
 
   // Announce nothing up front. Routes are created by Portal when Chunkforge
@@ -76,13 +81,64 @@ export async function startNodeAgent(options: NodeAgentOptions): Promise<Running
   }, heartbeatIntervalMs)
 
   return {
-    nodeId: redeemed.nodeId,
+    nodeId: identity.nodeId,
     close: async () => {
       clearInterval(timer)
       link.close()
       await coreApi.close()
     }
   }
+}
+
+
+/**
+ * Gets this node a usable Portal credential.
+ *
+ * Reuses the stored one when there is one, and only falls back to redeeming a
+ * pin when there is not — or when the stored token has stopped working, which
+ * is what happens if an operator detaches the node from Portal's own UI. The
+ * stored token is verified with a real authenticated call rather than trusted
+ * on sight, so a revoked credential is discovered here, at startup, instead of
+ * showing up later as a node that appears paired but silently does nothing.
+ */
+async function establishIdentity(
+  portal: PortalClient,
+  options: NodeAgentOptions
+): Promise<NodeIdentity> {
+  const stored = await loadNodeIdentity(options.dataRoot, options.portalUrl)
+  if (stored) {
+    portal.setToken(stored.nodeToken)
+    const usable = await portal.node
+      .heartbeat({ ...(await sampleStats(options.dataRoot)), latencyMs: 0 }, false)
+      .then(() => true)
+      .catch(() => false)
+    if (usable) {
+      console.log(`Reusing stored pairing as node ${stored.nodeId}`)
+      return stored
+    }
+    console.warn('Stored Portal pairing was rejected; re-pairing with the configured pin.')
+    portal.setToken(undefined)
+  }
+
+  const pin = options.pairingPin?.trim()
+  if (!pin) {
+    throw new Error(
+      stored
+        ? 'This node’s pairing was rejected by Portal and no pairing pin is configured to re-pair with.'
+        : 'This node has never paired with a Portal, and no pairing pin is configured.'
+    )
+  }
+
+  const redeemed = await portal.node.redeem(pin, options.nodeName)
+  const identity: NodeIdentity = {
+    nodeId: redeemed.nodeId,
+    nodeToken: redeemed.nodeToken,
+    portalUrl: options.portalUrl,
+    pairedAt: new Date().toISOString()
+  }
+  await saveNodeIdentity(options.dataRoot, identity)
+  console.log(`Paired with Portal as node ${identity.nodeId}`)
+  return identity
 }
 
 /**
