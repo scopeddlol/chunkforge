@@ -25,6 +25,7 @@ import { attachCoreEvents, registerEventSocket } from './events'
 import { registerCors } from './cors'
 import { registerNodeForwarding } from './nodeForwarding'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
+import { refreshPortalStatus } from './portalLink'
 
 export interface CoreApiOptions {
   /** Where instances, runtimes, and settings live. */
@@ -136,7 +137,14 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   // Resumes the live event link on every boot, not only right after pairing —
   // otherwise a panel restart would leave every remote server looking frozen
   // until someone reopened the Portal settings page to reconnect it by hand.
-  if (isPortalLinked()) startPortalEventRelay()
+  if (isPortalLinked()) {
+    startPortalEventRelay()
+    // The stored status describes the last session, not this one. Re-checking
+    // in the background refreshes the mirrored zone and corrects a status left
+    // reading "connected" by a process that was killed while it was. Detached
+    // from startup on purpose: an unreachable Portal must delay nothing.
+    void refreshPortalStatus().catch(() => undefined)
+  }
 
   app.get('/api/health', async () => ({ ok: true, version: '0.5.5' }))
 
