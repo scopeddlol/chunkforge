@@ -10,6 +10,7 @@ import {
   type PortalFrame,
   type TrafficFrame
 } from './protocol'
+import { nodeClaimants } from './nodeClaims'
 import { portalStore } from './store'
 import type { PortalTunnel, TunnelProtocol } from './types'
 
@@ -358,17 +359,22 @@ class PortalRelay {
   }
 
   /**
-   * Hands a node's pushed event to whichever control plane currently has that
-   * node claimed. An unclaimed or unwatched node's events are simply dropped —
+   * Hands a node's pushed event to every control plane that has adopted that
+   * node. An unclaimed or unwatched node's events are simply dropped —
    * there is nobody to show them to, and a node cannot know on its own whether
    * anyone is watching, so it pushes unconditionally and Portal is where that
    * gets decided.
    */
   private forwardEventPush(nodeId: string, frame: EventPushFrame): void {
     const node = portalStore.findNode(nodeId)
-    const clientId = node?.claimedByClientId
-    if (!clientId) return
-    this.clientEventSockets.get(clientId)?.send(JSON.stringify(frame))
+    if (!node) return
+    const message = JSON.stringify(frame)
+    // Every control plane sharing the node hears it. Each one filters to the
+    // servers it knows about on the way in, so a co-owner's events are ignored
+    // rather than shown.
+    for (const clientId of nodeClaimants(node)) {
+      this.clientEventSockets.get(clientId)?.send(message)
+    }
   }
 
   private handleTrafficFrame(nodeId: string, frame: TrafficFrame): void {

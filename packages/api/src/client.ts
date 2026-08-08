@@ -7,6 +7,7 @@ import type {
   InstalledPlugin,
   InstanceMetadata,
   InstanceSummary,
+  LogLineEvent,
   Node,
   NodeStats,
   PortalDomainBinding,
@@ -127,6 +128,10 @@ export class ChunkforgeClient {
     create: (config: CreateInstanceConfig) => this.post<InstanceMetadata>('/api/servers', config),
     start: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/start`),
     stop: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/stop`),
+    logs: (id: string, limit?: number) =>
+      this.get<LogLineEvent[]>(
+        `/api/servers/${id}/logs${limit ? `?limit=${limit}` : ''}`
+      ),
     command: (id: string, command: string) => this.post<{ ok: true }>(`/api/servers/${id}/command`, { command }),
     update: (id: string, patch: Partial<InstanceMetadata>) =>
       this.patch<InstanceMetadata>(`/api/servers/${id}`, patch),
@@ -250,8 +255,8 @@ export class ChunkforgeClient {
       this.post<PortalSettings>('/api/portal/connect', { portalUrl, pin, name, kind }),
     disconnect: () => this.post<PortalSettings>('/api/portal/disconnect'),
     domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
-    provisionDomain: (instanceId: string, force = false) =>
-      this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}`, { force }),
+    provisionDomain: (instanceId: string, force = false, label?: string) =>
+      this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}`, { force, label }),
     releaseDomain: (instanceId: string) => this.del<{ ok: true }>(`/api/portal/domains/${instanceId}`),
     renameDomain: (instanceId: string, label: string) =>
       this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}/rename`, { label })

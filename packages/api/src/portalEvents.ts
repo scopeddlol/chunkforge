@@ -1,3 +1,4 @@
+import WebSocket from 'ws'
 import { getPortalStatus, isPortalLinked } from '@chunkforge/core'
 import { PortalClient } from '@chunkforge/portal/client'
 import type { EventPushFrame } from '@chunkforge/portal/protocol'
@@ -17,6 +18,13 @@ import type { ServerEvent } from './eventTypes'
  * `onEvent('log', ...)`-style subscriber picks it up with no changes of its
  * own, because a remote event and a local one now look identical by the time
  * anything downstream of `broadcast()` sees them.
+ *
+ * The socket comes from `ws` rather than the global `WebSocket` on purpose.
+ * This module runs in every host that links to a Portal, and one of them is
+ * Electron's main process — Electron 32 ships Node 20, where the global does
+ * not exist at all. Reaching for it there threw a ReferenceError out of
+ * `startCoreApi()` before the desktop app had built its window, so the whole
+ * app failed to launch for anyone who had paired a Portal.
  */
 
 let socket: WebSocket | null = null
@@ -25,7 +33,15 @@ let retryDelayMs = 1000
 
 export function startPortalEventRelay(): void {
   closed = false
-  connect()
+  // Live remote events are an enhancement, never a prerequisite for booting.
+  // Whatever goes wrong reaching a Portal, the control plane still has to come
+  // up and manage its local servers, so this can report a failure but must
+  // never propagate one to its caller.
+  try {
+    connect()
+  } catch (err) {
+    console.error(`Portal event relay could not start: ${(err as Error).message}`)
+  }
 }
 
 export function stopPortalEventRelay(): void {
@@ -43,13 +59,13 @@ function connect(): void {
   const ws = new WebSocket(client.client.channelUrl(portal.clientToken))
   socket = ws
 
-  ws.onopen = () => {
+  ws.on('open', () => {
     retryDelayMs = 1000
-  }
-  ws.onmessage = (message) => {
+  })
+  ws.on('message', (data: unknown) => {
     let frame: EventPushFrame
     try {
-      frame = JSON.parse(String(message.data)) as EventPushFrame
+      frame = JSON.parse(String(data)) as EventPushFrame
     } catch {
       return
     }
@@ -57,14 +73,16 @@ function connect(): void {
     // The node emitted this from its own attachCoreEvents(), so it is already
     // a well-formed ServerEvent — Portal only relayed it, never inspected it.
     broadcast(frame.event as ServerEvent)
-  }
-  ws.onclose = () => {
+  })
+  ws.on('close', () => {
     socket = null
     if (closed) return
-    setTimeout(connect, retryDelayMs)
+    setTimeout(connect, retryDelayMs).unref?.()
     // A Portal that is restarting or unreachable should not be hit once a
     // second by every linked control plane trying to reconnect at once.
     retryDelayMs = Math.min(retryDelayMs * 2, 30_000)
-  }
-  ws.onerror = () => ws.close()
+  })
+  // Never rethrown: an unreachable Portal is an ordinary condition, and an
+  // unhandled 'error' event on a ws socket is a process-level crash.
+  ws.on('error', () => ws.close())
 }

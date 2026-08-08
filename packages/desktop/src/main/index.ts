@@ -19,8 +19,25 @@ function reportFatalStartupError(error: unknown): void {
   app.exit(1)
 }
 
-process.on('uncaughtException', reportFatalStartupError)
-process.on('unhandledRejection', reportFatalStartupError)
+/**
+ * Only failures *before* the window exists are fatal.
+ *
+ * Once Chunkforge is on screen the same handler would be actively harmful:
+ * a dropped Portal socket or a rejected background fetch is an ordinary event
+ * in a long-running app, and tearing the whole process down over one would
+ * look, to the person using it, exactly like the crash this handler was added
+ * to explain. After startup they are logged and the app keeps running.
+ */
+let started = false
+
+process.on('uncaughtException', (error) => {
+  if (started) return console.error('Chunkforge error:', error)
+  reportFatalStartupError(error)
+})
+process.on('unhandledRejection', (reason) => {
+  if (started) return console.error('Chunkforge unhandled rejection:', reason)
+  reportFatalStartupError(reason)
+})
 
 // Lets tooling attach to the renderer during development for real diagnostics
 // (CDP screenshots, DOM inspection) instead of guessing at rendering issues.
@@ -95,6 +112,8 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
+
+  started = true
 }).catch(reportFatalStartupError)
 
 app.on('window-all-closed', () => {

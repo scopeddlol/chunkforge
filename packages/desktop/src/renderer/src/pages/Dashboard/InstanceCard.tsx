@@ -4,6 +4,8 @@ import { Play20Filled, Stop20Filled, Options20Regular } from '@fluentui/react-ic
 import type { InstanceSummary } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
 import { ServerThumbnail } from '../../components/ServerThumbnail'
+import { CopyableAddress } from '../../components/CopyableAddress'
+import { resolveServerAddress } from '../../components/serverAddress'
 import { statusColors } from '../../theme/chunkforgeTheme'
 
 const useStyles = makeStyles({
@@ -56,6 +58,15 @@ const useStyles = makeStyles({
   stat: { display: 'flex', flexDirection: 'column', gap: '1px' },
   statLabel: { color: tokens.colorNeutralForeground4, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.4px' },
   statValue: { color: tokens.colorNeutralForeground2 },
+  addressRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    paddingTop: '8px',
+    borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
+    minWidth: 0,
+    overflow: 'hidden'
+  },
   footer: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' },
   actions: { display: 'flex', gap: '4px', alignItems: 'center' }
 })
@@ -71,6 +82,7 @@ export function InstanceCard({ instance, onOpen, onStart, onStop }: InstanceCard
   const styles = useStyles()
   const isRunning = instance.status === 'running'
   const isBusy = instance.status === 'starting' || instance.status === 'stopping'
+  const address = resolveServerAddress(instance)
 
   return (
     <div className={styles.card} onClick={() => onOpen(instance.id)} role="button" tabIndex={0}
@@ -122,6 +134,17 @@ export function InstanceCard({ instance, onOpen, onStart, onStop }: InstanceCard
             {new Date(instance.createdAt).toLocaleDateString()}
           </Text>
         </div>
+      </div>
+
+      <div className={styles.addressRow}>
+        <Text className={styles.statLabel}>Address</Text>
+        {address.kind === 'none' ? (
+          <Text size={200} className={styles.statValue}>
+            No public address yet
+          </Text>
+        ) : (
+          <CopyableAddress address={address.value} />
+        )}
       </div>
 
       <div className={styles.footer}>

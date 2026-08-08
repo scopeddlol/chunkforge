@@ -175,13 +175,16 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     return { ...metadata, nodeId: remoteNodeId }
   }
 
-  app.post<{ Params: { id: string }; Body: { force?: boolean } }>(
+  app.post<{ Params: { id: string }; Body: { force?: boolean; label?: string } }>(
     '/api/portal/domains/:id',
     { preHandler: requireRole('member') },
     async (request, reply) => {
       try {
         const instance = await resolveInstanceForDomain(request.params.id)
-        const domain = await provisionInstanceDomain(instance, { force: Boolean(request.body?.force) })
+        const domain = await provisionInstanceDomain(instance, {
+          force: Boolean(request.body?.force),
+          label: request.body?.label
+        })
         if (!domain) {
           return reply
             .code(400)

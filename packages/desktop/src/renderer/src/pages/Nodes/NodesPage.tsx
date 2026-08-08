@@ -172,7 +172,12 @@ export function NodesPage(): JSX.Element {
                         yours
                       </Badge>
                     )}
-                    {node.claimedByOther && <Badge appearance="tint">claimed elsewhere</Badge>}
+                    {(node.claimantCount ?? 0) > 1 && (
+                      <Badge appearance="tint">
+                        shared with {(node.claimantCount ?? 1) - 1} other
+                        {(node.claimantCount ?? 1) - 1 === 1 ? '' : 's'}
+                      </Badge>
+                    )}
                     {node.claimed && !node.agentReady && (
                       <Badge appearance="tint" color="warning">
                         agent down
@@ -189,7 +194,7 @@ export function NodesPage(): JSX.Element {
                   <Button
                     size="small"
                     appearance={node.claimed ? 'subtle' : 'primary'}
-                    disabled={busyId === node.id || node.claimedByOther}
+                    disabled={busyId === node.id}
                     onClick={() => void toggleClaim(node)}
                   >
                     {busyId === node.id ? '…' : node.claimed ? 'Release' : 'Adopt'}

@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/node-worker",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Chunkforge Node — runs servers and reaches Chunkforge through a Portal, with no inbound ports",
   "private": true,
   "type": "module",

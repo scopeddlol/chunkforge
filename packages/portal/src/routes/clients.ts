@@ -4,6 +4,7 @@ import { hashToken, newToken, requireClient } from '../auth'
 import { allocateDomain, listDomainsForClient, releaseDomain, renameDomain } from '../domains'
 import { dnsRecordsFor, portalPublicHost, wildcardRecord } from '../dns'
 import { broadcastPortal } from '../events'
+import { hasClaimed, nodeClaimants, setClaimants } from '../nodeClaims'
 import { portalRelay } from '../relay'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
@@ -81,10 +82,11 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
     async (request, reply) => {
       const node = portalStore.findNode(request.params.id)
       if (!node) return reply.code(404).send({ error: 'Unknown node.' })
-      if (node.claimedByClientId && node.claimedByClientId !== request.portalClientId) {
-        return reply.code(409).send({ error: 'That node is already claimed by another control plane.' })
-      }
-      node.claimedByClientId = request.portalClientId
+      const clientId = request.portalClientId
+      if (!clientId) return reply.code(401).send({ error: 'Sign in required.' })
+      // Adopting a node another control plane already uses is allowed: they
+      // share the machine's capacity and each still only sees its own servers.
+      setClaimants(node, [...nodeClaimants(node), clientId])
       await portalStore.upsertNode(node)
       const view = toNodeView(node, request.portalClientId)
       broadcastPortal({ type: 'node-updated', payload: view })
@@ -98,10 +100,14 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
     async (request, reply) => {
       const node = portalStore.findNode(request.params.id)
       if (!node) return reply.code(404).send({ error: 'Unknown node.' })
-      if (node.claimedByClientId !== request.portalClientId) {
+      if (!hasClaimed(node, request.portalClientId)) {
         return reply.code(403).send({ error: 'That node is not claimed by you.' })
       }
-      delete node.claimedByClientId
+      // Only this control plane steps back; anyone else sharing the node keeps it.
+      setClaimants(
+        node,
+        nodeClaimants(node).filter((id) => id !== request.portalClientId)
+      )
       await portalStore.upsertNode(node)
       return toNodeView(node, request.portalClientId)
     }
@@ -118,7 +124,7 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
     async (request, reply) => {
       const node = portalStore.findNode(request.params.id)
       if (!node) return reply.code(404).send({ error: 'Unknown node.' })
-      if (node.claimedByClientId !== request.portalClientId) {
+      if (!hasClaimed(node, request.portalClientId)) {
         return reply.code(403).send({ error: 'Claim this node before managing it.' })
       }
 

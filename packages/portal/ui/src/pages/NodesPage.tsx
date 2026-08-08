@@ -122,7 +122,9 @@ export function NodesPage(): JSX.Element {
                     <Badge appearance="tint" color={node.agentReady ? 'brand' : 'subtle'}>
                       {node.agentReady ? 'manageable' : 'agent down'}
                     </Badge>
-                    {node.claimedByOther && <Badge appearance="tint">claimed elsewhere</Badge>}
+                    {node.claimantCount > 1 && (
+                      <Badge appearance="tint">{node.claimantCount} control planes</Badge>
+                    )}
                     <Text size={200} className={styles.muted}>
                       {node.lastSeenAt
                         ? `seen ${new Date(node.lastSeenAt).toLocaleTimeString()}`

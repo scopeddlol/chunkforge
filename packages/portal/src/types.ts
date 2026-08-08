@@ -38,10 +38,18 @@ export interface PortalNode {
   /** Ports the node has told Portal it can accept traffic on. */
   tunnels: PortalTunnel[]
   /**
-   * The control plane that has adopted this node. Until one does, the node is
+   * The control planes that have adopted this node. Until one does, the node is
    * reachable but unmanaged — Portal will proxy for it but nothing is driving
    * it.
+   *
+   * A list rather than a single owner: a node is a machine with capacity, and
+   * one household or team can easily have a desktop install and a web panel
+   * that both deploy to it. Each control plane still only ever sees and drives
+   * the servers it created, since that is tracked per control plane, so
+   * sharing a node does not mean sharing its servers.
    */
+  claimedByClientIds?: string[]
+  /** @deprecated Single-owner form, read once on load and migrated to the list. */
   claimedByClientId?: string
   /** Set once the node reports that its embedded Core API is up. */
   agentReady?: boolean
@@ -167,9 +175,15 @@ export interface PortalNodeView {
   stats?: PortalNodeStats
   tunnels: PortalTunnel[]
   agentReady: boolean
-  /** True when *this* client owns the node; false when another one does. */
+  /** True when *this* client has adopted the node. */
   claimed: boolean
+  /**
+   * Kept so older builds still parse this payload. Nodes are shareable now, so
+   * another control plane having adopted one never puts it off limits.
+   */
   claimedByOther: boolean
+  /** How many control planes have adopted this node, including this one. */
+  claimantCount: number
 }
 
 /**

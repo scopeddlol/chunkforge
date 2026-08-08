@@ -26,6 +26,7 @@ import {
 import type { InstanceMetadata, InstanceStatus } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
 import { CopyableAddress } from '../../components/CopyableAddress'
+import { resolveServerAddress } from '../../components/serverAddress'
 import { ConsoleView } from '../../components/ConsoleView'
 import { useConfirmStop } from '../../components/ConfirmStopDialog'
 import { useInstancesStore } from '../../state/instancesStore'
@@ -80,6 +81,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
   const [onlinePlayers, setOnlinePlayers] = useState<string[]>([])
   const applyStatus = useInstancesStore((s) => s.applyStatus)
   const refreshInstances = useInstancesStore((s) => s.refresh)
+  const summary = useInstancesStore((s) => s.instances.find((i) => i.id === instanceId))
   const { requestStop, dialog: confirmStopDialog } = useConfirmStop()
 
   useEffect(() => {
@@ -143,13 +145,15 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             <Badge appearance="tint" color="informative">
               {metadata.serverType} {metadata.minecraftVersion}
             </Badge>
-            {metadata.portalHostname ? (
-              <CopyableAddress
-                address={`${metadata.portalHostname}${metadata.portalPublicPort ? `:${metadata.portalPublicPort}` : ''}`}
-              />
-            ) : (
-              <Text size={200}>port {metadata.port}</Text>
-            )}
+            {(() => {
+              // The list summary is enriched with Portal's own domain records,
+              // so it knows the public address even for a server whose node
+              // never persisted one. Fall back to this server's own metadata
+              // when the list has not loaded yet.
+              const address = resolveServerAddress({ ...metadata, ...(summary ?? {}) })
+              if (address.kind === 'none') return <Text size={200}>No public address yet</Text>
+              return <CopyableAddress address={address.value} />
+            })()}
             <Text size={200}>{(metadata.maxRamMb / 1024).toFixed(1)} GB max</Text>
             {isRunning && (
               <Text size={200}>
