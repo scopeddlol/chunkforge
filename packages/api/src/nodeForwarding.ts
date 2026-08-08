@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { guardNodeAccess } from './auth/nodeAccess'
 import { callNodeAgent } from './portalLink'
 import { nodeForInstance } from './remoteInstances'
 
@@ -26,6 +27,11 @@ export async function registerNodeForwarding(app: FastifyInstance): Promise<void
 
     const nodeId = nodeForInstance(instanceId)
     if (!nodeId) return
+
+    // The same single point that decides *where* a request goes is the right
+    // place to decide whether the caller may go there. Forty routes forwarding
+    // through here means forty routes that cannot forget this check.
+    if (!(await guardNodeAccess(request, reply, nodeId))) return
 
     const suffix = request.url.slice(request.url.indexOf('/api/servers'))
     try {

@@ -5,9 +5,13 @@ import { chunkforgeRoot } from '@chunkforge/core'
 import {
   hashPassword,
   hashToken,
+  inviteHint,
+  inviteProblem,
   newId,
+  newInviteCode,
   newToken,
   type ApiToken,
+  type Invite,
   type Role,
   type Session,
   type User
@@ -16,6 +20,15 @@ import {
 interface AuthFile {
   users: User[]
   apiTokens: ApiToken[]
+  invites: Invite[]
+}
+
+/** The parts of a user an admin may set when creating an account. */
+export type UserGrants = Partial<Pick<User, 'nodeAccess' | 'canConfigurePersonalNode'>>
+
+export type UserPatch = Partial<Pick<User, 'role' | 'disabled' | 'projectGrants' | 'canConfigurePersonalNode'>> & {
+  /** An array restricts, `null` clears the restriction, absent leaves it alone. */
+  nodeAccess?: string[] | null
 }
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -26,7 +39,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
  * out is acceptable, and it avoids persisting bearer material.
  */
 class AuthStore {
-  private data: AuthFile = { users: [], apiTokens: [] }
+  private data: AuthFile = { users: [], apiTokens: [], invites: [] }
   private sessions = new Map<string, Session>()
   private loaded = false
 
@@ -37,7 +50,7 @@ class AuthStore {
   async load(): Promise<void> {
     const path = this.file()
     if (!existsSync(path)) {
-      this.data = { users: [], apiTokens: [] }
+      this.data = { users: [], apiTokens: [], invites: [] }
       this.loaded = true
       return
     }
@@ -45,8 +58,9 @@ class AuthStore {
       this.data = JSON.parse(await readFile(path, 'utf-8')) as AuthFile
       this.data.users ??= []
       this.data.apiTokens ??= []
+      this.data.invites ??= []
     } catch {
-      this.data = { users: [], apiTokens: [] }
+      this.data = { users: [], apiTokens: [], invites: [] }
     }
     this.loaded = true
   }
@@ -79,7 +93,12 @@ class AuthStore {
     return this.data.users.find((u) => u.username.toLowerCase() === username.toLowerCase())
   }
 
-  async createUser(username: string, password: string, role: Role): Promise<User> {
+  async createUser(
+    username: string,
+    password: string,
+    role: Role,
+    grants: UserGrants = {}
+  ): Promise<User> {
     this.assertLoaded()
     if (this.findByUsername(username)) throw new Error('That username is already taken')
     const user: User = {
@@ -88,19 +107,26 @@ class AuthStore {
       passwordHash: hashPassword(password),
       role,
       projectGrants: {},
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      ...grants
     }
     this.data.users.push(user)
     await this.persist()
     return user
   }
 
-  async updateUser(id: string, patch: Partial<Pick<User, 'role' | 'disabled' | 'projectGrants'>>): Promise<User> {
+  async updateUser(id: string, patch: UserPatch): Promise<User> {
     const user = this.findUser(id)
     if (!user) throw new Error('No such user')
     // The owner must always remain able to administer the panel.
     if (user.role === 'owner' && patch.role && patch.role !== 'owner') {
       throw new Error("The owner's role cannot be changed")
+    }
+    // `nodeAccess: null` is how a caller says "back to every node" — undefined
+    // cannot travel through JSON, and Object.assign would treat it as absent.
+    if (patch.nodeAccess === null) {
+      delete user.nodeAccess
+      delete patch.nodeAccess
     }
     Object.assign(user, patch)
     await this.persist()
@@ -156,6 +182,104 @@ class AuthStore {
 
   revokeSession(token: string): void {
     this.sessions.delete(token)
+  }
+
+  // ---- invites ----
+
+  /**
+   * Cuts an invite. Returns the plaintext code once, exactly like an API token:
+   * only the hash is kept, so this is the one moment it can be copied.
+   */
+  async createInvite(
+    createdBy: string,
+    options: {
+      role?: Role
+      nodeAccess?: string[]
+      canConfigurePersonalNode?: boolean
+      note?: string
+      uses?: number
+      expiresInDays?: number
+    } = {}
+  ): Promise<{ code: string; record: Invite }> {
+    this.assertLoaded()
+    const code = newInviteCode()
+    const record: Invite = {
+      id: newId(),
+      codeHash: hashToken(code),
+      hint: inviteHint(code),
+      role: options.role ?? 'member',
+      nodeAccess: options.nodeAccess,
+      canConfigurePersonalNode: options.canConfigurePersonalNode,
+      note: options.note?.trim() || undefined,
+      createdBy,
+      createdAt: new Date().toISOString(),
+      expiresAt: options.expiresInDays
+        ? new Date(Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+        : undefined,
+      remainingUses: Math.max(1, Math.floor(options.uses ?? 1)),
+      usedBy: []
+    }
+    this.data.invites.push(record)
+    await this.persist()
+    return { code, record }
+  }
+
+  listInvites(): Array<Omit<Invite, 'codeHash'>> {
+    this.assertLoaded()
+    return this.data.invites.map(({ codeHash: _hash, ...rest }) => rest)
+  }
+
+  findInvite(code: string): Invite | undefined {
+    const hash = hashToken(code.trim())
+    return this.data.invites.find((i) => i.codeHash === hash)
+  }
+
+  /** What an invite offers, without revealing anything if it is not usable. */
+  describeInvite(code: string): { role: Role; note?: string } | null {
+    const invite = this.findInvite(code)
+    if (inviteProblem(invite)) return null
+    return { role: invite!.role, note: invite!.note }
+  }
+
+  /**
+   * Redeems an invite into a real account. The invite's grants are copied onto
+   * the new user, and the use is spent in the same write as the account is
+   * created so a code cannot be redeemed twice by two racing requests.
+   */
+  async acceptInvite(code: string, username: string, password: string): Promise<User> {
+    this.assertLoaded()
+    const invite = this.findInvite(code)
+    const problem = inviteProblem(invite)
+    if (problem || !invite) throw new Error(problem ?? 'That invite code is not valid')
+    if (this.findByUsername(username)) throw new Error('That username is already taken')
+
+    const user: User = {
+      id: newId(),
+      username,
+      passwordHash: hashPassword(password),
+      role: invite.role,
+      projectGrants: {},
+      createdAt: new Date().toISOString(),
+      nodeAccess: invite.nodeAccess,
+      canConfigurePersonalNode: invite.canConfigurePersonalNode
+    }
+    invite.remainingUses -= 1
+    invite.usedBy.push({ userId: user.id, username: user.username, at: user.createdAt })
+    this.data.users.push(user)
+    await this.persist()
+    return user
+  }
+
+  async revokeInvite(id: string): Promise<void> {
+    const invite = this.data.invites.find((i) => i.id === id)
+    if (!invite) return
+    invite.revokedAt = new Date().toISOString()
+    await this.persist()
+  }
+
+  async deleteInvite(id: string): Promise<void> {
+    this.data.invites = this.data.invites.filter((i) => i.id !== id)
+    await this.persist()
   }
 
   // ---- api tokens ----

@@ -19,6 +19,7 @@ import {
   type ServerType
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
+import { filterByNodeAccess, guardNodeAccess } from '../auth/nodeAccess'
 import { forgetLogLines, recentLogLines } from '../logBuffer'
 import {
   callNodeAgent,
@@ -98,9 +99,15 @@ async function withPortalAddresses(summaries: InstanceSummary[]): Promise<Instan
 export async function registerServerRoutes(app: FastifyInstance): Promise<void> {
   // One list, wherever the servers actually run. Remote ones are fetched from
   // their nodes through Portal and appear beside the local ones.
-  app.get('/api/servers', { preHandler: requireRole('viewer') }, async () => {
+  app.get('/api/servers', { preHandler: requireRole('viewer') }, async (request) => {
     const [local, remote] = await Promise.all([listLocalSummaries(), listRemoteInstances()])
-    return withPortalAddresses([...local, ...remote])
+    // A user restricted to some nodes should not see the servers on the rest;
+    // node access is about machines, but what a machine *holds* is the part
+    // that is actually visible in the UI.
+    const visible = filterByNodeAccess(request, [...local, ...remote], (summary) =>
+      nodeForInstance(summary.id)
+    )
+    return withPortalAddresses(visible)
   })
 
   async function listLocalSummaries(): Promise<InstanceSummary[]> {
@@ -151,6 +158,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: requireRole('member') },
     async (request, reply) => {
       const targetNode = request.body?.nodeId
+      if (!(await guardNodeAccess(request, reply, targetNode))) return
       try {
         if (targetNode && targetNode !== 'local') {
           const created = await createRemoteInstance(targetNode, request.body)
