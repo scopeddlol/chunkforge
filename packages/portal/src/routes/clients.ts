@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import { hashToken, newToken, requireClient } from '../auth'
-import { allocateDomain, listDomainsForClient, releaseDomain } from '../domains'
+import { allocateDomain, listDomainsForClient, releaseDomain, renameDomain } from '../domains'
 import { dnsRecordsFor, portalPublicHost, wildcardRecord } from '../dns'
 import { broadcastPortal } from '../events'
 import { portalRelay } from '../relay'
@@ -210,6 +210,26 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
         await releaseDomain(request.params.hostname, request.portalClientId!)
         broadcastPortal({ type: 'domain-removed', payload: { hostname: request.params.hostname } })
         return { ok: true }
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /** Changes a server's address to a new label in the same zone. */
+  app.post<{ Params: { hostname: string }; Body: { label: string } }>(
+    '/api/client/domains/:hostname/rename',
+    { preHandler: requireClient },
+    async (request, reply) => {
+      try {
+        const domain = await renameDomain(
+          request.params.hostname,
+          request.portalClientId!,
+          request.body?.label ?? ''
+        )
+        broadcastPortal({ type: 'domain-removed', payload: { hostname: request.params.hostname } })
+        broadcastPortal({ type: 'domain-updated', payload: domain })
+        return { ...domain, dnsRecords: dnsRecordsFor(domain, portalPublicHost()) }
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

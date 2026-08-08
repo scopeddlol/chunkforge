@@ -11,12 +11,30 @@ import {
   verifyPassword
 } from '../auth'
 import { normalizeZone } from '../domains'
-import { isPublicBaseUrlManaged } from '../environment'
+import {
+  connectCloudflare,
+  disconnectCloudflare,
+  isCloudflareConfigured,
+  syncWildcardRecord,
+  testCloudflareConnection
+} from '../dnsProvider'
+import { isCloudflareManaged, isPublicBaseUrlManaged } from '../environment'
 import { broadcastPortal, subscribePortalEvents } from '../events'
 import { portalRelay } from '../relay'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
-import type { PortalConfig, PairingKind } from '../types'
+import type { PortalConfig, PortalConfigView, PairingKind } from '../types'
+
+/** Never hands the raw token back — only whether one is set, and by whom. */
+function toConfigView(config: PortalConfig): PortalConfigView {
+  const { cloudflareApiToken: _token, ...rest } = config
+  return {
+    ...rest,
+    publicBaseUrlManaged: isPublicBaseUrlManaged(),
+    cloudflareApiTokenManaged: isCloudflareManaged(),
+    cloudflareConfigured: isCloudflareConfigured()
+  }
+}
 
 /**
  * The operator-facing surface — everything Portal's own admin UI talks to.
@@ -85,10 +103,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/overview', { preHandler: requireOperator }, async () => buildOverview())
 
-  app.get('/api/config', { preHandler: requireOperator }, async () => ({
-    ...portalStore.config(),
-    publicBaseUrlManaged: isPublicBaseUrlManaged()
-  }))
+  app.get('/api/config', { preHandler: requireOperator }, async () => toConfigView(portalStore.config()))
 
   app.patch<{ Body: Partial<PortalConfig> }>(
     '/api/config',
@@ -103,6 +118,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
           error: 'The public URL is set by CHUNKFORGE_PORTAL_DOMAIN on this deployment.'
         })
       }
+      // Cloudflare credentials go through their own routes, which resolve the
+      // zone id rather than trusting whatever the caller sent — a raw PATCH
+      // here could not do that resolution.
+      delete patch.cloudflareApiToken
+      delete patch.cloudflareZoneId
       if (patch.zoneSuffix !== undefined) patch.zoneSuffix = normalizeZone(patch.zoneSuffix)
       if (
         patch.publicPortRangeStart !== undefined &&
@@ -113,9 +133,64 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       }
       const config = await portalStore.saveConfig(patch)
       broadcastPortal({ type: 'overview', payload: buildOverview() })
-      return { ...config, publicBaseUrlManaged: isPublicBaseUrlManaged() }
+      return toConfigView(config)
     }
   )
+
+  // ---- Cloudflare DNS automation ----
+
+  app.post<{ Body: { apiToken: string } }>(
+    '/api/cloudflare/connect',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      if (isCloudflareManaged()) {
+        return reply.code(409).send({
+          error: 'Cloudflare credentials are set by CHUNKFORGE_CLOUDFLARE_API_TOKEN on this deployment.'
+        })
+      }
+      const apiToken = request.body?.apiToken?.trim()
+      if (!apiToken) return reply.code(400).send({ error: 'An API token is required.' })
+      try {
+        await connectCloudflare(apiToken)
+        await syncWildcardRecord()
+        const config = toConfigView(portalStore.config())
+        broadcastPortal({ type: 'overview', payload: buildOverview() })
+        return config
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  app.post('/api/cloudflare/disconnect', { preHandler: requireOperator }, async (_request, reply) => {
+    if (isCloudflareManaged()) {
+      return reply.code(409).send({
+        error: 'Cloudflare credentials are set by CHUNKFORGE_CLOUDFLARE_API_TOKEN on this deployment.'
+      })
+    }
+    await disconnectCloudflare()
+    const config = toConfigView(portalStore.config())
+    broadcastPortal({ type: 'overview', payload: buildOverview() })
+    return config
+  })
+
+  app.post('/api/cloudflare/test', { preHandler: requireOperator }, async (_request, reply) => {
+    try {
+      return await testCloudflareConnection()
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message })
+    }
+  })
+
+  /** Re-publishes the wildcard record on demand — useful after changing the zone or the public URL. */
+  app.post('/api/cloudflare/sync-wildcard', { preHandler: requireOperator }, async (_request, reply) => {
+    try {
+      await syncWildcardRecord()
+      return { ok: true }
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message })
+    }
+  })
 
   // ---- pairing pins ----
 

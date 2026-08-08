@@ -82,6 +82,12 @@ export const portalApi = {
     list: () => call<PortalDomain[]>('/api/domains'),
     remove: (hostname: string) =>
       call<{ ok: true }>(`/api/domains/${encodeURIComponent(hostname)}`, { method: 'DELETE' })
+  },
+  cloudflare: {
+    connect: (apiToken: string) => post<PortalConfigView>('/api/cloudflare/connect', { apiToken }),
+    disconnect: () => post<PortalConfigView>('/api/cloudflare/disconnect'),
+    test: () => post<{ ok: true; zoneName: string }>('/api/cloudflare/test'),
+    syncWildcard: () => post<{ ok: true }>('/api/cloudflare/sync-wildcard')
   }
 }
 

@@ -192,6 +192,7 @@ export {
   releasePortalNode,
   provisionInstanceDomain,
   releaseInstanceDomain,
+  renameInstanceDomain,
   listPortalDomains,
   callNodeAgent
 } from './portalLink'

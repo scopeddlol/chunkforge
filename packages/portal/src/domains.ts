@@ -1,3 +1,4 @@
+import { removeDomainRecords, syncDomainRecords } from './dnsProvider'
 import { portalRelay } from './relay'
 import { portalStore } from './store'
 import type { PortalDomain, PortalNode, PortalTunnel, TunnelProtocol } from './types'
@@ -96,6 +97,12 @@ export async function allocateDomain(request: AllocateDomainRequest): Promise<Po
 
   await portalStore.upsertDomain(domain)
   await bindDomainTunnel(node, domain)
+  // Best-effort: a Cloudflare hiccup should not fail the allocation, since the
+  // hostname and route are already live and the admin UI still reports the
+  // records to publish by hand as a fallback.
+  await syncDomainRecords(domain).catch((err: Error) => {
+    console.error(`Could not publish DNS for ${domain.hostname}: ${err.message}`)
+  })
   return domain
 }
 
@@ -103,6 +110,9 @@ export async function releaseDomain(hostname: string, clientId: string): Promise
   const domain = portalStore.findDomain(hostname)
   if (!domain) return
   if (domain.clientId !== clientId) throw new Error('That domain belongs to another control plane.')
+  await removeDomainRecords(domain).catch((err: Error) => {
+    console.error(`Could not remove DNS for ${domain.hostname}: ${err.message}`)
+  })
   await portalStore.removeDomain(domain.hostname)
 
   const node = portalStore.findNode(domain.nodeId)
@@ -117,6 +127,66 @@ export async function releaseDomain(hostname: string, clientId: string): Promise
 /** Every domain a control plane owns, newest last. */
 export function listDomainsForClient(clientId: string): PortalDomain[] {
   return portalStore.domains().filter((domain) => domain.clientId === clientId)
+}
+
+/**
+ * Moves a server's address to a new label in the same zone.
+ *
+ * This is a release-and-reallocate rather than an in-place edit on purpose:
+ * the hostname is the DNS key everywhere it is used — the tunnel id, the
+ * Cloudflare record, a player's saved server entry — and changing it half way
+ * is how you end up with an orphaned tunnel bound to a name nothing points at
+ * anymore. Doing it as one remove-then-add keeps every one of those in sync
+ * with the single new name.
+ */
+export async function renameDomain(
+  hostname: string,
+  clientId: string,
+  newLabel: string
+): Promise<PortalDomain> {
+  const domain = portalStore.findDomain(hostname)
+  if (!domain) throw new Error('Unknown subdomain.')
+  if (domain.clientId !== clientId) throw new Error('That domain belongs to another control plane.')
+
+  const config = portalStore.config()
+  const zone = normalizeZone(config.zoneSuffix)
+  if (!zone) throw new Error('Portal has no domain zone configured.')
+
+  const label = toDnsLabel(newLabel)
+  if (!label) throw new Error('That name has no usable characters for a subdomain.')
+  const nextHostname = `${label}.${zone}`
+  if (nextHostname === domain.hostname) return domain
+
+  const clash = portalStore.domains().find((entry) => entry.hostname === nextHostname)
+  if (clash) throw new Error(`${nextHostname} is already taken.`)
+
+  // Same port and route, new name — a rename must not disturb who a player
+  // was already connecting to on the port, only what they type to get there.
+  const renamed: PortalDomain = {
+    ...domain,
+    hostname: nextHostname,
+    label,
+    createdAt: domain.createdAt
+  }
+
+  await removeDomainRecords(domain).catch((err: Error) => {
+    console.error(`Could not remove DNS for ${domain.hostname}: ${err.message}`)
+  })
+  await portalStore.removeDomain(domain.hostname)
+
+  const node = portalStore.findNode(domain.nodeId)
+  if (node) {
+    node.tunnels = node.tunnels.filter((tunnel) => tunnel.id !== domainTunnelId(domain.hostname))
+    await portalStore.upsertNode(node)
+  }
+
+  await portalStore.upsertDomain(renamed)
+  if (node) await bindDomainTunnel(node, renamed)
+  await syncDomainRecords(renamed).catch((err: Error) => {
+    console.error(`Could not publish DNS for ${renamed.hostname}: ${err.message}`)
+  })
+
+  return renamed
 }
 
 function domainTunnelId(hostname: string): string {

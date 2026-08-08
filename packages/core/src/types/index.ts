@@ -157,6 +157,12 @@ export interface CreateInstanceConfig {
    * that node instead.
    */
   nodeId?: string
+  /**
+   * Requested subdomain label for a server deployed to a node, e.g. `survival`
+   * for `survival.play.example.com`. Omit to derive one from the server's
+   * name, which is what happens for most servers.
+   */
+  subdomainLabel?: string
 }
 
 /**

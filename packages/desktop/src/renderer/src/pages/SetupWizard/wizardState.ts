@@ -22,6 +22,12 @@ export interface WizardState {
    * there.
    */
   nodeId: string
+  /**
+   * Subdomain label requested for a server on a node, e.g. `survival`. Empty
+   * means Portal derives one from the server's name, which is the default for
+   * most servers.
+   */
+  subdomainLabel: string
   installLocation: string | null
   enableGeyser: boolean
   groupId: string | null
@@ -93,6 +99,7 @@ export function createInitialWizardState(defaults?: {
     maxRamMb: defaults?.defaultMaxRamMb ?? 4096,
     toggles: { ...defaultToggles },
     nodeId: 'local',
+    subdomainLabel: '',
     installLocation: defaults?.defaultInstallLocation ?? null,
     enableGeyser: false,
     groupId: null,
@@ -103,7 +110,7 @@ export function createInitialWizardState(defaults?: {
 }
 
 export function toCreateInstanceConfig(state: WizardState): CreateInstanceConfig {
-  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack, nodeId } = state
+  const { serverType, minecraftVersion, name, accentColor, port, minRamMb, maxRamMb, toggles, installLocation, enableGeyser, groupId, initialPlugins, modpack, nodeId, subdomainLabel } = state
   return {
     serverType,
     minecraftVersion,
@@ -120,6 +127,8 @@ export function toCreateInstanceConfig(state: WizardState): CreateInstanceConfig
     groupId,
     initialPlugins,
     modpack,
-    nodeId
+    nodeId,
+    // Meaningless for a local server — there is no Portal route to name.
+    subdomainLabel: nodeId === 'local' ? undefined : subdomainLabel.trim() || undefined
   }
 }

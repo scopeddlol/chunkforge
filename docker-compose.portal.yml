@@ -44,6 +44,9 @@ services:
       CHUNKFORGE_PORTAL_DOMAIN: ${CHUNKFORGE_PORTAL_DOMAIN}
       # Optional: pre-seeds the zone on first boot. Editable in the UI after.
       CHUNKFORGE_PORTAL_ZONE: ${CHUNKFORGE_PORTAL_ZONE:-}
+      # Optional: Cloudflare API token, so Portal publishes DNS itself.
+      CHUNKFORGE_CLOUDFLARE_API_TOKEN: ${CHUNKFORGE_CLOUDFLARE_API_TOKEN:-}
+      CHUNKFORGE_CLOUDFLARE_ZONE_NAME: ${CHUNKFORGE_CLOUDFLARE_ZONE_NAME:-}
     expose:
       # Deliberately not published to the host. The only way in is through Caddy.
       - "8080"

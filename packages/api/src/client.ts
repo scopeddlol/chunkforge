@@ -252,7 +252,9 @@ export class ChunkforgeClient {
     domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
     provisionDomain: (instanceId: string, force = false) =>
       this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}`, { force }),
-    releaseDomain: (instanceId: string) => this.del<{ ok: true }>(`/api/portal/domains/${instanceId}`)
+    releaseDomain: (instanceId: string) => this.del<{ ok: true }>(`/api/portal/domains/${instanceId}`),
+    renameDomain: (instanceId: string, label: string) =>
+      this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}/rename`, { label })
   }
 
   filehub = {

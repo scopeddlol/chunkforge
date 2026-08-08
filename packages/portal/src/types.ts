@@ -123,6 +123,15 @@ export interface PortalConfig {
    */
   autoAllocatePorts: boolean
   trustProxy: boolean
+  /**
+   * A Cloudflare API token scoped to Zone:DNS:Edit on the zone above. When
+   * set, Portal submits the wildcard and per-server records itself instead of
+   * only reporting what to publish. Never returned to the admin UI once set —
+   * only whether one is configured.
+   */
+  cloudflareApiToken: string
+  /** Cloudflare's internal id for the zone. Resolved automatically from the zone name. */
+  cloudflareZoneId: string
 }
 
 export const defaultPortalConfig: PortalConfig = {
@@ -131,7 +140,9 @@ export const defaultPortalConfig: PortalConfig = {
   publicPortRangeStart: 25600,
   publicPortRangeEnd: 25699,
   autoAllocatePorts: true,
-  trustProxy: true
+  trustProxy: true,
+  cloudflareApiToken: '',
+  cloudflareZoneId: ''
 }
 
 /** What the admin UI renders on its landing page. */
@@ -162,10 +173,15 @@ export interface PortalNodeView {
 }
 
 /**
- * Config as the admin UI sees it. `publicBaseUrlManaged` is not stored — it
- * reflects whether the container was given a domain, in which case the field is
- * read-only rather than merely discouraged.
+ * Config as the admin UI sees it. `publicBaseUrlManaged` and
+ * `cloudflareApiTokenManaged` are not stored — they reflect whether the
+ * container was given the value as an environment variable, in which case the
+ * field is read-only rather than merely discouraged. The raw Cloudflare token
+ * is never included; only whether one is set.
  */
-export interface PortalConfigView extends PortalConfig {
+export interface PortalConfigView extends Omit<PortalConfig, 'cloudflareApiToken'> {
   publicBaseUrlManaged: boolean
+  cloudflareApiTokenManaged: boolean
+  /** True once a token is stored, without exposing it. */
+  cloudflareConfigured: boolean
 }

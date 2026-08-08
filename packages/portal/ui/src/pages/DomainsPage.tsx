@@ -17,7 +17,7 @@ import {
   tokens
 } from '@fluentui/react-components'
 import { onPortalEvent, portalApi } from '../api'
-import type { PortalConfig, PortalDomain, PortalNodeView } from '../../../src/types'
+import type { PortalConfigView, PortalDomain, PortalNodeView } from '../../../src/types'
 
 const useStyles = makeStyles({
   root: { padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: '20px' },
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
   }
 })
 
-function portalHostFrom(config: PortalConfig): string {
+function portalHostFrom(config: PortalConfigView): string {
   if (!config.publicBaseUrl.trim()) return ''
   try {
     return new URL(config.publicBaseUrl).hostname
@@ -64,7 +64,7 @@ export function DomainsPage(): JSX.Element {
   const styles = useStyles()
   const [domains, setDomains] = useState<PortalDomain[] | null>(null)
   const [nodes, setNodes] = useState<PortalNodeView[]>([])
-  const [config, setConfig] = useState<PortalConfig | null>(null)
+  const [config, setConfig] = useState<PortalConfigView | null>(null)
 
   async function refresh(): Promise<void> {
     const [nextDomains, nextNodes, nextConfig] = await Promise.all([
@@ -86,6 +86,7 @@ export function DomainsPage(): JSX.Element {
 
   const zone = config?.zoneSuffix ?? ''
   const portalHost = config ? portalHostFrom(config) : ''
+  const automatic = config?.cloudflareConfigured ?? false
 
   return (
     <div className={styles.root}>
@@ -106,12 +107,22 @@ export function DomainsPage(): JSX.Element {
         </MessageBar>
       )}
 
-      {zone && (
+      {automatic && (
+        <MessageBar intent="success">
+          <MessageBarBody>
+            Cloudflare is connected — the wildcard and every server's records are published
+            automatically. Nothing below needs to be copied by hand.
+          </MessageBarBody>
+        </MessageBar>
+      )}
+
+      {zone && !automatic && (
         <div className={styles.panel}>
           <Text weight="semibold">Publish this once</Text>
           <Text size={200} className={styles.muted}>
             A wildcard record covers every subdomain this Portal will ever allocate, so adding a server
-            later needs no DNS work beyond its SRV record.
+            later needs no DNS work beyond its SRV record. Connect Cloudflare under Settings and Portal
+            will publish this — and every record below — for you.
           </Text>
           <div className={styles.record}>
             <Badge appearance="filled">A</Badge>
@@ -144,7 +155,7 @@ export function DomainsPage(): JSX.Element {
                 <TableHeaderCell>Hostname</TableHeaderCell>
                 <TableHeaderCell>Node</TableHeaderCell>
                 <TableHeaderCell>Route</TableHeaderCell>
-                <TableHeaderCell>SRV record to publish</TableHeaderCell>
+                <TableHeaderCell>{automatic ? 'DNS' : 'SRV record to publish'}</TableHeaderCell>
                 <TableHeaderCell />
               </TableRow>
             </TableHeader>
@@ -165,7 +176,11 @@ export function DomainsPage(): JSX.Element {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {domain.protocol === 'tcp' ? (
+                    {automatic ? (
+                      <Badge appearance="tint" color="success">
+                        published
+                      </Badge>
+                    ) : domain.protocol === 'tcp' ? (
                       <span className={styles.mono}>
                         _minecraft._tcp.{domain.hostname} 0 0 {domain.publicPort} {domain.hostname}
                       </span>

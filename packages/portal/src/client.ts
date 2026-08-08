@@ -144,6 +144,8 @@ export class PortalClient {
       this.request<{ ok: true }>(`/api/client/domains/${encodeURIComponent(hostname)}`, {
         method: 'DELETE'
       }),
+    renameDomain: (hostname: string, label: string) =>
+      this.post<AllocatedDomain>(`/api/client/domains/${encodeURIComponent(hostname)}/rename`, { label }),
 
     /**
      * Runs a Chunkforge Core API call on a remote node. The path is exactly the

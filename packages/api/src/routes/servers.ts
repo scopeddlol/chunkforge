@@ -112,7 +112,9 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
             port: created.port,
             nodeId: targetNode
           }
-          const domain = await provisionInstanceDomain(metadata).catch(() => null)
+          const domain = await provisionInstanceDomain(metadata, {
+            label: request.body.subdomainLabel
+          }).catch(() => null)
           return { ...created, nodeId: targetNode, portalHostname: domain?.hostname ?? null }
         }
 

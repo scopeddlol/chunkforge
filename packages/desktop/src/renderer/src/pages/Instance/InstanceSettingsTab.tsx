@@ -56,6 +56,11 @@ const useStyles = makeStyles({
 
 const difficulties: InstanceToggles['difficulty'][] = ['peaceful', 'easy', 'normal', 'hard']
 
+/** The label part of a hostname, e.g. `survival` from `survival.play.example.com`. */
+function labelFromHostname(hostname: string | null | undefined): string {
+  return hostname?.split('.')[0] ?? ''
+}
+
 interface InstanceSettingsTabProps {
   metadata: InstanceMetadata
   onSaved: (updated: InstanceMetadata) => void
@@ -68,6 +73,8 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
   const [saving, setSaving] = useState(false)
   const [provisioningHost, setProvisioningHost] = useState(false)
   const [hostError, setHostError] = useState<string | null>(null)
+  const [subdomainLabel, setSubdomainLabel] = useState(labelFromHostname(metadata.portalHostname))
+  const [renamingHost, setRenamingHost] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteFiles, setDeleteFiles] = useState(true)
 
@@ -116,6 +123,28 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
       setHostError(err instanceof Error ? err.message : 'Could not allocate an address.')
     } finally {
       setProvisioningHost(false)
+    }
+  }
+
+  /**
+   * Moves the server to a new subdomain label without touching the public
+   * port a player already has saved — see Portal's `renameDomain`, which this
+   * calls through.
+   */
+  async function renamePortalHostname(): Promise<void> {
+    if (!subdomainLabel.trim()) return
+    setRenamingHost(true)
+    setHostError(null)
+    try {
+      const domain = await api().portal.renameDomain(metadata.id, subdomainLabel.trim())
+      const updated = { ...draft, portalHostname: domain.hostname, portalPublicPort: domain.publicPort }
+      setDraft(updated)
+      setSubdomainLabel(labelFromHostname(domain.hostname))
+      onSaved(updated)
+    } catch (err) {
+      setHostError(err instanceof Error ? err.message : 'Could not rename that address.')
+    } finally {
+      setRenamingHost(false)
     }
   }
 
@@ -259,6 +288,30 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
               : 'No address — this server runs on this machine'}
           </div>
         </Field>
+        {draft.portalHostname && (
+          <Field
+            label="Change subdomain"
+            hint="The port stays the same, so anyone with the old address saved keeps their old connection working until you tell them the new one."
+          >
+            <div className={styles.actions}>
+              <Input
+                value={subdomainLabel}
+                onChange={(_, data) => setSubdomainLabel(data.value)}
+                placeholder={labelFromHostname(draft.portalHostname)}
+              />
+              <Button
+                disabled={
+                  renamingHost ||
+                  !subdomainLabel.trim() ||
+                  subdomainLabel.trim() === labelFromHostname(draft.portalHostname)
+                }
+                onClick={() => void renamePortalHostname()}
+              >
+                {renamingHost ? 'Renaming…' : 'Rename'}
+              </Button>
+            </div>
+          </Field>
+        )}
         <div className={styles.actions}>
           <Button
             icon={<FolderOpen20Regular />}

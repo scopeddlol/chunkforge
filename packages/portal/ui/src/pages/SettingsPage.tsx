@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import {
+  Badge,
   Button,
   Field,
   Input,
@@ -26,8 +27,9 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '16px'
   },
-  row: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
-  actions: { display: 'flex', gap: '10px', alignItems: 'center' },
+  row: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' },
+  actions: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' },
+  headerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
   error: { color: tokens.colorPaletteRedForeground2 },
   ok: { color: tokens.colorPaletteGreenForeground2 }
 })
@@ -38,6 +40,9 @@ export function SettingsPage(): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
   const [password, setPassword] = useState('')
+  const [cfToken, setCfToken] = useState('')
+  const [cfBusy, setCfBusy] = useState(false)
+  const [cfMessage, setCfMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
   useEffect(() => {
     void portalApi.config.get().then(setConfig)
@@ -63,6 +68,59 @@ export function SettingsPage(): JSX.Element {
       setMessage({ text: err instanceof Error ? err.message : 'Could not save.', ok: false })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function connectCloudflare(): Promise<void> {
+    setCfBusy(true)
+    setCfMessage(null)
+    try {
+      setConfig(await portalApi.cloudflare.connect(cfToken.trim()))
+      setCfToken('')
+      setCfMessage({ text: 'Connected. The wildcard record has been published.', ok: true })
+    } catch (err) {
+      setCfMessage({ text: err instanceof Error ? err.message : 'Could not connect.', ok: false })
+    } finally {
+      setCfBusy(false)
+    }
+  }
+
+  async function disconnectCloudflare(): Promise<void> {
+    setCfBusy(true)
+    setCfMessage(null)
+    try {
+      setConfig(await portalApi.cloudflare.disconnect())
+      setCfMessage({ text: 'Disconnected. Records already published are left in place.', ok: true })
+    } catch (err) {
+      setCfMessage({ text: err instanceof Error ? err.message : 'Could not disconnect.', ok: false })
+    } finally {
+      setCfBusy(false)
+    }
+  }
+
+  async function testCloudflare(): Promise<void> {
+    setCfBusy(true)
+    setCfMessage(null)
+    try {
+      const result = await portalApi.cloudflare.test()
+      setCfMessage({ text: `Working — talking to zone "${result.zoneName}".`, ok: true })
+    } catch (err) {
+      setCfMessage({ text: err instanceof Error ? err.message : 'Connection failed.', ok: false })
+    } finally {
+      setCfBusy(false)
+    }
+  }
+
+  async function resyncWildcard(): Promise<void> {
+    setCfBusy(true)
+    setCfMessage(null)
+    try {
+      await portalApi.cloudflare.syncWildcard()
+      setCfMessage({ text: 'Wildcard record re-published.', ok: true })
+    } catch (err) {
+      setCfMessage({ text: err instanceof Error ? err.message : 'Could not publish it.', ok: false })
+    } finally {
+      setCfBusy(false)
     }
   }
 
@@ -163,6 +221,76 @@ export function SettingsPage(): JSX.Element {
             <Text className={message.ok ? styles.ok : styles.error}>{message.text}</Text>
           )}
         </div>
+      </div>
+
+      <div className={styles.panel}>
+        <div className={styles.headerRow}>
+          <Text weight="semibold">Cloudflare DNS</Text>
+          <Badge appearance="tint" color={config.cloudflareConfigured ? 'success' : 'informative'}>
+            {config.cloudflareConfigured ? 'connected' : 'not connected'}
+          </Badge>
+        </div>
+        <Text size={200} className={styles.muted}>
+          Give Portal a Cloudflare API token and it publishes the wildcard record and every server's
+          address itself — the Subdomains page stops asking you to copy anything. Without this, Portal
+          keeps reporting the exact records to add by hand, which works everywhere but takes a step per
+          server.
+        </Text>
+
+        {config.cloudflareApiTokenManaged && (
+          <Text size={200} className={styles.muted}>
+            Set by <code>CHUNKFORGE_CLOUDFLARE_API_TOKEN</code> on this deployment.
+          </Text>
+        )}
+
+        {!config.cloudflareConfigured && !config.cloudflareApiTokenManaged && (
+          <Field
+            label="API token"
+            hint="A Cloudflare token scoped to Zone → DNS → Edit for the zone above. Create one under My Profile → API Tokens."
+          >
+            <div className={styles.row}>
+              <Input
+                type="password"
+                value={cfToken}
+                placeholder="Paste the token"
+                style={{ minWidth: '280px', flexGrow: 1 }}
+                onChange={(_, data) => setCfToken(data.value)}
+              />
+              <Button
+                appearance="primary"
+                disabled={cfBusy || !cfToken.trim() || !config.zoneSuffix.trim()}
+                onClick={() => void connectCloudflare()}
+              >
+                {cfBusy ? 'Connecting…' : 'Connect'}
+              </Button>
+            </div>
+            {!config.zoneSuffix.trim() && (
+              <Text size={200} className={styles.muted}>
+                Set the domain zone above first — Portal needs it to find the right Cloudflare zone.
+              </Text>
+            )}
+          </Field>
+        )}
+
+        {config.cloudflareConfigured && (
+          <div className={styles.actions}>
+            <Button disabled={cfBusy} onClick={() => void testCloudflare()}>
+              Test Connection
+            </Button>
+            <Button disabled={cfBusy} onClick={() => void resyncWildcard()}>
+              Re-publish Wildcard
+            </Button>
+            {!config.cloudflareApiTokenManaged && (
+              <Button disabled={cfBusy} onClick={() => void disconnectCloudflare()}>
+                Disconnect
+              </Button>
+            )}
+          </div>
+        )}
+
+        {cfMessage && (
+          <Text className={cfMessage.ok ? styles.ok : styles.error}>{cfMessage.text}</Text>
+        )}
       </div>
 
       <div className={styles.panel}>

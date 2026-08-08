@@ -93,7 +93,25 @@ VPS's IP needs no further DNS work. Point Portal at a bare IP instead and it
 reports an `A` record.
 
 Portal reports the exact records for each server under **Subdomains**. It does
-not write them for you — it holds no credentials for your zone.
+not write them for you by default — it holds no credentials for your zone.
+
+### Automatic DNS with Cloudflare
+
+If your zone is on Cloudflare, give Portal an API token under **Settings →
+Cloudflare DNS** — scoped to `Zone → DNS → Edit` on that one zone, nothing
+broader — and it publishes the wildcard and every server's records itself.
+The Subdomains page then shows what's already live instead of what to copy.
+
+The token can also come from the environment, which behaves the same as the
+domain does — set once at deploy time, read-only in the UI:
+
+```bash
+export CHUNKFORGE_CLOUDFLARE_API_TOKEN=<your token>
+export CHUNKFORGE_CLOUDFLARE_ZONE_NAME=play.example.com   # defaults to the domain zone
+```
+
+Turning it off (or never setting it) changes nothing else — Portal falls back
+to reporting the records exactly as before.
 
 ## Getting started
 
@@ -168,7 +186,7 @@ live status, and a detail view with seven tabs:
 | **Add-Ons** | Installed plugins or mods with enable/disable toggles and uninstall |
 | **Files** | Sandboxed file browser with an inline text editor |
 | **Backups** | Zip snapshots of the overworld, nether, and end — with optional upload to FileHub |
-| **Settings** | Editable name, port, RAM, gameplay options, public address, and delete |
+| **Settings** | Editable name, port, RAM, gameplay options, public address (rename the subdomain without losing the port), and delete |
 
 A server on a remote node behaves identically to a local one. Requests for it
 are forwarded to its node through Portal, so the console, the file browser, and

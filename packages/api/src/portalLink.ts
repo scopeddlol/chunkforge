@@ -137,7 +137,7 @@ export async function releasePortalNode(nodeId: string): Promise<void> {
  */
 export async function provisionInstanceDomain(
   instance: InstanceMetadata,
-  options?: { force?: boolean }
+  options?: { force?: boolean; label?: string }
 ): Promise<PortalDomainBinding | null> {
   const portal = getPortalStatus()
   if (!isPortalLinked()) return null
@@ -149,6 +149,10 @@ export async function provisionInstanceDomain(
 
   const allocated = await clientFor(portal).client.allocateDomain({
     nodeId,
+    // The requested label wins when the caller has one — Portal only falls
+    // back to the server's display name when the wizard did not ask for a
+    // specific address.
+    label: options?.label?.trim() || undefined,
     name: instance.name,
     instanceId: instance.id,
     protocol: 'tcp',
@@ -198,6 +202,37 @@ export async function releaseInstanceDomain(
     // a leftover record from Portal's own Subdomains page.
   }
   await unbindInstanceHostname(instance.id).catch(() => undefined)
+}
+
+/**
+ * Moves a server's address to a new subdomain label, keeping its public port —
+ * a rename must not silently move where players who already have the server
+ * saved end up connecting.
+ */
+export async function renameInstanceDomain(
+  instance: Pick<InstanceMetadata, 'id' | 'portalHostname'>,
+  label: string
+): Promise<PortalDomainBinding> {
+  const client = clientFor(requirePortalLink())
+
+  let hostname = instance.portalHostname
+  if (!hostname) {
+    const domains = await client.client.domains()
+    hostname = domains.find((domain) => domain.instanceId === instance.id)?.hostname
+  }
+  if (!hostname) throw new Error('This server has no address to rename yet.')
+
+  const renamed = await client.client.renameDomain(hostname, label)
+  await bindInstanceHostname(instance.id, renamed.hostname, renamed.publicPort)
+  return {
+    hostname: renamed.hostname,
+    nodeId: renamed.nodeId,
+    instanceId: renamed.instanceId,
+    protocol: renamed.protocol,
+    targetPort: renamed.targetPort,
+    publicPort: renamed.publicPort,
+    dnsRecords: renamed.dnsRecords
+  }
 }
 
 export async function listPortalDomains(): Promise<PortalDomainBinding[]> {

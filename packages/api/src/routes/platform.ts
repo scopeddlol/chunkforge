@@ -13,12 +13,14 @@ import {
   updateLocalNodeStats,
   DEFAULT_PROJECT_ID,
   type AppSettings,
+  type InstanceMetadata,
   type NodeStats,
   type ServerGroup
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
 import { broadcast } from '../events'
 import {
+  callNodeAgent,
   claimPortalNode,
   connectToPortal,
   disconnectFromPortal,
@@ -27,8 +29,10 @@ import {
   provisionInstanceDomain,
   refreshPortalStatus,
   releaseInstanceDomain,
-  releasePortalNode
+  releasePortalNode,
+  renameInstanceDomain
 } from '../portalLink'
+import { nodeForInstance } from '../remoteInstances'
 
 export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
   // ---- stats ----
@@ -151,12 +155,32 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     listPortalDomains()
   )
 
+  /**
+   * A server only ever gets a Portal address when it lives on a node, and a
+   * server on a node has no *local* metadata file at all — the node holds the
+   * real record. So this resolves the same shape two different ways rather
+   * than assuming `loadInstanceMetadata` will work, which is what silently
+   * broke domain actions for every remote server before this.
+   */
+  async function resolveInstanceForDomain(id: string): Promise<InstanceMetadata> {
+    const remoteNodeId = nodeForInstance(id)
+    if (!remoteNodeId) return loadInstanceMetadata(id)
+
+    const response = await callNodeAgent(remoteNodeId, 'GET', `/api/servers/${encodeURIComponent(id)}`)
+    if (!response.ok) throw new Error('Could not reach that server on its node.')
+    const metadata = (await response.json()) as InstanceMetadata
+    // The id belongs to *this* node once we are asking it directly — stamping
+    // our node id back on keeps provisionInstanceDomain's routing decision
+    // correct for the caller.
+    return { ...metadata, nodeId: remoteNodeId }
+  }
+
   app.post<{ Params: { id: string }; Body: { force?: boolean } }>(
     '/api/portal/domains/:id',
     { preHandler: requireRole('member') },
     async (request, reply) => {
       try {
-        const instance = await loadInstanceMetadata(request.params.id)
+        const instance = await resolveInstanceForDomain(request.params.id)
         const domain = await provisionInstanceDomain(instance, { force: Boolean(request.body?.force) })
         if (!domain) {
           return reply
@@ -174,8 +198,22 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     '/api/portal/domains/:id',
     { preHandler: requireRole('member') },
     async (request) => {
-      await releaseInstanceDomain(await loadInstanceMetadata(request.params.id))
+      // Unlike provisioning, releasing needs no local or node lookup at all —
+      // Portal resolves the hostname by instance id on its own side.
+      await releaseInstanceDomain({ id: request.params.id })
       return { ok: true }
+    }
+  )
+
+  app.post<{ Params: { id: string }; Body: { label: string } }>(
+    '/api/portal/domains/:id/rename',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      try {
+        return await renameInstanceDomain({ id: request.params.id }, request.body?.label ?? '')
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
     }
   )
 

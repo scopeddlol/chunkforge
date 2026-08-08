@@ -62,6 +62,21 @@ const useStyles = makeStyles({
   }
 })
 
+/**
+ * A local preview of the label Portal would compute from this text — not
+ * authoritative, since Portal is the one place collisions get resolved, but
+ * enough to show what a player will actually type.
+ */
+function previewDnsLabel(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+}
+
 interface NameLocationStepProps {
   state: WizardState
   onChange: (patch: Partial<WizardState>) => void
@@ -71,6 +86,7 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
   const styles = useStyles()
   const [defaultRoot, setDefaultRoot] = useState('')
   const [nodes, setNodes] = useState<Node[]>([])
+  const [zoneSuffix, setZoneSuffix] = useState('')
 
   useEffect(() => {
     native().getDefaultInstancesRoot().then(setDefaultRoot)
@@ -85,8 +101,16 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
       .catch(() => setNodes([]))
   }, [])
 
+  useEffect(() => {
+    void api()
+      .portal.status()
+      .then((status) => setZoneSuffix(status.zoneSuffix))
+      .catch(() => setZoneSuffix(''))
+  }, [])
+
   const remoteNodes = nodes.filter((node) => node.kind === 'portal')
   const isRemote = state.nodeId !== 'local'
+  const previewLabel = previewDnsLabel(state.subdomainLabel || state.name)
 
   async function handleBrowse(): Promise<void> {
     const picked = await native().pickFolder('Choose where this server is created')
@@ -149,10 +173,23 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
         )}
 
         {isRemote ? (
-          <Text size={200} className={styles.locationHint}>
-            This server is created on the node, in its own storage. Chunkforge will ask your Portal for
-            an address once it exists.
-          </Text>
+          <>
+            <Field
+              label="Subdomain"
+              hint="Leave blank to use the server name. Portal picks the next free one if this is taken."
+            >
+              <Input
+                value={state.subdomainLabel}
+                placeholder={previewDnsLabel(state.name) || 'survival'}
+                onChange={(_, data) => onChange({ subdomainLabel: data.value })}
+              />
+            </Field>
+            <Text size={200} className={styles.locationHint}>
+              {zoneSuffix
+                ? `Players will connect at ${previewLabel || '<name>'}.${zoneSuffix}`
+                : "This server is created on the node, in its own storage. Chunkforge will ask your Portal for an address once it exists."}
+            </Text>
+          </>
         ) : (
           <Field label="Install location" hint="A folder named after your server is created here.">
             <div className={styles.locationRow}>
