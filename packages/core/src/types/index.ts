@@ -476,6 +476,13 @@ export interface PluginSearchResponse {
   filteredOut?: number
 }
 
+/** A Minecraft release offered in the content browser's version filter. */
+export interface GameVersionOption {
+  id: string
+  /** Newest release, so the UI can preselect something sensible. */
+  isLatest: boolean
+}
+
 export type DashboardView = 'grid' | 'table'
 
 export type ThemeId =

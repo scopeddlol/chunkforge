@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { makeStyles, tokens, Text, Button } from '@fluentui/react-components'
+import { makeStyles, tokens, Text, Button, Badge } from '@fluentui/react-components'
 import { ArrowDownload20Regular, Open16Regular, AppsAddIn24Regular } from '@fluentui/react-icons'
 import type { PluginSearchResult } from '@shared/types'
 import { SourceBadge } from '../../components/SourceBadge'
@@ -139,6 +139,23 @@ export function PluginCard({ plugin, onInstall, canInstall }: PluginCardProps): 
       <Text size={200} className={styles.summary}>
         {plugin.summary}
       </Text>
+
+      {/*
+        Shown only when it says something the user could not already infer: a
+        confirmed mismatch, or a pass the source did not give us enough to be
+        sure about. A plain compatible result needs no badge — the whole point
+        of attaching a server is that what you see already fits.
+      */}
+      {plugin.compatibility && !plugin.compatibility.compatible && (
+        <Badge appearance="tint" color="danger">
+          {plugin.compatibility.reason ?? 'Not compatible'}
+        </Badge>
+      )}
+      {plugin.compatibility?.compatible && !plugin.compatibility.certain && plugin.compatibility.reason && (
+        <Badge appearance="tint" color="warning">
+          {plugin.compatibility.reason}
+        </Badge>
+      )}
 
       <div className={styles.footer}>
         <Text size={200} className={styles.downloads}>
