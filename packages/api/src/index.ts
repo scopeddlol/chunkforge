@@ -148,7 +148,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
     void refreshPortalStatus().catch(() => undefined)
   }
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.6.0' }))
+  app.get('/api/health', async () => ({ ok: true, version: '0.7.0' }))
 
   if (serveWebUi) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))

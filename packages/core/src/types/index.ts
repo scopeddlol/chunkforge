@@ -339,6 +339,52 @@ export interface PluginAlternative {
   sourceUrl: string
 }
 
+/**
+ * What a piece of content *is*, independent of where it was found.
+ *
+ * Sources disagree about vocabulary — Modrinth calls them project types,
+ * CurseForge uses class ids, Hangar only has plugins — so every provider
+ * normalises to this before anything downstream sees it.
+ */
+export type ContentKind = 'plugin' | 'mod' | 'modpack'
+
+/**
+ * The platform a piece of content runs on.
+ *
+ * Deliberately one list rather than separate mod-loader and plugin-platform
+ * enums: a search spans both worlds, and the browser needs to compare a
+ * result against a server without caring which family it came from.
+ */
+export type ContentPlatform =
+  | 'paper'
+  | 'spigot'
+  | 'purpur'
+  | 'bukkit'
+  | 'folia'
+  | 'velocity'
+  | 'waterfall'
+  | 'fabric'
+  | 'forge'
+  | 'neoforge'
+  | 'quilt'
+
+/**
+ * Whether a result can actually run on the server the browser is attached to,
+ * and why not when it cannot.
+ *
+ * Carried on the result rather than computed in the UI so that filtering,
+ * sorting, and the explanation a user reads all agree — the previous browser
+ * showed incompatible entries with no way to tell, because nothing on the
+ * result said what it supported.
+ */
+export interface CompatibilityVerdict {
+  compatible: boolean
+  /** Set when the source told us enough to be sure; false means "assumed". */
+  certain: boolean
+  /** Short human reason, e.g. "No build for 1.21.1" or "Fabric only". */
+  reason?: string
+}
+
 export interface PluginSearchResult {
   source: PluginSource
   id: string
@@ -351,6 +397,20 @@ export interface PluginSearchResult {
   categories: string[]
   /** Same project found on other sources; picked from at download time. */
   alternatives?: PluginAlternative[]
+  /** What this is. Lets one search feed the Mods, Plugins and Modpacks tabs. */
+  kind?: ContentKind
+  /**
+   * Game versions the source advertises for the project as a whole. Absent
+   * when a source does not publish it at search time, which is the difference
+   * between "known incompatible" and "unknown".
+   */
+  gameVersions?: string[]
+  /** Platforms the project advertises, normalised across sources. */
+  platforms?: ContentPlatform[]
+  /** Filled in when the browser is attached to a server. */
+  compatibility?: CompatibilityVerdict
+  /** Recency signal for sorting; sources that omit it sort last. */
+  updatedAt?: string | null
 }
 
 export interface PluginVersion {
@@ -378,14 +438,49 @@ export interface PluginSearchQuery {
   gameVersion?: string
   loader?: string
   limit?: number
+  /**
+   * How many results to skip. Sources paginate differently — offsets, pages,
+   * cursors — so each provider converts this to whatever its API wants and
+   * the caller only ever thinks in offsets.
+   */
+  offset?: number
+  /** Narrows the search to one kind. Omit to search everything. */
+  kind?: ContentKind
+  /**
+   * Drop results that cannot run on the attached server rather than showing
+   * them greyed out. Requires gameVersion/loader to mean anything.
+   */
+  hideIncompatible?: boolean
   /** Defaults to true; set false to see one card per source. */
   mergeSources?: boolean
+  /**
+   * Server the browser is attached to. Present means every result comes back
+   * judged, and `hideIncompatible` has something to act on.
+   */
+  serverType?: ServerType
 }
 
 export interface PluginSearchResponse {
   results: PluginSearchResult[]
   /** Per-source failures, so one dead source doesn't hide the rest. */
   errors: { source: PluginSource; message: string }[]
+  /**
+   * Whether asking for the next offset could return anything. Derived from
+   * whether any source filled its page, because most of these APIs will not
+   * tell us a total and the ones that do disagree about what it counts.
+   */
+  hasMore: boolean
+  /** Offset to pass back for the next page. */
+  nextOffset: number
+  /** Results removed by `hideIncompatible`, so the UI can say so. */
+  filteredOut?: number
+}
+
+/** A Minecraft release offered in the content browser's version filter. */
+export interface GameVersionOption {
+  id: string
+  /** Newest release, so the UI can preselect something sensible. */
+  isLatest: boolean
 }
 
 export type DashboardView = 'grid' | 'table'

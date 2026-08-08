@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import {
   availableSources,
+  listGameVersions,
   installModpack,
   installPlugin,
   listInstalledPlugins,
@@ -29,6 +30,17 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
   )
 
   app.get('/api/addons/sources', { preHandler: requireRole('viewer') }, async () => availableSources())
+
+  // One list for every tab and every source. Built from Mojang's manifest
+  // rather than any catalogue, so the options do not change depending on which
+  // tab happens to be open.
+  app.get('/api/addons/game-versions', { preHandler: requireRole('viewer') }, async (_req, reply) => {
+    try {
+      return await listGameVersions()
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message })
+    }
+  })
 
   app.get<{ Querystring: { source: PluginSource; projectId: string } }>(
     '/api/addons/versions',

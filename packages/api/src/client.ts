@@ -22,6 +22,7 @@ import type {
   ServerGroup,
   ServerType,
   DashboardStats,
+  GameVersionOption,
   VersionCatalogEntry
 } from '@chunkforge/core'
 import type { ServerEvent } from './eventTypes'
@@ -154,6 +155,7 @@ export class ChunkforgeClient {
   addons = {
     search: (query: PluginSearchQuery) => this.post<PluginSearchResponse>('/api/addons/search', query),
     sources: () => this.get<PluginSource[]>('/api/addons/sources'),
+    gameVersions: () => this.get<GameVersionOption[]>('/api/addons/game-versions'),
     versions: (source: PluginSource, projectId: string) =>
       this.get<PluginVersion[]>(
         `/api/addons/versions?source=${source}&projectId=${encodeURIComponent(projectId)}`

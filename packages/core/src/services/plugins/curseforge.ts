@@ -1,10 +1,49 @@
-import type { PluginSearchResult, PluginVersion } from '../../types/index'
+import type {
+  ContentKind,
+  ContentPlatform,
+  PluginSearchResult,
+  PluginVersion
+} from '../../types/index'
+import { toPlatform } from './compatibility'
 import { fetchJson, type PluginProvider } from './provider'
 import { getSettings } from '../../store/settingsStore'
 
 const BASE = 'https://api.curseforge.com/v1'
 const MINECRAFT_GAME_ID = 432
 const BUKKIT_PLUGINS_CLASS_ID = 5
+const MODS_CLASS_ID = 6
+const MODPACKS_CLASS_ID = 4471
+
+/** CurseForge separates its catalogue by class id rather than a type field. */
+const CLASS_ID_BY_KIND: Record<ContentKind, number> = {
+  plugin: BUKKIT_PLUGINS_CLASS_ID,
+  mod: MODS_CLASS_ID,
+  modpack: MODPACKS_CLASS_ID
+}
+
+/**
+ * CurseForge tags loader support as numbered "mod loader types" on each file,
+ * and repeats the loader name in latestFilesIndexes. The names are what comes
+ * back in search results, so that is what gets normalised.
+ */
+function platformsFor(mod: CurseForgeMod, kind: ContentKind): ContentPlatform[] {
+  const named = (mod.latestFilesIndexes ?? [])
+    .map((f) => (f.modLoader === undefined ? null : MOD_LOADER_NAMES[f.modLoader] ?? null))
+    .filter((v): v is string => v !== null)
+  const platforms = named.map(toPlatform).filter((p): p is ContentPlatform => p !== null)
+  if (platforms.length > 0) return [...new Set(platforms)]
+  // Bukkit-plugin listings carry no loader tags at all; the class they were
+  // searched under is the only signal, and it is a reliable one.
+  return kind === 'plugin' ? ['spigot'] : []
+}
+
+/** CurseForge's numeric modLoaderType enum. */
+const MOD_LOADER_NAMES: Record<number, string> = {
+  1: 'forge',
+  4: 'fabric',
+  5: 'quilt',
+  6: 'neoforge'
+}
 
 interface CurseForgeMod {
   id: number
@@ -15,6 +54,8 @@ interface CurseForgeMod {
   authors?: Array<{ name: string }>
   links?: { websiteUrl?: string }
   categories?: Array<{ name: string }>
+  dateModified?: string
+  latestFilesIndexes?: Array<{ gameVersion?: string; modLoader?: number }>
 }
 
 interface CurseForgeSearchResponse {
@@ -51,11 +92,13 @@ export const curseForgeProvider: PluginProvider = {
   isAvailable: () => apiKey() !== null,
 
   async search(query, filters, limit) {
-    const { gameVersion } = filters
+    const { gameVersion, offset } = filters
+    const kind: ContentKind = filters.kind ?? 'plugin'
     const params = new URLSearchParams({
       gameId: String(MINECRAFT_GAME_ID),
-      classId: String(BUKKIT_PLUGINS_CLASS_ID),
+      classId: String(CLASS_ID_BY_KIND[kind]),
       pageSize: String(limit),
+      index: String(offset ?? 0),
       sortField: query ? '2' : '6', // 2 = popularity-weighted relevance, 6 = total downloads
       sortOrder: 'desc'
     })
@@ -76,7 +119,17 @@ export const curseForgeProvider: PluginProvider = {
         downloads: mod.downloadCount ?? 0,
         author: mod.authors?.[0]?.name ?? 'Unknown',
         sourceUrl: mod.links?.websiteUrl ?? `https://www.curseforge.com/minecraft/bukkit-plugins`,
-        categories: (mod.categories ?? []).map((c) => c.name)
+        categories: (mod.categories ?? []).map((c) => c.name),
+        kind,
+        gameVersions: [
+          ...new Set(
+            (mod.latestFilesIndexes ?? [])
+              .map((f) => f.gameVersion)
+              .filter((v): v is string => Boolean(v))
+          )
+        ],
+        platforms: platformsFor(mod, kind),
+        updatedAt: mod.dateModified ?? null
       })
     )
   },

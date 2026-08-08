@@ -13,6 +13,7 @@ import type {
 import { addOnFolder } from '../../types/index'
 import { downloadFile } from '../downloadFile'
 import type { PluginProvider } from './provider'
+import { judgeCompatibility } from './compatibility'
 import { modrinthProvider } from './modrinth'
 import { hangarProvider } from './hangar'
 import { spigetProvider } from './spiget'
@@ -50,7 +51,12 @@ export async function searchPlugins(query: PluginSearchQuery): Promise<PluginSea
       try {
         const results = await provider.search(
           query.query,
-          { gameVersion: query.gameVersion, loader: query.loader },
+          {
+            gameVersion: query.gameVersion,
+            loader: query.loader,
+            offset: query.offset ?? 0,
+            kind: query.kind
+          },
           limit
         )
         return { source, error: null, results }
@@ -70,11 +76,37 @@ export async function searchPlugins(query: PluginSearchQuery): Promise<PluginSea
     }
   }
 
+  const merged = query.mergeSources === false ? interleaved : mergeByIdentity(interleaved)
+
+  // Judged before filtering so the verdict is on every result either way —
+  // a card that stays visible still needs to be able to explain itself.
+  const target =
+    query.serverType && query.gameVersion
+      ? { serverType: query.serverType, minecraftVersion: query.gameVersion }
+      : null
+  const judged = target
+    ? merged.map((result) => ({ ...result, compatibility: judgeCompatibility(result, target) }))
+    : merged
+
+  // Only ever drops results a source gave us enough information to rule out.
+  // Hiding something merely unproven would quietly bury working content, which
+  // is worse than the mislabelling this feature exists to fix.
+  const visible = query.hideIncompatible
+    ? judged.filter((r) => r.compatibility?.compatible !== false || !r.compatibility?.certain)
+    : judged
+
   return {
-    results: query.mergeSources === false ? interleaved : mergeByIdentity(interleaved),
+    results: rankResults(visible, query.query),
     errors: settled
       .filter((s) => s.error !== null)
       .map((s) => ({ source: s.source, message: s.error as string }))
+    ,
+    // No source here reports a reliable total, and the ones that do count
+    // different things. A source filling its page is the only honest signal
+    // that asking again might return more.
+    hasMore: settled.some((s) => s.results.length >= limit),
+    nextOffset: (query.offset ?? 0) + limit,
+    filteredOut: judged.length - visible.length
   }
 }
 
@@ -213,4 +245,58 @@ export async function uninstallPlugin(
   filename: string
 ): Promise<void> {
   await rm(join(addOnsDir(instancePath, serverType), filename), { force: true })
+}
+
+
+/**
+ * Orders results the way someone searching actually expects.
+ *
+ * Interleaving alone gives every source a fair share of the top rows, but it
+ * says nothing about which entries are *good*: a search for "essentials"
+ * would put an exact match below whatever happened to be first from another
+ * source. Ranking sorts across the interleaved set once, so relevance wins
+ * while ties still spread across sources rather than clumping.
+ *
+ * Downloads are the tiebreaker rather than the signal. They vary by orders of
+ * magnitude between sources — SpigotMC counts differently from Modrinth — so
+ * they decide between comparably-relevant entries and nothing more.
+ */
+export function rankResults(results: PluginSearchResult[], query: string): PluginSearchResult[] {
+  const term = query.trim().toLowerCase()
+  if (!term) return results
+
+  const scored = results.map((result, index) => ({
+    result,
+    // Original position preserved so equal scores keep the interleaved order.
+    index,
+    score: relevance(result, term)
+  }))
+
+  return scored
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.result)
+}
+
+function relevance(result: PluginSearchResult, term: string): number {
+  const name = result.name.toLowerCase()
+  if (name === term) return 100
+
+  if (name.startsWith(term)) {
+    // "Chunk Loader" and "Chunky" both start with "chunk", so a prefix test
+    // alone cannot separate them. Whether the match ends on a word boundary
+    // is what distinguishes the plugin actually named after the term from one
+    // that merely begins with the same letters.
+    const next = name.charAt(term.length)
+    return next === '' || /[^a-z0-9]/.test(next) ? 85 : 75
+  }
+
+  // Whole-word hit anywhere in the name.
+  if (new RegExp(`\\b${escapeRegex(term)}\\b`).test(name)) return 60
+  if (name.includes(term)) return 40
+  if (result.summary.toLowerCase().includes(term)) return 20
+  return 0
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

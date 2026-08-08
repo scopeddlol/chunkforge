@@ -45,6 +45,14 @@ export {
   getProvider
 } from './services/plugins/pluginRegistry'
 export { searchModpacks, listModpackVersions } from './services/plugins/modpacks'
+export { listGameVersions } from './services/plugins/gameVersions'
+export {
+  judgeCompatibility,
+  platformsForServer,
+  toPlatform,
+  versionMatches,
+  type CompatibilityTarget
+} from './services/plugins/compatibility'
 export { installModpack, readModpackTarget, loaderToServerType } from './services/modpackService'
 
 // Files, players, backups, stats

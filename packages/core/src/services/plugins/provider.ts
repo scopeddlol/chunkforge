@@ -1,9 +1,17 @@
-import type { PluginSearchResult, PluginSource, PluginVersion } from '../../types/index'
+import type { ContentKind, PluginSearchResult, PluginSource, PluginVersion } from '../../types/index'
 
 export interface SearchFilters {
   gameVersion?: string
   /** Loader id such as "paper" or "fabric"; ignored by sources that don't model it. */
   loader?: string
+  /**
+   * Results to skip. Sources paginate by offset, page number or cursor; each
+   * provider converts this to whatever its API wants so callers only ever
+   * think in offsets.
+   */
+  offset?: number
+  /** Restricts to one content kind. Omit to let the provider decide. */
+  kind?: ContentKind
 }
 
 export interface PluginProvider {
