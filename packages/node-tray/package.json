@@ -1,7 +1,7 @@
 {
   "name": "@chunkforge/node-tray",
   "version": "0.6.0",
-  "description": "Chunkforge Node for Windows — the node service with a setup window and a tray icon",
+  "description": "Chunkforge Node for Windows \u2014 the node service with a setup window and a tray icon",
   "main": "./out/main/index.js",
   "author": "Chunkforge",
   "homepage": "https://github.com/scopeddlol/chunkforge",
@@ -12,8 +12,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build:win": "electron-vite build && electron-builder --win --publish never",
-    "release:win": "electron-vite build && electron-builder --win --publish always"
+    "build:win": "electron-vite build",
+    "release:win": "electron-vite build"
   },
   "dependencies": {
     "@chunkforge/api": "*",
@@ -35,7 +35,6 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
     "electron": "^32.2.0",
-    "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

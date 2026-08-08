@@ -1,7 +1,7 @@
 {
   "name": "chunkforge-monorepo",
   "version": "0.6.0",
-  "description": "Chunkforge — self-hostable Minecraft server platform",
+  "description": "Chunkforge \u2014 self-hostable Minecraft server platform",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -20,7 +20,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build:win": "npm run build:win --workspace @chunkforge/desktop",
-    "build:win:node": "npm run build:win --workspace @chunkforge/node-tray",
+    "build:win:node": "npm run build:win --workspace @chunkforge/node-tray && npm exec --workspace @chunkforge/desktop -- electron-builder --win --publish never --projectDir ../node-tray",
     "build:web": "npm run build --workspace @chunkforge/web",
     "build:portal": "npm run build --workspace @chunkforge/portal",
     "build:image:portal": "docker build -f Dockerfile.portal -t chunkforge-portal:local .",
@@ -28,17 +28,20 @@
     "build:image:node": "docker build -f Dockerfile.node -t chunkforge-node:local .",
     "build:images": "npm run build:image:portal && npm run build:image:web && npm run build:image:node",
     "release:win": "npm run release:win --workspace @chunkforge/desktop",
-    "release:win:node": "npm run release:win --workspace @chunkforge/node-tray",
+    "release:win:node": "npm run release:win --workspace @chunkforge/node-tray && npm exec --workspace @chunkforge/desktop -- electron-builder --win --publish always --projectDir ../node-tray",
     "api": "npm run dev --workspace @chunkforge/api",
     "portal": "npm run start --workspace @chunkforge/portal",
     "web": "npm run start --workspace @chunkforge/web"
-  },
-  "overrides": {
-    "app-builder-bin": "5.0.0-alpha.13"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
     "app-builder-bin": "5.0.0-alpha.13",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "7zip-bin": "~5.2.0"
+  },
+  "overrides": {
+    "app-builder-bin": "5.0.0-alpha.13"
   }
 }
