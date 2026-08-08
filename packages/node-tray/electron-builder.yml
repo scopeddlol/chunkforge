@@ -7,6 +7,14 @@ copyright: Chunkforge
 # is the supported escape hatch. Keep it in step with the electron devDependency.
 electronVersion: 32.3.3
 
+# electron-builder's rebuild pass runs npm with --omit=dev against the shared
+# workspace root before packaging, which prunes the very binaries it then
+# shells out to (7za, app-builder) and dies on the first one it needs. Nothing
+# here has native code to rebuild — sharp ships prebuilds — so the pass buys
+# nothing and is turned off. Production dependencies are still collected into
+# the asar; only the rebuild-and-reinstall step is skipped.
+npmRebuild: false
+
 directories:
   buildResources: build
   output: release
