@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/web",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Chunkforge Web — the Chunkforge UI in Docker, optionally with a node packaged in",
   "private": true,
   "type": "module",

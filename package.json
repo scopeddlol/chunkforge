@@ -1,6 +1,6 @@
 {
   "name": "chunkforge-monorepo",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Chunkforge — self-hostable Minecraft server platform",
   "private": true,
   "type": "module",

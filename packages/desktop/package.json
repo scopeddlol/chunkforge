@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/desktop",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Chunkforge desktop shell",
   "main": "./out/main/index.js",
   "author": "Chunkforge",

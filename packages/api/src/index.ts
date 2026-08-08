@@ -138,7 +138,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   // until someone reopened the Portal settings page to reconnect it by hand.
   if (isPortalLinked()) startPortalEventRelay()
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.5.1' }))
+  app.get('/api/health', async () => ({ ok: true, version: '0.5.2' }))
 
   if (serveWebUi) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))
