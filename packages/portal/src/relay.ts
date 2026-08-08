@@ -6,9 +6,11 @@ import {
   isTrafficFrame,
   type AgentRequestFrame,
   type AgentResponseFrame,
+  type EventPushFrame,
   type PortalFrame,
   type TrafficFrame
 } from './protocol'
+import { portalStore } from './store'
 import type { PortalTunnel, TunnelProtocol } from './types'
 
 /** The subset of a ws socket the relay needs; keeps this file free of ws types. */
@@ -30,7 +32,18 @@ interface PendingAgentCall {
   timer: ReturnType<typeof setTimeout>
 }
 
-const AGENT_TIMEOUT_MS = 30_000
+/**
+ * How long Portal waits for a node to answer a forwarded API call.
+ *
+ * This has to cover the slowest real request that goes through it, not the
+ * typical one — creating a server means the node downloading a Java runtime
+ * and a server jar, sometimes compiling Spigot from source, all before it can
+ * answer. 30 seconds was tuned for a status check and silently killed every
+ * creation that took longer, which is nearly all of them: the node kept
+ * building the server after Portal gave up, so the caller saw a failure for a
+ * server that then finished successfully with nothing pointing at it.
+ */
+const AGENT_TIMEOUT_MS = 10 * 60_000
 const UDP_SESSION_TTL_MS = 60_000
 
 /**
@@ -49,6 +62,8 @@ class PortalRelay {
   private readonly udpPeers = new Map<string, { address: string; port: number; lastUsedAt: number }>()
   private readonly pendingAgentCalls = new Map<string, PendingAgentCall>()
   private readonly agentReady = new Set<string>()
+  /** One socket per control plane, kept open only to carry pushed events downstream. */
+  private readonly clientEventSockets = new Map<string, NodeSocket>()
   private reaper: ReturnType<typeof setInterval> | null = null
 
   private key(protocol: TunnelProtocol, publicPort: number): string {
@@ -84,6 +99,25 @@ class PortalRelay {
     socket.on('error', drop)
 
     this.ensureReaper()
+  }
+
+  // ---- client event channel ----
+
+  /**
+   * The socket a control plane holds open purely to receive events its
+   * claimed nodes push up. It carries nothing else — requests still go
+   * through the ordinary HTTP agent routes — so losing it only means events
+   * go unseen until it reconnects, never a failed request.
+   */
+  registerClientEventSocket(clientId: string, socket: NodeSocket): void {
+    this.clientEventSockets.get(clientId)?.close(1012, 'Replaced by a newer connection')
+    this.clientEventSockets.set(clientId, socket)
+
+    const drop = (): void => {
+      if (this.clientEventSockets.get(clientId) === socket) this.clientEventSockets.delete(clientId)
+    }
+    socket.on('close', drop)
+    socket.on('error', drop)
   }
 
   isNodeConnected(nodeId: string): boolean {
@@ -316,7 +350,25 @@ class PortalRelay {
       pending.resolve(frame)
       return
     }
+    if (frame.type === 'event-push') {
+      this.forwardEventPush(nodeId, frame)
+      return
+    }
     if (isTrafficFrame(frame)) this.handleTrafficFrame(nodeId, frame)
+  }
+
+  /**
+   * Hands a node's pushed event to whichever control plane currently has that
+   * node claimed. An unclaimed or unwatched node's events are simply dropped —
+   * there is nobody to show them to, and a node cannot know on its own whether
+   * anyone is watching, so it pushes unconditionally and Portal is where that
+   * gets decided.
+   */
+  private forwardEventPush(nodeId: string, frame: EventPushFrame): void {
+    const node = portalStore.findNode(nodeId)
+    const clientId = node?.claimedByClientId
+    if (!clientId) return
+    this.clientEventSockets.get(clientId)?.send(JSON.stringify(frame))
   }
 
   private handleTrafficFrame(nodeId: string, frame: TrafficFrame): void {
@@ -379,6 +431,8 @@ class PortalRelay {
     for (const socket of this.sockets.values()) socket.close(1001, 'Portal shutting down')
     this.sockets.clear()
     this.agentReady.clear()
+    for (const socket of this.clientEventSockets.values()) socket.close(1001, 'Portal shutting down')
+    this.clientEventSockets.clear()
   }
 }
 

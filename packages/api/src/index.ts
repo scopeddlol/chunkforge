@@ -4,7 +4,13 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cookie from '@fastify/cookie'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
-import { configureDataRoot, ensureChunkforgeDirs, loadSettings, runMigrations } from '@chunkforge/core'
+import {
+  configureDataRoot,
+  ensureChunkforgeDirs,
+  isPortalLinked,
+  loadSettings,
+  runMigrations
+} from '@chunkforge/core'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { authStore } from './auth/store'
@@ -18,6 +24,7 @@ import { registerFileHubRoutes } from './routes/filehub'
 import { attachCoreEvents, registerEventSocket } from './events'
 import { registerCors } from './cors'
 import { registerNodeForwarding } from './nodeForwarding'
+import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
 
 export interface CoreApiOptions {
   /** Where instances, runtimes, and settings live. */
@@ -126,6 +133,10 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   await registerEventSocket(app)
 
   attachCoreEvents()
+  // Resumes the live event link on every boot, not only right after pairing —
+  // otherwise a panel restart would leave every remote server looking frozen
+  // until someone reopened the Portal settings page to reconnect it by hand.
+  if (isPortalLinked()) startPortalEventRelay()
 
   app.get('/api/health', async () => ({ ok: true, version: '0.5.1' }))
 
@@ -159,6 +170,7 @@ export async function startCoreApi(options: CoreApiOptions): Promise<RunningCore
     url: `http://${host}:${boundPort}`,
     sessionToken: options.localOwner ? await createLocalOwnerSession() : undefined,
     close: async () => {
+      stopPortalEventRelay()
       await app.close()
     }
   }

@@ -13,6 +13,7 @@ import {
   type PortalSettings
 } from '@chunkforge/core'
 import { PortalClient } from '@chunkforge/portal/client'
+import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
 
 /**
  * This Chunkforge's link to its Portal.
@@ -43,7 +44,7 @@ export async function connectToPortal(
   await savePortalStatus({ portalUrl: trimmed, connectionStatus: 'connecting', lastError: undefined })
   try {
     const redeemed = await new PortalClient({ baseUrl: trimmed }).client.redeem(pin, name, kind)
-    return await savePortalStatus({
+    const status = await savePortalStatus({
       enabled: true,
       portalUrl: trimmed,
       clientId: redeemed.clientId,
@@ -53,6 +54,11 @@ export async function connectToPortal(
       connectedAt: new Date().toISOString(),
       lastError: undefined
     })
+    // Live events from any node this control plane later claims arrive over
+    // this same link, so it opens the moment pairing succeeds rather than
+    // waiting for the first node to be adopted.
+    startPortalEventRelay()
+    return status
   } catch (err) {
     const message = (err as Error).message
     await savePortalStatus({ connectionStatus: 'disconnected', lastError: message })
@@ -61,6 +67,7 @@ export async function connectToPortal(
 }
 
 export async function disconnectFromPortal(): Promise<PortalSettings> {
+  stopPortalEventRelay()
   return clearPortalLink()
 }
 

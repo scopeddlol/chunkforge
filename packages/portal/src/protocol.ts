@@ -17,7 +17,12 @@ import type { TunnelProtocol } from './types'
  * Portal.
  */
 
-export type PortalFrame = TrafficFrame | AgentRequestFrame | AgentResponseFrame | AgentReadyFrame
+export type PortalFrame =
+  | TrafficFrame
+  | AgentRequestFrame
+  | AgentResponseFrame
+  | AgentReadyFrame
+  | EventPushFrame
 
 export interface TrafficFrame {
   type: 'tcp-open' | 'tcp-data' | 'tcp-end' | 'udp-message'
@@ -64,6 +69,23 @@ export interface AgentResponseFrame {
 export interface AgentReadyFrame {
   type: 'agent-ready'
   ready: boolean
+}
+
+/**
+ * node → Portal → the control plane that claimed it: an unsolicited live
+ * event, forwarded whole.
+ *
+ * This is what makes a remote server behave like a local one instead of a
+ * frozen snapshot — console output, status changes, and player joins on a
+ * node otherwise never leave it, since nothing else ever asks. Portal never
+ * inspects `event` — it only knows which claiming client's socket to hand it
+ * to, so the shape is agreed entirely between the node (which got it from its
+ * own embedded Core API) and that client (which re-broadcasts it to its own
+ * UI exactly as if it had come from a local server).
+ */
+export interface EventPushFrame {
+  type: 'event-push'
+  event: unknown
 }
 
 export function isTrafficFrame(frame: PortalFrame): frame is TrafficFrame {

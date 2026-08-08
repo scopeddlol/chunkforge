@@ -98,6 +98,15 @@ class PortalLink {
   private retryDelayMs = 1000
   private readonly tcpUpstreams = new Map<string, net.Socket>()
   private readonly udpUpstreams = new Map<string, dgram.Socket>()
+  /**
+   * The node's own connection to its own Core API's live event stream — the
+   * same one a browser tab on this machine would open. Piping it up the
+   * Portal channel is what lets a remote server's console, status, and
+   * players stay live instead of frozen at whatever they were when the UI
+   * last happened to ask.
+   */
+  private localEvents: WebSocket | null = null
+  private localEventsRetryMs = 1000
 
   constructor(
     private readonly portal: PortalClient,
@@ -117,6 +126,7 @@ class PortalLink {
       // saying so on every reconnect avoids a window where the UI sees the node
       // as up but unmanageable.
       this.send({ type: 'agent-ready', ready: true })
+      this.connectLocalEvents()
     }
 
     socket.onmessage = (event) => {
@@ -145,6 +155,7 @@ class PortalLink {
   close(): void {
     this.closed = true
     this.socket?.close()
+    this.localEvents?.close()
     this.dropUpstreams()
   }
 
@@ -152,12 +163,48 @@ class PortalLink {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(frame))
   }
 
+  /**
+   * Opens the node's own event stream and re-sends every frame from it up the
+   * Portal channel, wrapped as `event-push`. Reconnects on its own — this
+   * socket outliving the Core API's occasional hiccups matters more than a
+   * simple implementation, since a silently-dead events link is a remote
+   * server that looks frozen with no error to explain why.
+   */
+  private connectLocalEvents(): void {
+    if (this.closed || this.localEvents) return
+    const url = `${this.coreApi.url.replace(/^http/, 'ws')}/api/events?token=${encodeURIComponent(this.coreApi.sessionToken ?? '')}`
+    const socket = new WebSocket(url)
+    this.localEvents = socket
+
+    socket.onopen = () => {
+      this.localEventsRetryMs = 1000
+    }
+    socket.onmessage = (event) => {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(String(event.data))
+      } catch {
+        return
+      }
+      this.send({ type: 'event-push', event: parsed })
+    }
+    socket.onclose = () => {
+      this.localEvents = null
+      if (this.closed) return
+      setTimeout(() => this.connectLocalEvents(), this.localEventsRetryMs)
+      this.localEventsRetryMs = Math.min(this.localEventsRetryMs * 2, 30_000)
+    }
+    socket.onerror = () => socket.close()
+  }
+
   private handleFrame(frame: PortalFrame): void {
     if (frame.type === 'agent-request') {
       void this.runAgentRequest(frame)
       return
     }
-    if (frame.type === 'agent-response' || frame.type === 'agent-ready') return
+    // 'event-push' only ever flows node → Portal; a node has nothing to do
+    // with one arriving, but it must not fall through to traffic handling.
+    if (frame.type === 'agent-response' || frame.type === 'agent-ready' || frame.type === 'event-push') return
     this.handleTraffic(frame)
   }
 

@@ -127,6 +127,9 @@ export class PortalClient {
         { pin, name, kind }
       ),
     status: () => this.request<PortalClientStatus>('/api/client/status'),
+    /** Held open for the life of the Portal link; carries pushed events only. */
+    channelUrl: (token: string) =>
+      `${toWebSocketUrl(this.baseUrl)}/api/client/channel?token=${encodeURIComponent(token)}`,
     nodes: () => this.request<PortalNodeView[]>('/api/client/nodes'),
     claimNode: (nodeId: string) => this.post<PortalNodeView>(`/api/client/nodes/${nodeId}/claim`),
     releaseNode: (nodeId: string) => this.post<PortalNodeView>(`/api/client/nodes/${nodeId}/release`),

@@ -343,14 +343,21 @@ In Docker, `/data` holds the same layout. Chunkforge Web separates `panel/` from
 ## Status
 
 The Portal and node runtime is young. Working today: pairing, node adoption,
-automatic subdomain allocation with the DNS records to publish, the TCP/UDP
-relay, and full remote management through the Portal channel.
+automatic subdomain allocation (renameable after the fact, and written
+directly to Cloudflare when connected), the TCP/UDP relay, and full remote
+management through the Portal channel — including live console output,
+status, and player lists, which reach a remote server the same way they reach
+a local one: the node's own Core API broadcasts its events exactly as it
+always did, and one more hop relays that broadcast up through Portal to
+whichever control plane claimed it. Nothing downstream of that — the console,
+the dashboard, the players tab — knows or cares whether a server is local or
+500 miles away.
 
 TLS for the control surface is handled by the bundled Caddy proxy.
 
-Not yet built: writing DNS records automatically through a provider API, TLS on
-the allocated *player* routes (Minecraft is not HTTP, so the proxy cannot help
-there), and scheduling logic that picks a node for you rather than asking.
+Not yet built: scheduling logic that picks a node for you rather than asking,
+and parallelising the download steps of server creation (Java runtime and
+server jar currently fetch one after the other).
 
 ## Tech
 

@@ -235,4 +235,25 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
       }
     }
   )
+
+  /**
+   * The event channel. A control plane holds this open the whole time it is
+   * linked, and nodes it has claimed push their live events down it — console
+   * lines, status changes, player joins — the same events those nodes' own
+   * Core APIs broadcast locally. Nothing is requested over this socket; it
+   * only ever receives.
+   */
+  app.get('/api/client/channel', { websocket: true }, (connection, request) => {
+    const socket = (
+      connection && typeof connection === 'object' && 'socket' in connection
+        ? (connection as { socket: unknown }).socket
+        : connection
+    ) as Parameters<typeof portalRelay.registerClientEventSocket>[1]
+
+    if (!request.portalClientId) {
+      socket.close(1008, 'Client token required')
+      return
+    }
+    portalRelay.registerClientEventSocket(request.portalClientId, socket)
+  })
 }
