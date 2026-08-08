@@ -1,8 +1,26 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, dialog, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { startCoreApi, type RunningCoreApi } from '@chunkforge/api'
 import { registerNativeIpcHandlers } from './ipc/native'
+
+/**
+ * A failure here before the window exists is otherwise invisible: Electron
+ * does not crash or print anywhere a double-click launch can see, so the
+ * process just sits alive in Task Manager forever with nothing on screen and
+ * no way to tell why. A missing dependency in a packaged build is exactly the
+ * kind of thing that only shows up this way — showing a real dialog and
+ * exiting turns that into a bug report instead of a support ticket.
+ */
+function reportFatalStartupError(error: unknown): void {
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
+  console.error('Chunkforge failed to start:', message)
+  dialog.showErrorBox('Chunkforge failed to start', message)
+  app.exit(1)
+}
+
+process.on('uncaughtException', reportFatalStartupError)
+process.on('unhandledRejection', reportFatalStartupError)
 
 // Lets tooling attach to the renderer during development for real diagnostics
 // (CDP screenshots, DOM inspection) instead of guessing at rendering issues.
@@ -77,7 +95,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
-})
+}).catch(reportFatalStartupError)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
