@@ -11,7 +11,7 @@ import type { InstanceSummary } from '@shared/types'
  * — saying so is better than printing a port nobody can connect to.
  */
 export type ServerAddress =
-  | { kind: 'portal'; value: string }
+  | { kind: 'portal'; value: string; fallback?: string }
   | { kind: 'direct'; value: string }
   | { kind: 'none' }
 
@@ -22,8 +22,17 @@ export function resolveServerAddress(
   > & { port?: number }
 ): ServerAddress {
   if (instance.portalHostname) {
+    // Bare hostname. Portal publishes a Minecraft SRV record alongside every
+    // subdomain, and the client reads the port out of it, so the port is
+    // Portal's business and not something anyone should have to type. It is
+    // still returned as `fallback` for the one case that needs it: a zone
+    // whose SRV record has not been published yet.
     const port = instance.portalPublicPort
-    return { kind: 'portal', value: port ? `${instance.portalHostname}:${port}` : instance.portalHostname }
+    return {
+      kind: 'portal',
+      value: instance.portalHostname,
+      fallback: port ? `${instance.portalHostname}:${port}` : undefined
+    }
   }
 
   const isRemote = Boolean(instance.nodeId && instance.nodeId !== 'local')

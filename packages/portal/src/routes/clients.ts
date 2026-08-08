@@ -14,7 +14,7 @@ import { hasClaimed, nodeClaimants, setClaimants } from '../nodeClaims'
 import { portalRelay } from '../relay'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
-import type { ClientKind, PortalClientRecord, TunnelProtocol } from '../types'
+import type { ClientKind, PortalClientRecord, PortalNode, TunnelProtocol } from '../types'
 
 /**
  * The control-plane-facing surface: what Chunkforge Desktop and Chunkforge Web
@@ -121,6 +121,56 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
       )
       await portalStore.upsertNode(node)
       return toNodeView(node, request.portalClientId)
+    }
+  )
+
+  /**
+   * Registers the calling control plane's own machine as a node.
+   *
+   * A subdomain only works if Portal has somewhere to relay traffic to, and
+   * that means an outbound socket. A node paired the usual way has one; a
+   * desktop install running servers on the machine you are sitting at does
+   * not, which is why local servers could never be given an address. This
+   * hands that control plane node credentials so it can open the same socket,
+   * and claims the node for it in the same step — you do not adopt your own
+   * computer.
+   *
+   * Issues fresh credentials each time and replaces any previous self-node for
+   * this control plane, because the token is only ever returned once and a
+   * caller that lost it needs a way back without stranding a node record.
+   */
+  app.post<{ Body: { name?: string } }>(
+    '/api/client/self-node',
+    { preHandler: requireClient },
+    async (request, reply) => {
+      const clientId = request.portalClientId
+      if (!clientId) return reply.code(401).send({ error: 'Sign in required.' })
+
+      const previous = portalStore
+        .nodes()
+        .find((node) => node.selfNodeForClientId === clientId)
+      const token = newToken()
+      const now = new Date().toISOString()
+      const node: PortalNode = {
+        // Keeping the id across re-registrations means servers already
+        // allocated against this node keep resolving.
+        id: previous?.id ?? randomUUID(),
+        name: request.body?.name?.trim() || previous?.name || 'This machine',
+        tokenHash: hashToken(token),
+        status: 'offline',
+        pairedAt: previous?.pairedAt ?? now,
+        lastSeenAt: now,
+        tunnels: previous?.tunnels ?? [],
+        selfNodeForClientId: clientId
+      }
+      setClaimants(node, [...nodeClaimants(previous ?? node), clientId])
+      await portalStore.upsertNode(node)
+      broadcastPortal({ type: 'node-updated', payload: toNodeView(node, clientId) })
+      return {
+        nodeId: node.id,
+        nodeToken: token,
+        zoneSuffix: portalStore.config().zoneSuffix
+      }
     }
   )
 

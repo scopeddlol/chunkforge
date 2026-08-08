@@ -57,16 +57,57 @@ export async function startNodeAgent(options: NodeAgentOptions): Promise<Running
   console.log(`Node Core API listening on ${coreApi.url}`)
 
   const identity = await establishIdentity(portal, options)
-  portal.setToken(identity.nodeToken)
+  const running = attachNodeLink({
+    portalUrl: options.portalUrl,
+    nodeId: identity.nodeId,
+    nodeToken: identity.nodeToken,
+    dataRoot: options.dataRoot,
+    coreApi,
+    heartbeatIntervalMs
+  })
 
-  const link = new PortalLink(portal, identity.nodeToken, coreApi)
+  return {
+    nodeId: identity.nodeId,
+    close: async () => {
+      await running.close()
+      await coreApi.close()
+    }
+  }
+}
+
+export interface NodeLinkOptions {
+  portalUrl: string
+  nodeId: string
+  nodeToken: string
+  /** Used for the disk figures in heartbeats. */
+  dataRoot: string
+  /** The Core API this link exposes to Portal. Its lifetime is the caller's. */
+  coreApi: RunningCoreApi
+  heartbeatIntervalMs?: number
+}
+
+/**
+ * Opens the Portal socket for an *already running* Core API.
+ *
+ * Split out from `startNodeAgent` so a host that already has a Core API can
+ * become a node without starting a second one. Chunkforge Desktop uses this:
+ * it registers its own machine with Portal and attaches this link, which is
+ * what lets a server running on the machine you are sitting at be given a
+ * subdomain like any other. Only the socket belongs to this function — the
+ * Core API is closed by whoever created it.
+ */
+export function attachNodeLink(options: NodeLinkOptions): { nodeId: string; close: () => Promise<void> } {
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000
+  const portal = new PortalClient({ baseUrl: options.portalUrl, token: options.nodeToken })
+
+  const link = new PortalLink(portal, options.nodeToken, options.coreApi)
   link.connect()
 
   // Announce nothing up front. Routes are created by Portal when Chunkforge
   // allocates a subdomain for a server, and pushed down on connect — a node
   // guessing at port 25565 was how the old build ended up with tunnels nobody
   // asked for.
-  await portal.node.announceTunnels([]).catch((err: Error) => {
+  void portal.node.announceTunnels([]).catch((err: Error) => {
     console.error(`Could not announce tunnels: ${err.message}`)
   })
 
@@ -75,17 +116,17 @@ export async function startNodeAgent(options: NodeAgentOptions): Promise<Running
     const stats = await sampleStats(options.dataRoot)
     await portal.node.heartbeat({ ...stats, latencyMs: Date.now() - startedAt }, true)
   }
-  await beat().catch((err: Error) => console.error(`First heartbeat failed: ${err.message}`))
+  void beat().catch((err: Error) => console.error(`First heartbeat failed: ${err.message}`))
   const timer = setInterval(() => {
     void beat().catch((err: Error) => console.error(`Heartbeat failed: ${err.message}`))
   }, heartbeatIntervalMs)
+  timer.unref?.()
 
   return {
-    nodeId: identity.nodeId,
+    nodeId: options.nodeId,
     close: async () => {
       clearInterval(timer)
       link.close()
-      await coreApi.close()
     }
   }
 }

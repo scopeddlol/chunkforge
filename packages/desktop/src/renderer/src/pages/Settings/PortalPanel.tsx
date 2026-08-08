@@ -69,6 +69,8 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
   )
 
   const linked = portal.connectionStatus === 'connected' && Boolean(portal.clientId)
+  const [hostBusy, setHostBusy] = useState(false)
+  const [hostError, setHostError] = useState<string | null>(null)
 
   async function connect(): Promise<void> {
     setBusy(true)
@@ -81,6 +83,18 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
       setError(err instanceof Error ? err.message : 'Could not pair with that Portal.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function setHostLocally(enabled: boolean): Promise<void> {
+    setHostBusy(true)
+    setHostError(null)
+    try {
+      onPatch({ portal: await api().portal.hostLocally(enabled) })
+    } catch (err) {
+      setHostError(err instanceof Error ? err.message : 'Could not change hosting for this machine.')
+    } finally {
+      setHostBusy(false)
     }
   }
 
@@ -180,6 +194,19 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
         On by default. Turning it off means servers created on nodes have no public address until you
         provision one by hand from the server's Settings tab.
       </Text>
+
+      <Switch
+        label="Host servers on this machine"
+        disabled={!linked || hostBusy}
+        checked={Boolean(portal.hostServersLocally)}
+        onChange={(_, data) => void setHostLocally(data.checked)}
+      />
+      <Text size={200} className={styles.muted}>
+        Offers this computer to your Portal as a node, so servers you run here get a subdomain like
+        any other. Portal reaches them through the same outbound connection a remote node uses — no
+        port forwarding, and nothing listening on your router.
+      </Text>
+      {hostError && <Text className={styles.error}>{hostError}</Text>}
     </div>
   )
 }

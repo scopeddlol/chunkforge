@@ -1,7 +1,13 @@
 import os from 'os'
 import { startNodeAgent, type RunningNodeAgent } from './agent'
 
-export { startNodeAgent, type NodeAgentOptions, type RunningNodeAgent } from './agent'
+export {
+  startNodeAgent,
+  attachNodeLink,
+  type NodeAgentOptions,
+  type NodeLinkOptions,
+  type RunningNodeAgent
+} from './agent'
 
 /**
  * Starts a node from environment variables.

@@ -306,6 +306,18 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
               return <CopyableAddress address={address.value} size={300} />
             })()}
           </div>
+          <div>
+            {(() => {
+              const address = resolveServerAddress(draft)
+              if (address.kind !== 'portal' || !address.fallback) return null
+              return (
+                <Text size={200} className={styles.pathText}>
+                  Players connect with just the name above. If your zone&apos;s SRV record is not
+                  published yet, {address.fallback} still works.
+                </Text>
+              )
+            })()}
+          </div>
         </Field>
         {portalLinked && (
           <Field

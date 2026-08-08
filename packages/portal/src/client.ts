@@ -128,6 +128,12 @@ export class PortalClient {
         { pin, name, kind }
       ),
     status: () => this.request<PortalClientStatus>('/api/client/status'),
+    /** Registers this control plane's own machine as a node it can host on. */
+    registerSelfNode: (name?: string) =>
+      this.post<{ nodeId: string; nodeToken: string; zoneSuffix: string }>(
+        '/api/client/self-node',
+        { name }
+      ),
     /** Held open for the life of the Portal link; carries pushed events only. */
     channelUrl: (token: string) =>
       `${toWebSocketUrl(this.baseUrl)}/api/client/channel?token=${encodeURIComponent(token)}`,
