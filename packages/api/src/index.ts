@@ -7,6 +7,7 @@ import websocket from '@fastify/websocket'
 import {
   configureDataRoot,
   ensureChunkforgeDirs,
+  getSettings,
   isPortalLinked,
   loadSettings,
   runMigrations
@@ -25,6 +26,8 @@ import { attachCoreEvents, registerEventSocket } from './events'
 import { registerCors } from './cors'
 import { registerNodeForwarding } from './nodeForwarding'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
+import { refreshPortalStatus } from './portalLink'
+import { setLocalCoreApi, startLocalNodeHosting, stopLocalNodeHosting } from './localNode'
 
 export interface CoreApiOptions {
   /** Where instances, runtimes, and settings live. */
@@ -136,9 +139,16 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   // Resumes the live event link on every boot, not only right after pairing —
   // otherwise a panel restart would leave every remote server looking frozen
   // until someone reopened the Portal settings page to reconnect it by hand.
-  if (isPortalLinked()) startPortalEventRelay()
+  if (isPortalLinked()) {
+    startPortalEventRelay()
+    // The stored status describes the last session, not this one. Re-checking
+    // in the background refreshes the mirrored zone and corrects a status left
+    // reading "connected" by a process that was killed while it was. Detached
+    // from startup on purpose: an unreachable Portal must delay nothing.
+    void refreshPortalStatus().catch(() => undefined)
+  }
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.5.5' }))
+  app.get('/api/health', async () => ({ ok: true, version: '0.6.0' }))
 
   if (serveWebUi) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))
@@ -164,16 +174,30 @@ export async function startCoreApi(options: CoreApiOptions): Promise<RunningCore
   const address = app.server.address()
   const boundPort = typeof address === 'object' && address ? address.port : port
 
-  return {
+  const running: RunningCoreApi = {
     app,
     port: boundPort,
     url: `http://${host}:${boundPort}`,
     sessionToken: options.localOwner ? await createLocalOwnerSession() : undefined,
     close: async () => {
       stopPortalEventRelay()
+      await stopLocalNodeHosting()
       await app.close()
     }
   }
+
+  setLocalCoreApi(running)
+
+  // Needs the listening API, so it happens here rather than during build.
+  // Detached: registering with Portal must never hold up a local boot, and a
+  // machine that cannot reach its Portal still manages its own servers fine.
+  if (getSettings().portal.hostServersLocally) {
+    void startLocalNodeHosting(running).catch((err: Error) =>
+      console.error(`Could not offer this machine to Portal: ${err.message}`)
+    )
+  }
+
+  return running
 }
 
 /**

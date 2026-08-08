@@ -1,5 +1,5 @@
 import { useEffect, useState, type JSX } from 'react'
-import { Badge, Button, Spinner, Text, Title2, makeStyles, tokens } from '@fluentui/react-components'
+import { Badge, Button, Input, Spinner, Text, Title2, makeStyles, tokens } from '@fluentui/react-components'
 import { portalApi } from '../api'
 import { PinPanel } from './PinPanel'
 import type { PortalClientRecord } from '../../../src/types'
@@ -37,8 +37,25 @@ export function ClientsPage(): JSX.Element {
   const styles = useStyles()
   const [clients, setClients] = useState<Omit<PortalClientRecord, 'tokenHash'>[] | null>(null)
 
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [saving, setSaving] = useState(false)
+
   async function refresh(): Promise<void> {
     setClients(await portalApi.clients.list())
+  }
+
+  async function saveName(id: string): Promise<void> {
+    const name = draftName.trim()
+    if (!name) return
+    setSaving(true)
+    try {
+      await portalApi.clients.rename(id, name)
+      setEditingId(null)
+      await refresh()
+    } finally {
+      setSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -79,21 +96,59 @@ export function ClientsPage(): JSX.Element {
         <div className={styles.list}>
           {clients.map((client) => (
             <div key={client.id} className={styles.row}>
-              <Text weight="semibold">{client.name}</Text>
-              <Badge appearance="tint">{client.kind}</Badge>
-              <span className={styles.spacer} />
-              <Text size={200} className={styles.muted}>
-                {client.lastSeenAt
-                  ? `seen ${new Date(client.lastSeenAt).toLocaleString()}`
-                  : `paired ${new Date(client.pairedAt).toLocaleDateString()}`}
-              </Text>
-              <Button
-                size="small"
-                appearance="subtle"
-                onClick={() => void portalApi.clients.remove(client.id).then(refresh)}
-              >
-                Detach
-              </Button>
+              {editingId === client.id ? (
+                <>
+                  <Input
+                    value={draftName}
+                    autoFocus
+                    onChange={(_, data) => setDraftName(data.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void saveName(client.id)
+                      if (event.key === 'Escape') setEditingId(null)
+                    }}
+                  />
+                  <Button
+                    size="small"
+                    appearance="primary"
+                    disabled={saving || !draftName.trim()}
+                    onClick={() => void saveName(client.id)}
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button size="small" appearance="subtle" onClick={() => setEditingId(null)}>
+                    Cancel
+                  </Button>
+                  <span className={styles.spacer} />
+                </>
+              ) : (
+                <>
+                  <Text weight="semibold">{client.name}</Text>
+                  <Badge appearance="tint">{client.kind}</Badge>
+                  <span className={styles.spacer} />
+                  <Text size={200} className={styles.muted}>
+                    {client.lastSeenAt
+                      ? `seen ${new Date(client.lastSeenAt).toLocaleString()}`
+                      : `paired ${new Date(client.pairedAt).toLocaleDateString()}`}
+                  </Text>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    onClick={() => {
+                      setEditingId(client.id)
+                      setDraftName(client.name)
+                    }}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    onClick={() => void portalApi.clients.remove(client.id).then(refresh)}
+                  >
+                    Detach
+                  </Button>
+                </>
+              )}
             </div>
           ))}
         </div>

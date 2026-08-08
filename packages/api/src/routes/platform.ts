@@ -21,6 +21,7 @@ import { requireRole } from '../auth/plugin'
 import { broadcast } from '../events'
 import {
   callNodeAgent,
+  checkDomainLabel,
   claimPortalNode,
   connectToPortal,
   disconnectFromPortal,
@@ -32,6 +33,7 @@ import {
   releasePortalNode,
   renameInstanceDomain
 } from '../portalLink'
+import { startLocalNodeHosting, stopLocalNodeHosting } from '../localNode'
 import { nodeForInstance } from '../remoteInstances'
 
 export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
@@ -151,8 +153,53 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     return portal
   })
 
+  /**
+   * Offers this machine to Portal as a node, or withdraws it. Turning it on is
+   * what lets a server running here be given a subdomain, since Portal needs a
+   * socket to relay players down.
+   */
+  app.post<{ Body: { enabled: boolean } }>(
+    '/api/portal/host-locally',
+    { preHandler: requireRole('admin') },
+    async (request, reply) => {
+      const enabled = Boolean(request.body?.enabled)
+      const portal = getPortalStatus()
+      try {
+        if (enabled) {
+          await saveSettings({ portal: { ...portal, hostServersLocally: true } })
+          await startLocalNodeHosting()
+        } else {
+          await stopLocalNodeHosting()
+          await saveSettings({ portal: { ...portal, hostServersLocally: false } })
+        }
+        const next = getPortalStatus()
+        broadcast({ type: 'portal-status', payload: next })
+        return next
+      } catch (err) {
+        // Leave the flag off if we could not actually start, so the UI never
+        // claims this machine is hosting when Portal never accepted it.
+        await saveSettings({ portal: { ...getPortalStatus(), hostServersLocally: false } })
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
   app.get('/api/portal/domains', { preHandler: requireRole('viewer') }, async () =>
     listPortalDomains()
+  )
+
+  // Asked as the user types a subdomain, so a name that is already spoken for
+  // is called out before a server is created rather than silently suffixed.
+  app.get<{ Querystring: { label?: string; instanceId?: string } }>(
+    '/api/portal/domains/check',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      try {
+        return await checkDomainLabel(request.query.label ?? '', request.query.instanceId)
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
   )
 
   /**

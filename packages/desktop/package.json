@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/desktop",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "Chunkforge desktop shell",
   "main": "./out/main/index.js",
   "author": "Chunkforge",
@@ -29,7 +29,8 @@
     "@fluentui/react-icons": "^2.0.257",
     "electron-updater": "^6.3.9",
     "sharp": "^0.35.3",
-    "zustand": "^4.5.5"
+    "zustand": "^4.5.5",
+    "@chunkforge/node-worker": "*"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",

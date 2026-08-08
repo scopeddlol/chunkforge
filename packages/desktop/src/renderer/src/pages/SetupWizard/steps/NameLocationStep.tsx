@@ -17,6 +17,7 @@ import { accentSwatches, type WizardState } from '../wizardState'
 import { WizardPanel } from '../WizardPanel'
 import { native } from '../../../native'
 import { api } from '../../../api'
+import { useSubdomainAvailability } from '../../../components/useSubdomainAvailability'
 
 const useStyles = makeStyles({
   root: {
@@ -111,6 +112,12 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
   const remoteNodes = nodes.filter((node) => node.kind === 'portal')
   const isRemote = state.nodeId !== 'local'
   const previewLabel = previewDnsLabel(state.subdomainLabel || state.name)
+  // Checked against whatever will actually be requested, which is the typed
+  // label when there is one and the server name otherwise — checking only the
+  // typed box would stay silent for the common case of accepting the default.
+  const { status: availability, checking: checkingLabel } = useSubdomainAvailability(previewLabel, {
+    enabled: isRemote && Boolean(zoneSuffix)
+  })
 
   async function handleBrowse(): Promise<void> {
     const picked = await native().pickFolder('Choose where this server is created')
@@ -176,7 +183,25 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
           <>
             <Field
               label="Subdomain"
-              hint="Leave blank to use the server name. Portal picks the next free one if this is taken."
+              hint="Leave blank to use the server name."
+              validationState={
+                availability && !availability.available
+                  ? 'warning'
+                  : availability?.available
+                    ? 'success'
+                    : 'none'
+              }
+              validationMessage={
+                checkingLabel
+                  ? 'Checking…'
+                  : availability
+                    ? availability.available
+                      ? `${availability.hostname} is available`
+                      : availability.suggestion
+                        ? `${availability.reason} Try ${availability.suggestion}.`
+                        : availability.reason
+                    : undefined
+              }
             >
               <Input
                 value={state.subdomainLabel}

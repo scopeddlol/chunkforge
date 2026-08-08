@@ -12,7 +12,8 @@ services:
     environment:
       CHUNKFORGE_PORTAL_URL: ${CHUNKFORGE_PORTAL_URL}
       # Generated under Portal → Nodes. Single-use and short-lived.
-      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN}
+      # Only needed for the very first start; the node stores its token afterwards.
+      CHUNKFORGE_PAIRING_PIN: ${CHUNKFORGE_PAIRING_PIN:-}
       CHUNKFORGE_NODE_NAME: ${CHUNKFORGE_NODE_NAME:-Chunkforge Node}
       CHUNKFORGE_HEARTBEAT_MS: ${CHUNKFORGE_HEARTBEAT_MS:-15000}
       CHUNKFORGE_DATA: /data

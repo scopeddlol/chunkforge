@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import { getPortalStatus, isPortalLinked } from '@chunkforge/core'
+import { getPortalStatus, isPortalLinked, savePortalStatus } from '@chunkforge/core'
 import { PortalClient } from '@chunkforge/portal/client'
 import type { EventPushFrame } from '@chunkforge/portal/protocol'
 import { broadcast } from './events'
@@ -61,6 +61,12 @@ function connect(): void {
 
   ws.on('open', () => {
     retryDelayMs = 1000
+    // This socket succeeding is the most direct evidence there is that the
+    // Portal link works, so it — not a value written during last run's pairing
+    // — is what the status reflects. A control plane that restarts while its
+    // Portal is down now says so, instead of reporting the "connected" it was
+    // left on and looking wonky until someone reopened the settings page.
+    void markLink('connected')
   })
   ws.on('message', (data: unknown) => {
     let frame: EventPushFrame
@@ -76,6 +82,7 @@ function connect(): void {
   })
   ws.on('close', () => {
     socket = null
+    if (!closed) void markLink('disconnected', 'Lost contact with Portal.')
     if (closed) return
     setTimeout(connect, retryDelayMs).unref?.()
     // A Portal that is restarting or unreachable should not be hit once a
@@ -85,4 +92,28 @@ function connect(): void {
   // Never rethrown: an unreachable Portal is an ordinary condition, and an
   // unhandled 'error' event on a ws socket is a process-level crash.
   ws.on('error', () => ws.close())
+}
+
+/**
+ * Mirrors the live socket's state into stored settings and out to the UI.
+ *
+ * Written only on change: the relay reconnects on a backoff for as long as a
+ * Portal is unreachable, and rewriting the same status on every attempt would
+ * be a settings write and a UI event every few seconds for no new information.
+ */
+async function markLink(
+  connectionStatus: 'connected' | 'disconnected',
+  lastError?: string
+): Promise<void> {
+  try {
+    if (getPortalStatus().connectionStatus === connectionStatus) return
+    const portal = await savePortalStatus({
+      connectionStatus,
+      lastError: connectionStatus === 'connected' ? undefined : lastError
+    })
+    broadcast({ type: 'portal-status', payload: portal })
+  } catch {
+    // Status is a convenience. Failing to record it must never take down the
+    // relay that was reporting it.
+  }
 }

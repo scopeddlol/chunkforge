@@ -1,7 +1,7 @@
 {
   "name": "@chunkforge/node-worker",
-  "version": "0.5.5",
-  "description": "Chunkforge Node — runs servers and reaches Chunkforge through a Portal, with no inbound ports",
+  "version": "0.6.0",
+  "description": "Chunkforge Node \u2014 runs servers and reaches Chunkforge through a Portal, with no inbound ports",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -17,9 +17,11 @@
   "dependencies": {
     "@chunkforge/api": "*",
     "@chunkforge/core": "*",
-    "@chunkforge/portal": "*"
+    "@chunkforge/portal": "*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "@types/ws": "^8.5.13"
   }
 }

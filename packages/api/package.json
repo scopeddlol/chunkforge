@@ -1,7 +1,7 @@
 {
   "name": "@chunkforge/api",
-  "version": "0.5.5",
-  "description": "Chunkforge Core API — HTTP + WebSocket over @chunkforge/core",
+  "version": "0.6.0",
+  "description": "Chunkforge Core API \u2014 HTTP + WebSocket over @chunkforge/core",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -22,7 +22,8 @@
     "@fastify/static": "^8.0.3",
     "@fastify/websocket": "^11.0.1",
     "fastify": "^5.1.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "@chunkforge/node-worker": "*"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",

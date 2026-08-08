@@ -1,4 +1,5 @@
 import os from 'os'
+import WebSocket from 'ws'
 import net from 'net'
 import dgram from 'dgram'
 import { statfs } from 'fs/promises'
@@ -6,11 +7,18 @@ import { startCoreApi, type RunningCoreApi } from '@chunkforge/api'
 import { PortalClient } from '@chunkforge/portal/client'
 import type { AgentRequestFrame, PortalFrame, TrafficFrame } from '@chunkforge/portal/protocol'
 import type { PortalNodeStats, PortalTunnel } from '@chunkforge/portal/types'
+import { loadNodeIdentity, saveNodeIdentity, type NodeIdentity } from './identity'
 
 export interface NodeAgentOptions {
   portalUrl: string
-  pairingPin: string
-  nodeName: string
+  /**
+   * Only needed the first time. Once a node has paired, its stored token is
+   * used and the pin is ignored, so leaving it set in a compose file or a
+   * service config does no harm.
+   */
+  pairingPin?: string
+  /** Defaults to this machine's hostname when omitted. */
+  nodeName?: string
   /** Where instances, runtimes, and settings live on this node. */
   dataRoot: string
   heartbeatIntervalMs?: number
@@ -50,18 +58,58 @@ export async function startNodeAgent(options: NodeAgentOptions): Promise<Running
   })
   console.log(`Node Core API listening on ${coreApi.url}`)
 
-  const redeemed = await portal.node.redeem(options.pairingPin, options.nodeName)
-  portal.setToken(redeemed.nodeToken)
-  console.log(`Paired with Portal as node ${redeemed.nodeId}`)
+  const identity = await establishIdentity(portal, options)
+  const running = attachNodeLink({
+    portalUrl: options.portalUrl,
+    nodeId: identity.nodeId,
+    nodeToken: identity.nodeToken,
+    dataRoot: options.dataRoot,
+    coreApi,
+    heartbeatIntervalMs
+  })
 
-  const link = new PortalLink(portal, redeemed.nodeToken, coreApi)
+  return {
+    nodeId: identity.nodeId,
+    close: async () => {
+      await running.close()
+      await coreApi.close()
+    }
+  }
+}
+
+export interface NodeLinkOptions {
+  portalUrl: string
+  nodeId: string
+  nodeToken: string
+  /** Used for the disk figures in heartbeats. */
+  dataRoot: string
+  /** The Core API this link exposes to Portal. Its lifetime is the caller's. */
+  coreApi: RunningCoreApi
+  heartbeatIntervalMs?: number
+}
+
+/**
+ * Opens the Portal socket for an *already running* Core API.
+ *
+ * Split out from `startNodeAgent` so a host that already has a Core API can
+ * become a node without starting a second one. Chunkforge Desktop uses this:
+ * it registers its own machine with Portal and attaches this link, which is
+ * what lets a server running on the machine you are sitting at be given a
+ * subdomain like any other. Only the socket belongs to this function — the
+ * Core API is closed by whoever created it.
+ */
+export function attachNodeLink(options: NodeLinkOptions): { nodeId: string; close: () => Promise<void> } {
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000
+  const portal = new PortalClient({ baseUrl: options.portalUrl, token: options.nodeToken })
+
+  const link = new PortalLink(portal, options.nodeToken, options.coreApi)
   link.connect()
 
   // Announce nothing up front. Routes are created by Portal when Chunkforge
   // allocates a subdomain for a server, and pushed down on connect — a node
   // guessing at port 25565 was how the old build ended up with tunnels nobody
   // asked for.
-  await portal.node.announceTunnels([]).catch((err: Error) => {
+  void portal.node.announceTunnels([]).catch((err: Error) => {
     console.error(`Could not announce tunnels: ${err.message}`)
   })
 
@@ -70,19 +118,70 @@ export async function startNodeAgent(options: NodeAgentOptions): Promise<Running
     const stats = await sampleStats(options.dataRoot)
     await portal.node.heartbeat({ ...stats, latencyMs: Date.now() - startedAt }, true)
   }
-  await beat().catch((err: Error) => console.error(`First heartbeat failed: ${err.message}`))
+  void beat().catch((err: Error) => console.error(`First heartbeat failed: ${err.message}`))
   const timer = setInterval(() => {
     void beat().catch((err: Error) => console.error(`Heartbeat failed: ${err.message}`))
   }, heartbeatIntervalMs)
+  timer.unref?.()
 
   return {
-    nodeId: redeemed.nodeId,
+    nodeId: options.nodeId,
     close: async () => {
       clearInterval(timer)
       link.close()
-      await coreApi.close()
     }
   }
+}
+
+
+/**
+ * Gets this node a usable Portal credential.
+ *
+ * Reuses the stored one when there is one, and only falls back to redeeming a
+ * pin when there is not — or when the stored token has stopped working, which
+ * is what happens if an operator detaches the node from Portal's own UI. The
+ * stored token is verified with a real authenticated call rather than trusted
+ * on sight, so a revoked credential is discovered here, at startup, instead of
+ * showing up later as a node that appears paired but silently does nothing.
+ */
+async function establishIdentity(
+  portal: PortalClient,
+  options: NodeAgentOptions
+): Promise<NodeIdentity> {
+  const stored = await loadNodeIdentity(options.dataRoot, options.portalUrl)
+  if (stored) {
+    portal.setToken(stored.nodeToken)
+    const usable = await portal.node
+      .heartbeat({ ...(await sampleStats(options.dataRoot)), latencyMs: 0 }, false)
+      .then(() => true)
+      .catch(() => false)
+    if (usable) {
+      console.log(`Reusing stored pairing as node ${stored.nodeId}`)
+      return stored
+    }
+    console.warn('Stored Portal pairing was rejected; re-pairing with the configured pin.')
+    portal.setToken(undefined)
+  }
+
+  const pin = options.pairingPin?.trim()
+  if (!pin) {
+    throw new Error(
+      stored
+        ? 'This node’s pairing was rejected by Portal and no pairing pin is configured to re-pair with.'
+        : 'This node has never paired with a Portal, and no pairing pin is configured.'
+    )
+  }
+
+  const redeemed = await portal.node.redeem(pin, options.nodeName?.trim() || os.hostname())
+  const identity: NodeIdentity = {
+    nodeId: redeemed.nodeId,
+    nodeToken: redeemed.nodeToken,
+    portalUrl: options.portalUrl,
+    pairedAt: new Date().toISOString()
+  }
+  await saveNodeIdentity(options.dataRoot, identity)
+  console.log(`Paired with Portal as node ${identity.nodeId}`)
+  return identity
 }
 
 /**
@@ -119,7 +218,7 @@ class PortalLink {
     const socket = new WebSocket(this.portal.node.channelUrl(this.token))
     this.socket = socket
 
-    socket.onopen = () => {
+    socket.on('open', () => {
       this.retryDelayMs = 1000
       console.log('Portal channel open')
       // Portal only forwards management calls to a node that says it is ready;
@@ -127,29 +226,31 @@ class PortalLink {
       // as up but unmanageable.
       this.send({ type: 'agent-ready', ready: true })
       this.connectLocalEvents()
-    }
+    })
 
-    socket.onmessage = (event) => {
+    socket.on('message', (data: unknown) => {
       let frame: PortalFrame
       try {
-        frame = JSON.parse(String(event.data)) as PortalFrame
+        frame = JSON.parse(String(data)) as PortalFrame
       } catch {
         return
       }
       this.handleFrame(frame)
-    }
+    })
 
-    socket.onclose = () => {
+    socket.on('close', () => {
       this.socket = null
       this.dropUpstreams()
       if (this.closed) return
-      setTimeout(() => this.connect(), this.retryDelayMs)
+      setTimeout(() => this.connect(), this.retryDelayMs).unref?.()
       // Backing off keeps a Portal that is down or restarting from being hit
       // once a second by every node attached to it.
       this.retryDelayMs = Math.min(this.retryDelayMs * 2, 30_000)
-    }
+    })
 
-    socket.onerror = () => socket.close()
+    // Never rethrown: an unhandled 'error' on a ws socket crashes the process,
+    // and an unreachable Portal is an ordinary condition here.
+    socket.on('error', () => socket.close())
   }
 
   close(): void {
@@ -176,25 +277,25 @@ class PortalLink {
     const socket = new WebSocket(url)
     this.localEvents = socket
 
-    socket.onopen = () => {
+    socket.on('open', () => {
       this.localEventsRetryMs = 1000
-    }
-    socket.onmessage = (event) => {
+    })
+    socket.on('message', (data: unknown) => {
       let parsed: unknown
       try {
-        parsed = JSON.parse(String(event.data))
+        parsed = JSON.parse(String(data))
       } catch {
         return
       }
       this.send({ type: 'event-push', event: parsed })
-    }
-    socket.onclose = () => {
+    })
+    socket.on('close', () => {
       this.localEvents = null
       if (this.closed) return
-      setTimeout(() => this.connectLocalEvents(), this.localEventsRetryMs)
+      setTimeout(() => this.connectLocalEvents(), this.localEventsRetryMs).unref?.()
       this.localEventsRetryMs = Math.min(this.localEventsRetryMs * 2, 30_000)
-    }
-    socket.onerror = () => socket.close()
+    })
+    socket.on('error', () => socket.close())
   }
 
   private handleFrame(frame: PortalFrame): void {

@@ -53,6 +53,14 @@ export interface PortalNode {
   claimedByClientId?: string
   /** Set once the node reports that its embedded Core API is up. */
   agentReady?: boolean
+  /**
+   * Set when this node *is* a control plane's own machine rather than a
+   * separately paired host. Chunkforge Desktop registers one so servers it
+   * runs locally can be given a subdomain like any other, which needs an
+   * outbound socket Portal can relay through. Re-registering replaces the
+   * record for that control plane instead of accumulating a new node per boot.
+   */
+  selfNodeForClientId?: string
 }
 
 export interface PortalNodeStats {

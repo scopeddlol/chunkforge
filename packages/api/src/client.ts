@@ -28,6 +28,15 @@ import type { ServerEvent } from './eventTypes'
 
 export type { ServerEvent, ServerEventType, ServerEventPayloads } from './eventTypes'
 
+/** Whether a requested subdomain label can be used. Mirrors Portal's own shape. */
+export interface DomainAvailability {
+  label: string
+  hostname: string
+  available: boolean
+  reason?: string
+  suggestion?: string
+}
+
 export interface ClientOptions {
   /** Base URL of the Core API, e.g. http://127.0.0.1:8080 */
   baseUrl: string
@@ -254,7 +263,14 @@ export class ChunkforgeClient {
     connect: (portalUrl: string, pin: string, name?: string, kind: 'desktop' | 'web' = 'desktop') =>
       this.post<PortalSettings>('/api/portal/connect', { portalUrl, pin, name, kind }),
     disconnect: () => this.post<PortalSettings>('/api/portal/disconnect'),
+    hostLocally: (enabled: boolean) =>
+      this.post<PortalSettings>('/api/portal/host-locally', { enabled }),
     domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
+    checkDomain: (label: string, instanceId?: string) => {
+      const query = new URLSearchParams({ label })
+      if (instanceId) query.set('instanceId', instanceId)
+      return this.get<DomainAvailability | null>(`/api/portal/domains/check?${query.toString()}`)
+    },
     provisionDomain: (instanceId: string, force = false, label?: string) =>
       this.post<PortalDomainBinding>(`/api/portal/domains/${instanceId}`, { force, label }),
     releaseDomain: (instanceId: string) => this.del<{ ok: true }>(`/api/portal/domains/${instanceId}`),

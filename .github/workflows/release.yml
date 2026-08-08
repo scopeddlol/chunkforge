@@ -38,20 +38,38 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Ensure app-builder binary
+      - name: Ensure electron-builder binaries
         shell: pwsh
         run: |
-          $path = "node_modules\app-builder-bin\win\x64\app-builder.exe"
-          if (-not (Test-Path $path)) {
+          # electron-builder shells out to two vendored Windows binaries. Both
+          # can go missing after an `npm install --no-save` re-resolves the
+          # tree, and hoisting moves as packages are added to the workspace —
+          # so each is checked, repaired, and then re-checked in that order,
+          # because repairing the first is itself a re-resolve that can
+          # disturb the second.
+          $appBuilder = "node_modules\app-builder-bin\win\x64\app-builder.exe"
+          $sevenZip = "node_modules\7zip-bin\win\x64\7za.exe"
+
+          if (-not (Test-Path $appBuilder)) {
             npm install --no-save app-builder-bin@5.0.0-alpha.13
           }
-          if (-not (Test-Path $path)) {
-            throw "Missing app-builder binary at $path"
+          if (-not (Test-Path $sevenZip)) {
+            npm install --no-save 7zip-bin@5.2.0
           }
+
+          if (-not (Test-Path $appBuilder)) { throw "Missing app-builder binary at $appBuilder" }
+          if (-not (Test-Path $sevenZip)) { throw "Missing 7-Zip binary at $sevenZip" }
 
       # Compiles main/preload/renderer into out/ before packaging — electron-builder
       # only bundles what electron-vite has already emitted.
-      - name: Build and publish installer
+      - name: Build and publish desktop installer
         run: npm run release:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Published into the same release. The node is a separate product with
+      # its own installer, but it ships in lockstep with the panel it talks to.
+      - name: Build and publish node installer
+        run: npm run release:win:node
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 {
   "name": "@chunkforge/portal",
-  "version": "0.5.5",
-  "description": "Chunkforge Portal — subdomain manager and proxy service with its own admin web UI",
+  "version": "0.6.0",
+  "description": "Chunkforge Portal \u2014 subdomain manager and proxy service with its own admin web UI",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./protocol": "./src/protocol.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./domains": "./src/domains.ts"
   },
   "scripts": {
     "dev": "tsx watch src/standalone.ts",

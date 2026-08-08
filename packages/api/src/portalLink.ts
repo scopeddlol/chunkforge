@@ -13,6 +13,8 @@ import {
   type PortalSettings
 } from '@chunkforge/core'
 import { PortalClient } from '@chunkforge/portal/client'
+import type { LabelAvailability } from '@chunkforge/portal/domains'
+import { localNodeId } from './localNode'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
 
 /**
@@ -192,7 +194,12 @@ export async function provisionInstanceDomain(
   if (!portal.autoProvisionSubdomains && !options?.force) return null
   if (instance.portalHostname && !options?.force) return null
 
-  const nodeId = instance.nodeId && instance.nodeId !== 'local' ? instance.nodeId : null
+  // A local server can have an address too, as long as this machine is
+  // registered with Portal as a node — that registration is what gives Portal
+  // a socket to relay players down. Without it there is genuinely nowhere to
+  // route to, so there is nothing to allocate.
+  const nodeId =
+    instance.nodeId && instance.nodeId !== 'local' ? instance.nodeId : localNodeId()
   if (!nodeId) return null
 
   const allocated = await clientFor(portal).client.allocateDomain({
@@ -281,6 +288,18 @@ export async function renameInstanceDomain(
     publicPort: renamed.publicPort,
     dnsRecords: renamed.dnsRecords
   }
+}
+
+/**
+ * Asks Portal whether a subdomain is free. Returns null when there is no
+ * Portal to ask, which the UI reads as "nothing to check" rather than an error.
+ */
+export async function checkDomainLabel(
+  label: string,
+  instanceId?: string
+): Promise<LabelAvailability | null> {
+  if (!isPortalLinked()) return null
+  return clientFor(getPortalStatus()).client.checkDomain(label, instanceId)
 }
 
 export async function listPortalDomains(): Promise<PortalDomainBinding[]> {
