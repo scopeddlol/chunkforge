@@ -1,5 +1,20 @@
-import type { PluginSearchResult, PluginVersion } from '../../types/index'
+import type { ContentPlatform, PluginSearchResult, PluginVersion } from '../../types/index'
 import { fetchJson, type PluginProvider } from './provider'
+import { toPlatform } from './compatibility'
+
+/**
+ * Hangar reports versions per platform. The browser compares against one game
+ * version at a time, so the union across platforms is what matters here; the
+ * platform check is a separate test in the compatibility engine.
+ */
+function flattenVersions(supported: Record<string, string[]> | undefined): string[] | undefined {
+  if (!supported) return undefined
+  const all = new Set<string>()
+  for (const versions of Object.values(supported)) {
+    for (const version of versions ?? []) all.add(version)
+  }
+  return all.size > 0 ? [...all] : undefined
+}
 
 const BASE = 'https://hangar.papermc.io/api/v1'
 
@@ -10,6 +25,9 @@ interface HangarProject {
   avatarUrl: string | null
   category: string
   stats: { downloads: number }
+  lastUpdated?: string
+  /** Platform -> supported Minecraft versions, e.g. { PAPER: ["1.21", ...] }. */
+  supportedPlatforms?: Record<string, string[]>
 }
 
 interface HangarProjectsResponse {
@@ -39,7 +57,10 @@ export const hangarProvider: PluginProvider = {
   isAvailable: () => true,
 
   async search(query, filters, limit) {
-    const params = new URLSearchParams({ limit: String(limit), offset: '0' })
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(filters.offset ?? 0)
+    })
     // Hangar filters by the Minecraft version a project declares support for.
     if (filters.gameVersion) params.set('version', filters.gameVersion)
     if (query) params.set('query', query)
@@ -56,7 +77,14 @@ export const hangarProvider: PluginProvider = {
         downloads: project.stats?.downloads ?? 0,
         author: project.namespace.owner,
         sourceUrl: `https://hangar.papermc.io/${project.namespace.owner}/${project.namespace.slug}`,
-        categories: project.category ? [project.category.replace(/_/g, ' ')] : []
+        categories: project.category ? [project.category.replace(/_/g, ' ')] : [],
+        // Hangar only hosts server plugins, so the kind is never in doubt.
+        kind: 'plugin',
+        gameVersions: flattenVersions(project.supportedPlatforms),
+        platforms: Object.keys(project.supportedPlatforms ?? {})
+          .map(toPlatform)
+          .filter((p): p is ContentPlatform => p !== null),
+        updatedAt: project.lastUpdated ?? null
       })
     )
   },
