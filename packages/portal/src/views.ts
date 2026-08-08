@@ -1,4 +1,5 @@
 import { portalRelay } from './relay'
+import { hasClaimed, nodeClaimants } from './nodeClaims'
 import { portalStore } from './store'
 import type { PortalNode, PortalNodeView, PortalOverview } from './types'
 
@@ -23,8 +24,11 @@ export function toNodeView(node: PortalNode, clientId?: string): PortalNodeView 
     stats: node.stats,
     tunnels: node.tunnels,
     agentReady: portalRelay.isAgentReady(node.id),
-    claimed: Boolean(clientId) && node.claimedByClientId === clientId,
-    claimedByOther: Boolean(node.claimedByClientId) && node.claimedByClientId !== clientId
+    claimed: hasClaimed(node, clientId),
+    // Never off limits any more — nodes are shared. Reported only so an older
+    // client parsing this payload still sees a field it recognises.
+    claimedByOther: false,
+    claimantCount: nodeClaimants(node).length
   }
 }
 

@@ -1,5 +1,6 @@
 import { join } from 'path'
 import { mkdir } from 'fs/promises'
+import { networkInterfaces } from 'os'
 
 /**
  * Where Chunkforge keeps instances, runtimes, and settings.
@@ -39,4 +40,22 @@ export async function ensureChunkforgeDirs(): Promise<void> {
   await mkdir(instancesRoot(), { recursive: true })
   await mkdir(runtimesRoot(), { recursive: true })
   await mkdir(cacheRoot(), { recursive: true })
+}
+
+/**
+ * This machine's address on the local network, for servers that players reach
+ * directly rather than through a Portal.
+ *
+ * Picks the first non-internal IPv4 interface. That is a guess on a host with
+ * several NICs, but it is the right guess on the home and homelab networks
+ * where a directly-reachable server lives at all, and it beats showing a bare
+ * port the player has to pair with an address they were never told.
+ */
+export function localIpv4(): string | null {
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === 'IPv4' && !address.internal) return address.address
+    }
+  }
+  return null
 }

@@ -68,8 +68,26 @@ export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): 
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     setLines([])
-    return onEvent('log', (event) => {
+
+    // Backlog first, then follow live. Lines that arrive while the history is
+    // still in flight are kept: they are appended to whatever the fetch
+    // returns rather than replacing it, so nothing printed during the gap is
+    // lost and the panel never flashes empty on the way in.
+    void api()
+      .servers.logs(instanceId, maxLinesRef.current)
+      .then((history) => {
+        if (cancelled) return
+        setLines((live) => {
+          const merged = [...history, ...live]
+          const max = maxLinesRef.current
+          return merged.length > max ? merged.slice(merged.length - max) : merged
+        })
+      })
+      .catch(() => undefined)
+
+    const unsubscribe = onEvent('log', (event) => {
       if (event.instanceId !== instanceId) return
       setLines((prev) => {
         const next = [...prev, event]
@@ -77,6 +95,11 @@ export function ConsoleView({ instanceId, canSendCommands }: ConsoleViewProps): 
         return next.length > max ? next.slice(next.length - max) : next
       })
     })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [instanceId])
 
   useEffect(() => {

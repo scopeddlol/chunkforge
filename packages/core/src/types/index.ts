@@ -79,6 +79,12 @@ export interface InstanceSummary {
   portalHostname?: string
   /** Public port Portal accepts traffic on for this server. */
   portalPublicPort?: number
+  /**
+   * Address players use when there is no Portal in front of this server, e.g.
+   * `192.168.1.50:25565`. Only set for servers on the machine answering the
+   * request — a Portal node has no inbound address to publish.
+   */
+  directAddress?: string
 }
 
 export interface InstanceMetadata extends InstanceSummary {

@@ -19,7 +19,8 @@ export {
   instancesRoot,
   runtimesRoot,
   cacheRoot,
-  ensureChunkforgeDirs
+  ensureChunkforgeDirs,
+  localIpv4
 } from './services/paths'
 
 // Server lifecycle

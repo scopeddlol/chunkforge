@@ -157,6 +157,7 @@ export async function listAllNodes(): Promise<Node[]> {
         agentReady: node.agentReady,
         claimed: node.claimed,
         claimedByOther: node.claimedByOther,
+        claimantCount: node.claimantCount,
         tunnels: node.tunnels
       }))
     ]

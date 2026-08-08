@@ -2,6 +2,7 @@ import { existsSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { randomBytes } from 'crypto'
+import { nodeClaimants, setClaimants } from './nodeClaims'
 import {
   defaultPortalConfig,
   type PortalClientRecord,
@@ -177,7 +178,8 @@ class PortalStore {
     // Nodes stay paired — losing a laptop should not orphan a machine that is
     // still happily serving players — but they become unclaimed and adoptable.
     for (const node of this.data.nodes) {
-      if (node.claimedByClientId === id) delete node.claimedByClientId
+      const remaining = nodeClaimants(node).filter((clientId) => clientId !== id)
+      if (remaining.length !== nodeClaimants(node).length) setClaimants(node, remaining)
     }
     await this.persist()
   }

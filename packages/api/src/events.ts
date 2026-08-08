@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { instanceManager } from '@chunkforge/core'
+import { recordLogLine } from './logBuffer'
 import type { ServerEvent } from './eventTypes'
 
 /**
@@ -40,7 +41,10 @@ export function attachCoreEvents(): void {
   if (coreEventsAttached) return
   coreEventsAttached = true
 
-  instanceManager.on('log', (payload) => broadcast({ type: 'log', payload }))
+  instanceManager.on('log', (payload) => {
+    recordLogLine(payload)
+    broadcast({ type: 'log', payload })
+  })
   instanceManager.on('status-changed', (payload) => broadcast({ type: 'status', payload }))
   instanceManager.on('players-changed', (payload) => broadcast({ type: 'players', payload }))
   instanceManager.on('create-progress', (payload) => broadcast({ type: 'create-progress', payload }))

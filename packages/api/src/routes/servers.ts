@@ -4,19 +4,28 @@ import { join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import {
   instanceManager,
+  isPortalLinked,
   listInstanceMetadata,
   listVersions,
   loadInstanceMetadata,
+  localIpv4,
   removeInstanceFromIndex,
   renderServerProperties,
   saveInstanceMetadata,
   type CreateInstanceConfig,
   type InstanceMetadata,
   type InstanceSummary,
+  type PortalDomainBinding,
   type ServerType
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
-import { callNodeAgent, provisionInstanceDomain, releaseInstanceDomain } from '../portalLink'
+import { forgetLogLines, recentLogLines } from '../logBuffer'
+import {
+  callNodeAgent,
+  listPortalDomains,
+  provisionInstanceDomain,
+  releaseInstanceDomain
+} from '../portalLink'
 import {
   createRemoteInstance,
   forgetRemoteInstance,
@@ -50,7 +59,40 @@ function toSummary(metadata: InstanceMetadata): InstanceSummary {
     eulaAccepted: _eulaAccepted,
     ...summary
   } = metadata
-  return withLiveState(summary as InstanceSummary)
+  const ip = localIpv4()
+  return withLiveState({
+    ...(summary as InstanceSummary),
+    // Stamped here rather than stored: a machine's LAN address changes with
+    // the network it is on, so a value persisted at creation time would go
+    // stale the first time the box moved or the router handed out a new lease.
+    directAddress: ip ? `${ip}:${metadata.port}` : `localhost:${metadata.port}`
+  })
+}
+
+/**
+ * Fills in each server's Portal address from Portal's own domain records.
+ *
+ * Portal is the authority on which hostname belongs to which server — it is
+ * what allocated them. Reading them back from it here means the address shows
+ * up for servers that already existed before their binding was ever persisted
+ * locally, instead of only for ones created since. A Portal that cannot be
+ * reached simply leaves the summaries as they came, so the dashboard still
+ * lists every server.
+ */
+async function withPortalAddresses(summaries: InstanceSummary[]): Promise<InstanceSummary[]> {
+  if (!isPortalLinked()) return summaries
+  let domains: PortalDomainBinding[]
+  try {
+    domains = await listPortalDomains()
+  } catch {
+    return summaries
+  }
+  const byInstance = new Map(domains.map((domain) => [domain.instanceId, domain]))
+  return summaries.map((summary) => {
+    const domain = byInstance.get(summary.id)
+    if (!domain) return summary
+    return { ...summary, portalHostname: domain.hostname, portalPublicPort: domain.publicPort }
+  })
 }
 
 export async function registerServerRoutes(app: FastifyInstance): Promise<void> {
@@ -58,7 +100,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
   // their nodes through Portal and appear beside the local ones.
   app.get('/api/servers', { preHandler: requireRole('viewer') }, async () => {
     const [local, remote] = await Promise.all([listLocalSummaries(), listRemoteInstances()])
-    return [...local, ...remote]
+    return withPortalAddresses([...local, ...remote])
   })
 
   async function listLocalSummaries(): Promise<InstanceSummary[]> {
@@ -83,7 +125,14 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: requireRole('viewer') },
     async (request, reply) => {
       try {
-        return withLiveState(await loadInstanceMetadata(request.params.id))
+        const metadata = withLiveState(await loadInstanceMetadata(request.params.id))
+        const ip = localIpv4()
+        const withAddress = {
+          ...metadata,
+          directAddress: ip ? `${ip}:${metadata.port}` : `localhost:${metadata.port}`
+        }
+        const [enriched] = await withPortalAddresses([withAddress as unknown as InstanceSummary])
+        return { ...withAddress, ...enriched }
       } catch {
         return reply.code(404).send({ error: 'No such server' })
       }
@@ -138,6 +187,21 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }
+    }
+  )
+
+  /**
+   * The console backlog. Requested when the log panel mounts, so returning to
+   * a server shows what it has already printed instead of an empty box. For a
+   * server on a node this is forwarded there by the usual hook, which is what
+   * makes a remote console read identically to a local one.
+   */
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    '/api/servers/:id/logs',
+    { preHandler: requireRole('viewer') },
+    async (request) => {
+      const limit = Number(request.query.limit)
+      return recentLogLines(request.params.id, Number.isFinite(limit) && limit > 0 ? limit : undefined)
     }
   )
 
@@ -221,6 +285,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
         ).catch(() => undefined)
         await releaseInstanceDomain({ id, nodeId: remoteNode })
         await forgetRemoteInstance(id)
+        forgetLogLines(id)
         return { ok: true }
       }
 
@@ -231,6 +296,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
         await rm(metadata.path, { recursive: true, force: true })
       }
       await removeInstanceFromIndex(id)
+      forgetLogLines(id)
       return { ok: true }
     }
   )

@@ -1,5 +1,6 @@
 import { removeDomainRecords, syncDomainRecords } from './dnsProvider'
 import { portalRelay } from './relay'
+import { hasClaimed } from './nodeClaims'
 import { portalStore } from './store'
 import type { PortalDomain, PortalNode, PortalTunnel, TunnelProtocol } from './types'
 
@@ -54,12 +55,8 @@ export async function allocateDomain(request: AllocateDomainRequest): Promise<Po
   // Claiming is what authorises a control plane to use a node at all. Allowing
   // an *unclaimed* node here would let anyone paired with a shared Portal open
   // public routes onto a machine they do not manage.
-  if (node.claimedByClientId !== request.clientId) {
-    throw new Error(
-      node.claimedByClientId
-        ? 'That node is claimed by another Chunkforge control plane.'
-        : 'Adopt this node before allocating addresses on it.'
-    )
+  if (!hasClaimed(node, request.clientId)) {
+    throw new Error('Adopt this node before allocating addresses on it.')
   }
 
   const protocol: TunnelProtocol = request.protocol ?? 'tcp'

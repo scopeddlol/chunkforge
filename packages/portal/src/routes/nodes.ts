@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { hashToken, newToken, requireNode } from '../auth'
 import { broadcastPortal } from '../events'
 import { portalRelay } from '../relay'
+import { nodeClaimants } from '../nodeClaims'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
 import type { PortalNode, PortalNodeStats, PortalTunnel } from '../types'
@@ -52,7 +53,7 @@ export async function registerNodeRoutes(app: FastifyInstance): Promise<void> {
       node.status = 'online'
       if (request.body?.agentReady !== undefined) node.agentReady = request.body.agentReady
       await portalStore.upsertNode(node)
-      const view = toNodeView(node, node.claimedByClientId)
+      const view = toNodeView(node, nodeClaimants(node)[0])
       broadcastPortal({ type: 'node-updated', payload: view })
       return view
     }
@@ -86,7 +87,7 @@ export async function registerNodeRoutes(app: FastifyInstance): Promise<void> {
         const opened = await portalRelay.syncNodeTunnels(node.id, merged)
         node.tunnels = merged
         await portalStore.upsertNode(node)
-        broadcastPortal({ type: 'node-updated', payload: toNodeView(node, node.claimedByClientId) })
+        broadcastPortal({ type: 'node-updated', payload: toNodeView(node, nodeClaimants(node)[0]) })
         broadcastPortal({ type: 'overview', payload: buildOverview() })
         return { tunnels: opened }
       } catch (err) {
@@ -125,7 +126,7 @@ export async function registerNodeRoutes(app: FastifyInstance): Promise<void> {
       if (!record) return
       record.status = 'offline'
       void portalStore.upsertNode(record).then(() => {
-        broadcastPortal({ type: 'node-updated', payload: toNodeView(record, record.claimedByClientId) })
+        broadcastPortal({ type: 'node-updated', payload: toNodeView(record, nodeClaimants(record)[0]) })
       })
     })
   })

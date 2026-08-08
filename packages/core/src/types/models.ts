@@ -53,7 +53,10 @@ export interface Node {
   /** True once this control plane has claimed the node through Portal. */
   claimed?: boolean
   /** Another control plane on the same Portal already owns it. */
+  /** @deprecated Nodes are shareable; always false. */
   claimedByOther?: boolean
+  /** How many control planes have adopted this node, including this one. */
+  claimantCount?: number
   /** Public routes Portal has opened for this node. */
   tunnels?: PortalTunnelPort[]
 }
