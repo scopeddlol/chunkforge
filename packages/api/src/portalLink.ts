@@ -31,6 +31,46 @@ function clientFor(portal: PortalSettings): PortalClient {
   return new PortalClient({ baseUrl: portal.portalUrl, token: portal.clientToken })
 }
 
+/**
+ * Records a domain binding on whichever machine actually holds that server's
+ * metadata.
+ *
+ * A local server's record lives in this Core's own instance index, so
+ * `bindInstanceHostname` writes it directly. A remote server's record lives on
+ * its node — this Core never has a local metadata file for it at all — so the
+ * write has to go over the wire as a plain `PATCH /api/servers/:id`, the same
+ * route the node already serves for every other field. Calling
+ * `bindInstanceHostname` for a remote id would throw `Unknown instance`,
+ * which used to escape all the way to the user as the allocation failing.
+ */
+async function applyDomainBinding(
+  instance: Pick<InstanceMetadata, 'id'> & { nodeId?: string | null },
+  hostname: string,
+  publicPort: number
+): Promise<void> {
+  if (instance.nodeId && instance.nodeId !== 'local') {
+    await callNodeAgent(instance.nodeId, 'PATCH', `/api/servers/${encodeURIComponent(instance.id)}`, {
+      portalHostname: hostname,
+      portalPublicPort: publicPort
+    }).catch(() => undefined)
+    return
+  }
+  await bindInstanceHostname(instance.id, hostname, publicPort).catch(() => undefined)
+}
+
+async function clearDomainBinding(
+  instance: Pick<InstanceMetadata, 'id'> & { nodeId?: string | null }
+): Promise<void> {
+  if (instance.nodeId && instance.nodeId !== 'local') {
+    await callNodeAgent(instance.nodeId, 'PATCH', `/api/servers/${encodeURIComponent(instance.id)}`, {
+      portalHostname: null,
+      portalPublicPort: null
+    }).catch(() => undefined)
+    return
+  }
+  await unbindInstanceHostname(instance.id).catch(() => undefined)
+}
+
 /** Redeems a control-plane pin, storing the token Portal issues back. */
 export async function connectToPortal(
   portalUrl: string,
@@ -165,7 +205,7 @@ export async function provisionInstanceDomain(
     protocol: 'tcp',
     targetPort: instance.port
   })
-  await bindInstanceHostname(instance.id, allocated.hostname, allocated.publicPort)
+  await applyDomainBinding(instance, allocated.hostname, allocated.publicPort)
   return {
     hostname: allocated.hostname,
     nodeId: allocated.nodeId,
@@ -185,7 +225,7 @@ export async function provisionInstanceDomain(
  * instance id, which Portal stamped on the domain when it allocated it.
  */
 export async function releaseInstanceDomain(
-  instance: Pick<InstanceMetadata, 'id' | 'portalHostname'>
+  instance: Pick<InstanceMetadata, 'id' | 'portalHostname'> & { nodeId?: string | null }
 ): Promise<void> {
   if (!isPortalLinked()) return
   const client = clientFor(getPortalStatus())
@@ -208,7 +248,7 @@ export async function releaseInstanceDomain(
     // record could not be released would strand the user; an operator can prune
     // a leftover record from Portal's own Subdomains page.
   }
-  await unbindInstanceHostname(instance.id).catch(() => undefined)
+  await clearDomainBinding(instance)
 }
 
 /**
@@ -217,7 +257,7 @@ export async function releaseInstanceDomain(
  * saved end up connecting.
  */
 export async function renameInstanceDomain(
-  instance: Pick<InstanceMetadata, 'id' | 'portalHostname'>,
+  instance: Pick<InstanceMetadata, 'id' | 'portalHostname'> & { nodeId?: string | null },
   label: string
 ): Promise<PortalDomainBinding> {
   const client = clientFor(requirePortalLink())
@@ -230,7 +270,7 @@ export async function renameInstanceDomain(
   if (!hostname) throw new Error('This server has no address to rename yet.')
 
   const renamed = await client.client.renameDomain(hostname, label)
-  await bindInstanceHostname(instance.id, renamed.hostname, renamed.publicPort)
+  await applyDomainBinding(instance, renamed.hostname, renamed.publicPort)
   return {
     hostname: renamed.hostname,
     nodeId: renamed.nodeId,

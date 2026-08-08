@@ -198,9 +198,10 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     '/api/portal/domains/:id',
     { preHandler: requireRole('member') },
     async (request) => {
-      // Unlike provisioning, releasing needs no local or node lookup at all —
-      // Portal resolves the hostname by instance id on its own side.
-      await releaseInstanceDomain({ id: request.params.id })
+      // Portal resolves *which* domain to release by instance id on its own
+      // side, but clearing the binding locally still needs to know whether
+      // that id belongs to this machine or a remote node.
+      await releaseInstanceDomain({ id: request.params.id, nodeId: nodeForInstance(request.params.id) })
       return { ok: true }
     }
   )
@@ -210,7 +211,10 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     { preHandler: requireRole('member') },
     async (request, reply) => {
       try {
-        return await renameInstanceDomain({ id: request.params.id }, request.body?.label ?? '')
+        return await renameInstanceDomain(
+          { id: request.params.id, nodeId: nodeForInstance(request.params.id) },
+          request.body?.label ?? ''
+        )
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

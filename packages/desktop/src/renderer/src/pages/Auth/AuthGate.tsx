@@ -89,7 +89,7 @@ export function AuthGate({ children }: { children: JSX.Element }): JSX.Element {
     <div className={styles.root}>
       <Card className={styles.card}>
         <div>
-          <Title2>{mode === 'setup' ? 'Set up Chunkforge Portal' : 'Sign in to Chunkforge Portal'}</Title2>
+          <Title2>{mode === 'setup' ? 'Set up Chunkforge' : 'Sign in to Chunkforge'}</Title2>
           <Text block className={styles.muted}>
             {mode === 'setup'
               ? 'Create the first owner account for this self-hosted panel.'
