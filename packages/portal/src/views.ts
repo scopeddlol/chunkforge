@@ -2,7 +2,7 @@ import { portalRelay } from './relay'
 import { portalStore } from './store'
 import type { PortalNode, PortalNodeView, PortalOverview } from './types'
 
-export const PORTAL_VERSION = '0.5.3'
+export const PORTAL_VERSION = '0.5.4'
 
 const startedAt = Date.now()
 

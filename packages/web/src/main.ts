@@ -1,7 +1,7 @@
+import { spawn, type ChildProcess } from 'child_process'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { startCoreApi } from '@chunkforge/api'
-import { startNodeAgent, type RunningNodeAgent } from '@chunkforge/node-worker'
 
 /**
  * Chunkforge Web.
@@ -16,6 +16,7 @@ import { startNodeAgent, type RunningNodeAgent } from '@chunkforge/node-worker'
  * Portal, and it does not proxy player traffic.
  */
 const here = dirname(fileURLToPath(import.meta.url))
+const repoRoot = resolve(here, '../../..')
 
 const dataRoot = process.env.CHUNKFORGE_DATA ?? '/data'
 const port = Number(process.env.PORT ?? 8080)
@@ -41,37 +42,59 @@ console.log(`UI served from ${uiRoot}`)
 console.log(`Data root: ${dataRoot}`)
 
 /**
- * The packaged node.
+ * The packaged node, run as a genuinely separate process.
  *
  * Optional on purpose. A homelab box that both hosts the panel and runs the
  * servers wants this on, and gets one container instead of two. A panel that
  * only ever deploys to machines elsewhere leaves it off and stays small.
  *
- * The node keeps its own data root, because it is a genuinely separate
- * Chunkforge install that happens to share a container — its servers belong to
- * it, not to the panel in front of it.
+ * It cannot run in-process alongside the panel. @chunkforge/core's data root,
+ * settings cache, and instance manager are all process-wide singletons —
+ * correct for every other host, which only ever runs one Core API per
+ * process, but two Core APIs sharing one process means the second
+ * `configureDataRoot()` call silently overwrites the first's. The panel would
+ * end up reading and writing the node's own settings.json instead of its
+ * own — including which remote servers it knows about, which is exactly the
+ * kind of thing that turns into "Unknown instance" the moment anyone tries to
+ * act on a server the panel created moments earlier. A child process gets the
+ * node the same total isolation Desktop, the standalone API, and a bare node
+ * container already have by only ever running one Core API each.
  */
-let node: RunningNodeAgent | null = null
+let node: ChildProcess | null = null
 if (isTruthy(process.env.CHUNKFORGE_EMBEDDED_NODE)) {
   try {
-    node = await startNodeAgent({
-      portalUrl: required('CHUNKFORGE_PORTAL_URL'),
-      pairingPin: required('CHUNKFORGE_PAIRING_PIN'),
-      nodeName: process.env.CHUNKFORGE_NODE_NAME?.trim() || 'Chunkforge Web (local node)',
-      dataRoot: join(dataRoot, 'node'),
-      heartbeatIntervalMs: Number(process.env.CHUNKFORGE_HEARTBEAT_MS ?? 15000)
+    node = spawn('npm', ['run', 'start', '--workspace', '@chunkforge/node-worker'], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        CHUNKFORGE_PORTAL_URL: required('CHUNKFORGE_PORTAL_URL'),
+        CHUNKFORGE_PAIRING_PIN: required('CHUNKFORGE_PAIRING_PIN'),
+        CHUNKFORGE_NODE_NAME: process.env.CHUNKFORGE_NODE_NAME?.trim() || 'Chunkforge Web (local node)',
+        CHUNKFORGE_DATA: join(dataRoot, 'node'),
+        CHUNKFORGE_HEARTBEAT_MS: process.env.CHUNKFORGE_HEARTBEAT_MS ?? '15000'
+      }
     })
-    console.log(`Embedded Chunkforge Node started (${node.nodeId})`)
+    node.on('exit', (code, signal) => {
+      // Losing the node is not fatal to the panel — it can still manage
+      // servers on other nodes — but a silent restart loop would be worse
+      // than a log line explaining why this container's own node vanished.
+      if (!shuttingDown) {
+        console.error(`Embedded node exited (code=${code ?? '-'}, signal=${signal ?? '-'})`)
+      }
+      node = null
+    })
   } catch (err) {
-    // The panel is useful without the co-located node — it can still manage
-    // remote ones — so a bad pin must not take the whole container down.
     console.error(`Embedded node did not start: ${(err as Error).message}`)
   }
 }
 
+let shuttingDown = false
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    void Promise.allSettled([node?.close(), running.close()]).then(() => process.exit(0))
+    shuttingDown = true
+    node?.kill(signal)
+    void running.close().then(() => process.exit(0))
   })
 }
 

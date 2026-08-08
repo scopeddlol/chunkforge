@@ -23,6 +23,7 @@ import { FolderOpen20Regular, Save20Regular, Delete20Regular } from '@fluentui/r
 import type { InstanceMetadata, InstanceToggles } from '@shared/types'
 import { IconPanel } from './IconPanel'
 import { StartupPanel } from './StartupPanel'
+import { CopyableAddress } from '../../components/CopyableAddress'
 import { api } from '../../api'
 import { native } from '../../native'
 
@@ -283,9 +284,14 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
           validationMessage={hostError ?? undefined}
         >
           <div className={styles.portalHost}>
-            {draft.portalHostname
-              ? `${draft.portalHostname}${draft.portalPublicPort ? `:${draft.portalPublicPort}` : ''}`
-              : 'No address — this server runs on this machine'}
+            {draft.portalHostname ? (
+              <CopyableAddress
+                address={`${draft.portalHostname}${draft.portalPublicPort ? `:${draft.portalPublicPort}` : ''}`}
+                size={300}
+              />
+            ) : (
+              'No address — this server runs on this machine'
+            )}
           </div>
         </Field>
         {draft.portalHostname && (

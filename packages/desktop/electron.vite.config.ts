@@ -8,7 +8,15 @@ import react from '@vitejs/plugin-react'
 // stay external, since those ship real builds.
 const CORE_SRC = resolve(__dirname, '../core/src')
 const API_SRC = resolve(__dirname, '../api/src')
-const WORKSPACE_PACKAGES = ['@chunkforge/core', '@chunkforge/api']
+const PORTAL_SRC = resolve(__dirname, '../portal/src')
+// Every workspace package the Core API can reach transitively has to be
+// listed here, not just the ones desktop imports directly — the exclude list
+// controls what gets inlined vs. left as a real runtime import, and
+// @chunkforge/api now pulls in @chunkforge/portal (for the Portal link and
+// its event relay). Missing one here doesn't fail the build; it fails
+// silently at launch, because Electron's Node has no loader for the raw .ts
+// source a skipped package's "exports" field points at.
+const WORKSPACE_PACKAGES = ['@chunkforge/core', '@chunkforge/api', '@chunkforge/portal']
 
 export default defineConfig({
   main: {
@@ -17,6 +25,10 @@ export default defineConfig({
       alias: {
         '@chunkforge/core': CORE_SRC,
         '@chunkforge/api': API_SRC,
+        '@chunkforge/portal/client': resolve(PORTAL_SRC, 'client.ts'),
+        '@chunkforge/portal/protocol': resolve(PORTAL_SRC, 'protocol.ts'),
+        '@chunkforge/portal/types': resolve(PORTAL_SRC, 'types.ts'),
+        '@chunkforge/portal': resolve(PORTAL_SRC, 'index.ts'),
         '@main': resolve('src/main')
       }
     }

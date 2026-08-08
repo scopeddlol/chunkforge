@@ -25,6 +25,7 @@ import {
 } from '@fluentui/react-icons'
 import type { InstanceMetadata, InstanceStatus } from '@shared/types'
 import { StatusDot } from '../../components/StatusDot'
+import { CopyableAddress } from '../../components/CopyableAddress'
 import { ConsoleView } from '../../components/ConsoleView'
 import { useConfirmStop } from '../../components/ConfirmStopDialog'
 import { useInstancesStore } from '../../state/instancesStore'
@@ -142,7 +143,13 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             <Badge appearance="tint" color="informative">
               {metadata.serverType} {metadata.minecraftVersion}
             </Badge>
-            <Text size={200}>port {metadata.port}</Text>
+            {metadata.portalHostname ? (
+              <CopyableAddress
+                address={`${metadata.portalHostname}${metadata.portalPublicPort ? `:${metadata.portalPublicPort}` : ''}`}
+              />
+            ) : (
+              <Text size={200}>port {metadata.port}</Text>
+            )}
             <Text size={200}>{(metadata.maxRamMb / 1024).toFixed(1)} GB max</Text>
             {isRunning && (
               <Text size={200}>

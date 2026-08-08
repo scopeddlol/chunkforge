@@ -163,7 +163,10 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     }
   )
 
-  app.patch<{ Params: { id: string }; Body: Partial<InstanceMetadata> }>(
+  app.patch<{
+    Params: { id: string }
+    Body: Partial<InstanceMetadata> & { portalHostname?: string | null; portalPublicPort?: number | null }
+  }>(
     '/api/servers/:id',
     { preHandler: requireRole('member') },
     async (request, reply) => {
@@ -179,7 +182,14 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           accentColor: patch.accentColor ?? metadata.accentColor,
           ramAllocatedMb: patch.maxRamMb ?? metadata.maxRamMb,
           toggles: patch.toggles ?? metadata.toggles,
-          launchArgs: patch.launchArgs ?? metadata.launchArgs
+          launchArgs: patch.launchArgs ?? metadata.launchArgs,
+          // Portal, via `portalLink.ts`, is the only caller that sends these —
+          // it is how a remote server's binding reaches the node's own
+          // metadata file, the copy `GET /api/servers/:id` actually serves.
+          portalHostname:
+            'portalHostname' in patch ? (patch.portalHostname ?? undefined) : metadata.portalHostname,
+          portalPublicPort:
+            'portalPublicPort' in patch ? (patch.portalPublicPort ?? undefined) : metadata.portalPublicPort
         }
         await saveInstanceMetadata(next)
         await writeFile(
@@ -209,7 +219,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           'DELETE',
           `/api/servers/${encodeURIComponent(id)}?deleteFiles=${request.query.deleteFiles === 'true'}`
         ).catch(() => undefined)
-        await releaseInstanceDomain({ id })
+        await releaseInstanceDomain({ id, nodeId: remoteNode })
         await forgetRemoteInstance(id)
         return { ok: true }
       }

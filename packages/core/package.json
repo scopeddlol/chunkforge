@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/core",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Chunkforge domain layer — server lifecycle, add-ons, backups. No UI, no Electron.",
   "private": true,
   "type": "module",
@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "adm-zip": "^0.6.0"
+    "adm-zip": "^0.6.0",
+    "tar": "^7.4.3"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8"
