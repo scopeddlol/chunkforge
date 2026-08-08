@@ -438,6 +438,14 @@ export interface PortalSettings {
   lastError?: string
   /** Request a subdomain from Portal for every server created on a node. */
   autoProvisionSubdomains: boolean
+  /**
+   * Offer this machine to Portal as a node, so servers running here can be
+   * given a subdomain too. Off by default: an install that only deploys to
+   * real nodes should not publish a route into the user's own desktop.
+   */
+  hostServersLocally?: boolean
+  /** Node id Portal issued for this machine, kept so re-registering reuses it. */
+  selfNodeId?: string
 }
 
 export interface AppSettings {

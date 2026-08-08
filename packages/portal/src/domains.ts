@@ -247,10 +247,17 @@ function resolvePublicPort(
     ...portalStore.domains().map((domain) => domain.publicPort),
     ...portalRelay.boundPublicPorts()
   ])
+  const free: number[] = []
   for (let port = config.publicPortRangeStart; port <= config.publicPortRangeEnd; port += 1) {
-    if (!used.has(port)) return port
+    if (!used.has(port)) free.push(port)
   }
-  throw new Error('No public ports left in the configured range.')
+  if (free.length === 0) throw new Error('No public ports left in the configured range.')
+  // Picked at random rather than lowest-first. The port is an implementation
+  // detail players never type — an SRV record carries it — so there is nothing
+  // to gain from predictability, and spreading allocations means deleting and
+  // recreating a server is far less likely to hand it the port a player's
+  // client still has cached for the server that used to be there.
+  return free[Math.floor(Math.random() * free.length)]
 }
 
 function assertPortFree(port: number, existing: PortalDomain | undefined): void {

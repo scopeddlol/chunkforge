@@ -263,6 +263,8 @@ export class ChunkforgeClient {
     connect: (portalUrl: string, pin: string, name?: string, kind: 'desktop' | 'web' = 'desktop') =>
       this.post<PortalSettings>('/api/portal/connect', { portalUrl, pin, name, kind }),
     disconnect: () => this.post<PortalSettings>('/api/portal/disconnect'),
+    hostLocally: (enabled: boolean) =>
+      this.post<PortalSettings>('/api/portal/host-locally', { enabled }),
     domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
     checkDomain: (label: string, instanceId?: string) => {
       const query = new URLSearchParams({ label })
