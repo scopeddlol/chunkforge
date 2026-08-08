@@ -154,6 +154,11 @@ CHUNKFORGE_PAIRING_PIN=<node pin from Portal → Nodes> \
 docker compose -f docker-compose.node.yml up -d
 ```
 
+On Windows, install **Chunkforge Node** instead of running the container. It is
+the same node with a setup window: enter the Portal address and a pairing pin,
+pick where server files live, and it runs from the tray and starts with
+Windows. Download it from the releases page alongside the desktop app.
+
 The pin is a one-time introduction. The node stores the token Portal issues
 back in its data volume, so later restarts reconnect on their own and the pin
 can be dropped from the environment — pins are single-use and expire, so a

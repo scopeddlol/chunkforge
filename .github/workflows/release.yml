@@ -51,7 +51,14 @@ jobs:
 
       # Compiles main/preload/renderer into out/ before packaging — electron-builder
       # only bundles what electron-vite has already emitted.
-      - name: Build and publish installer
+      - name: Build and publish desktop installer
         run: npm run release:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Published into the same release. The node is a separate product with
+      # its own installer, but it ships in lockstep with the panel it talks to.
+      - name: Build and publish node installer
+        run: npm run release:win:node
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

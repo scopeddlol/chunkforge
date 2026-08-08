@@ -36,10 +36,13 @@ jobs:
             throw "Missing app-builder binary at $path"
           }
 
-      - name: Build installer
+      - name: Build desktop installer
         run: npm run build:win
 
-      - name: Upload installer artifact
+      - name: Build node installer
+        run: npm run build:win:node
+
+      - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
           name: chunkforge-windows
@@ -47,4 +50,7 @@ jobs:
             packages/desktop/release/**/*.exe
             packages/desktop/release/**/*.blockmap
             packages/desktop/release/**/latest.yml
+            packages/node-tray/release/**/*.exe
+            packages/node-tray/release/**/*.blockmap
+            packages/node-tray/release/**/latest*.yml
           if-no-files-found: error

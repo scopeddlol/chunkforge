@@ -1,6 +1,6 @@
 {
   "name": "chunkforge-monorepo",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "Chunkforge — self-hostable Minecraft server platform",
   "private": true,
   "type": "module",
@@ -10,7 +10,8 @@
     "packages/portal",
     "packages/web",
     "packages/desktop",
-    "packages/node-worker"
+    "packages/node-worker",
+    "packages/node-tray"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @chunkforge/desktop",
@@ -19,6 +20,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build:win": "npm run build:win --workspace @chunkforge/desktop",
+    "build:win:node": "npm run build:win --workspace @chunkforge/node-tray",
     "build:web": "npm run build --workspace @chunkforge/web",
     "build:portal": "npm run build --workspace @chunkforge/portal",
     "build:image:portal": "docker build -f Dockerfile.portal -t chunkforge-portal:local .",
@@ -26,6 +28,7 @@
     "build:image:node": "docker build -f Dockerfile.node -t chunkforge-node:local .",
     "build:images": "npm run build:image:portal && npm run build:image:web && npm run build:image:node",
     "release:win": "npm run release:win --workspace @chunkforge/desktop",
+    "release:win:node": "npm run release:win --workspace @chunkforge/node-tray",
     "api": "npm run dev --workspace @chunkforge/api",
     "portal": "npm run start --workspace @chunkforge/portal",
     "web": "npm run start --workspace @chunkforge/web"

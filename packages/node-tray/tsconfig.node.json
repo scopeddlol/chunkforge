@@ -1,0 +1,26 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.ts",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "../core/src/**/*",
+    "../api/src/**/*",
+    "../node-worker/src/**/*",
+    "../portal/src/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@chunkforge/core": ["../core/src/index.ts"],
+      "@chunkforge/api": ["../api/src/index.ts"],
+      "@chunkforge/node-worker": ["../node-worker/src/index.ts"],
+      "@chunkforge/portal": ["../portal/src/index.ts"],
+      "@chunkforge/portal/client": ["../portal/src/client.ts"],
+      "@chunkforge/portal/protocol": ["../portal/src/protocol.ts"],
+      "@chunkforge/portal/types": ["../portal/src/types.ts"],
+      "@chunkforge/portal/domains": ["../portal/src/domains.ts"]
+    }
+  }
+}

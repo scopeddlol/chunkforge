@@ -1,4 +1,5 @@
 import os from 'os'
+import WebSocket from 'ws'
 import net from 'net'
 import dgram from 'dgram'
 import { statfs } from 'fs/promises'
@@ -16,7 +17,8 @@ export interface NodeAgentOptions {
    * service config does no harm.
    */
   pairingPin?: string
-  nodeName: string
+  /** Defaults to this machine's hostname when omitted. */
+  nodeName?: string
   /** Where instances, runtimes, and settings live on this node. */
   dataRoot: string
   heartbeatIntervalMs?: number
@@ -170,7 +172,7 @@ async function establishIdentity(
     )
   }
 
-  const redeemed = await portal.node.redeem(pin, options.nodeName)
+  const redeemed = await portal.node.redeem(pin, options.nodeName?.trim() || os.hostname())
   const identity: NodeIdentity = {
     nodeId: redeemed.nodeId,
     nodeToken: redeemed.nodeToken,
@@ -216,7 +218,7 @@ class PortalLink {
     const socket = new WebSocket(this.portal.node.channelUrl(this.token))
     this.socket = socket
 
-    socket.onopen = () => {
+    socket.on('open', () => {
       this.retryDelayMs = 1000
       console.log('Portal channel open')
       // Portal only forwards management calls to a node that says it is ready;
@@ -224,29 +226,31 @@ class PortalLink {
       // as up but unmanageable.
       this.send({ type: 'agent-ready', ready: true })
       this.connectLocalEvents()
-    }
+    })
 
-    socket.onmessage = (event) => {
+    socket.on('message', (data: unknown) => {
       let frame: PortalFrame
       try {
-        frame = JSON.parse(String(event.data)) as PortalFrame
+        frame = JSON.parse(String(data)) as PortalFrame
       } catch {
         return
       }
       this.handleFrame(frame)
-    }
+    })
 
-    socket.onclose = () => {
+    socket.on('close', () => {
       this.socket = null
       this.dropUpstreams()
       if (this.closed) return
-      setTimeout(() => this.connect(), this.retryDelayMs)
+      setTimeout(() => this.connect(), this.retryDelayMs).unref?.()
       // Backing off keeps a Portal that is down or restarting from being hit
       // once a second by every node attached to it.
       this.retryDelayMs = Math.min(this.retryDelayMs * 2, 30_000)
-    }
+    })
 
-    socket.onerror = () => socket.close()
+    // Never rethrown: an unhandled 'error' on a ws socket crashes the process,
+    // and an unreachable Portal is an ordinary condition here.
+    socket.on('error', () => socket.close())
   }
 
   close(): void {
@@ -273,25 +277,25 @@ class PortalLink {
     const socket = new WebSocket(url)
     this.localEvents = socket
 
-    socket.onopen = () => {
+    socket.on('open', () => {
       this.localEventsRetryMs = 1000
-    }
-    socket.onmessage = (event) => {
+    })
+    socket.on('message', (data: unknown) => {
       let parsed: unknown
       try {
-        parsed = JSON.parse(String(event.data))
+        parsed = JSON.parse(String(data))
       } catch {
         return
       }
       this.send({ type: 'event-push', event: parsed })
-    }
-    socket.onclose = () => {
+    })
+    socket.on('close', () => {
       this.localEvents = null
       if (this.closed) return
-      setTimeout(() => this.connectLocalEvents(), this.localEventsRetryMs)
+      setTimeout(() => this.connectLocalEvents(), this.localEventsRetryMs).unref?.()
       this.localEventsRetryMs = Math.min(this.localEventsRetryMs * 2, 30_000)
-    }
-    socket.onerror = () => socket.close()
+    })
+    socket.on('error', () => socket.close())
   }
 
   private handleFrame(frame: PortalFrame): void {
