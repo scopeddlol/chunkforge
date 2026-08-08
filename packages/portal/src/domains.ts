@@ -259,3 +259,64 @@ function assertPortFree(port: number, existing: PortalDomain | undefined): void 
     .find((domain) => domain.publicPort === port && domain.hostname !== existing?.hostname)
   if (clash) throw new Error(`Public port ${port} is already used by ${clash.hostname}.`)
 }
+
+export interface LabelAvailability {
+  /** The label after DNS normalisation — what would actually be registered. */
+  label: string
+  hostname: string
+  available: boolean
+  /** Why it cannot be used, when it cannot. */
+  reason?: string
+  /** A free alternative, offered only when the request is taken. */
+  suggestion?: string
+}
+
+/**
+ * Whether a subdomain label can be used, before anything is committed.
+ *
+ * Allocation quietly falls back to `name-2` when `name` is taken, which is the
+ * right behaviour for an automatic allocation during server creation but a
+ * poor surprise for someone who deliberately typed a name. This lets the UI
+ * say so up front, and offer the suffix as a choice rather than a fait
+ * accompli.
+ *
+ * A domain the asking control plane already owns for this same instance counts
+ * as available: re-submitting the name a server already has is not a clash.
+ */
+export function checkLabelAvailability(
+  rawLabel: string,
+  options?: { instanceId?: string; clientId?: string }
+): LabelAvailability {
+  const zone = normalizeZone(portalStore.config().zoneSuffix)
+  const label = toDnsLabel(rawLabel)
+
+  if (!zone) {
+    return { label, hostname: '', available: false, reason: 'Portal has no domain zone configured.' }
+  }
+  if (!label) {
+    return {
+      label,
+      hostname: '',
+      available: false,
+      reason: 'That name has no usable characters for a subdomain.'
+    }
+  }
+
+  const hostname = `${label}.${zone}`
+  const existing = portalStore.findDomain(hostname)
+  if (!existing) return { label, hostname, available: true }
+
+  const isOwnedByCaller =
+    Boolean(options?.instanceId) && existing.instanceId === options?.instanceId &&
+    (!options?.clientId || existing.clientId === options.clientId)
+  if (isOwnedByCaller) return { label, hostname, available: true }
+
+  const taken = new Set(portalStore.domains().map((domain) => domain.hostname))
+  return {
+    label,
+    hostname,
+    available: false,
+    reason: 'That subdomain is already in use.',
+    suggestion: nextFreeHostname(label, zone, taken).slice(0, -(zone.length + 1))
+  }
+}

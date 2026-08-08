@@ -243,6 +243,29 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     portalStore.clients().map(({ tokenHash: _hash, ...rest }) => rest)
   )
 
+  /**
+   * Renames a control plane from Portal's own side.
+   *
+   * The name a control plane reports is a build-time constant — every desktop
+   * install calls itself "Chunkforge Desktop" — so on a Portal with more than
+   * one attached, the operator needs to be able to tell them apart here.
+   */
+  app.patch<{ Params: { id: string }; Body: { name?: string } }>(
+    '/api/clients/:id',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const client = portalStore.findClient(request.params.id)
+      if (!client) return reply.code(404).send({ error: 'Unknown control plane.' })
+      const name = request.body?.name?.trim()
+      if (!name) return reply.code(400).send({ error: 'Enter a name.' })
+      client.name = name
+      await portalStore.upsertClient(client)
+      broadcastPortal({ type: 'overview', payload: buildOverview() })
+      const { tokenHash: _hash, ...view } = client
+      return view
+    }
+  )
+
   app.delete<{ Params: { id: string } }>(
     '/api/clients/:id',
     { preHandler: requireOperator },

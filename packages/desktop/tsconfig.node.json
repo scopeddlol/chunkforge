@@ -19,7 +19,8 @@
       "@chunkforge/portal": ["../portal/src/index.ts"],
       "@chunkforge/portal/client": ["../portal/src/client.ts"],
       "@chunkforge/portal/protocol": ["../portal/src/protocol.ts"],
-      "@chunkforge/portal/types": ["../portal/src/types.ts"]
+      "@chunkforge/portal/types": ["../portal/src/types.ts"],
+      "@chunkforge/portal/domains": ["../portal/src/domains.ts"]
     }
   }
 }

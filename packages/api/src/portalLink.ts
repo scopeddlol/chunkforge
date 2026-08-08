@@ -13,6 +13,7 @@ import {
   type PortalSettings
 } from '@chunkforge/core'
 import { PortalClient } from '@chunkforge/portal/client'
+import type { LabelAvailability } from '@chunkforge/portal/domains'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
 
 /**
@@ -281,6 +282,18 @@ export async function renameInstanceDomain(
     publicPort: renamed.publicPort,
     dnsRecords: renamed.dnsRecords
   }
+}
+
+/**
+ * Asks Portal whether a subdomain is free. Returns null when there is no
+ * Portal to ask, which the UI reads as "nothing to check" rather than an error.
+ */
+export async function checkDomainLabel(
+  label: string,
+  instanceId?: string
+): Promise<LabelAvailability | null> {
+  if (!isPortalLinked()) return null
+  return clientFor(getPortalStatus()).client.checkDomain(label, instanceId)
 }
 
 export async function listPortalDomains(): Promise<PortalDomainBinding[]> {

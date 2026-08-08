@@ -1,7 +1,13 @@
 import { randomUUID } from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import { hashToken, newToken, requireClient } from '../auth'
-import { allocateDomain, listDomainsForClient, releaseDomain, renameDomain } from '../domains'
+import {
+  allocateDomain,
+  checkLabelAvailability,
+  listDomainsForClient,
+  releaseDomain,
+  renameDomain
+} from '../domains'
 import { dnsRecordsFor, portalPublicHost, wildcardRecord } from '../dns'
 import { broadcastPortal } from '../events'
 import { hasClaimed, nodeClaimants, setClaimants } from '../nodeClaims'
@@ -29,7 +35,12 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
         const token = newToken()
         const client: PortalClientRecord = {
           id: randomUUID(),
-          name: request.body?.name?.trim() || pin.label || 'Chunkforge',
+          // The pin's label wins. An operator who typed "Desktop — my PC"
+          // when generating the pin named this control plane deliberately;
+          // the name the client sends is a generic build-time constant like
+          // "Chunkforge Desktop", so letting it win meant every control plane
+          // arrived with the same name and the label was silently discarded.
+          name: pin.label?.trim() || request.body?.name?.trim() || 'Chunkforge',
           kind: request.body?.kind === 'web' ? 'web' : 'desktop',
           tokenHash: hashToken(token),
           pairedAt: new Date().toISOString()
@@ -111,6 +122,21 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
       await portalStore.upsertNode(node)
       return toNodeView(node, request.portalClientId)
     }
+  )
+
+  /**
+   * Whether a subdomain is free, asked before anything is created. Scoped to
+   * the calling control plane so a server checking its own current name is
+   * told yes rather than that it clashes with itself.
+   */
+  app.get<{ Querystring: { label?: string; instanceId?: string } }>(
+    '/api/client/domains/check',
+    { preHandler: requireClient },
+    async (request) =>
+      checkLabelAvailability(request.query.label ?? '', {
+        instanceId: request.query.instanceId,
+        clientId: request.portalClientId
+      })
   )
 
   /**

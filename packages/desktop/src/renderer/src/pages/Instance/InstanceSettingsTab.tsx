@@ -25,6 +25,7 @@ import { IconPanel } from './IconPanel'
 import { StartupPanel } from './StartupPanel'
 import { CopyableAddress } from '../../components/CopyableAddress'
 import { resolveServerAddress } from '../../components/serverAddress'
+import { useSubdomainAvailability } from '../../components/useSubdomainAvailability'
 import { api } from '../../api'
 import { native } from '../../native'
 
@@ -82,6 +83,12 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
   const [deleteFiles, setDeleteFiles] = useState(true)
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(metadata)
+  // Scoped to this instance so its own current name reads as available rather
+  // than clashing with itself.
+  const { status: availability, checking: checkingLabel } = useSubdomainAvailability(subdomainLabel, {
+    instanceId: metadata.id,
+    enabled: portalLinked
+  })
 
   // Whether a subdomain can be set at all is a property of the Portal link,
   // not of this server — a node server that has never been allocated one still
@@ -303,6 +310,24 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
         {portalLinked && (
           <Field
             label="Subdomain"
+            validationState={
+              availability && !availability.available
+                ? 'warning'
+                : availability?.available
+                  ? 'success'
+                  : 'none'
+            }
+            validationMessage={
+              checkingLabel
+                ? 'Checking…'
+                : availability
+                  ? availability.available
+                    ? `${availability.hostname} is available`
+                    : availability.suggestion
+                      ? `${availability.reason} Try ${availability.suggestion}.`
+                      : availability.reason
+                  : undefined
+            }
             hint={
               draft.portalHostname
                 ? `The public port stays the same, so anyone who saved the old address keeps working until you tell them the new one.${zoneSuffix ? ` Full address: ${subdomainLabel.trim() || labelFromHostname(draft.portalHostname)}.${zoneSuffix}` : ''}`
@@ -323,7 +348,8 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
                 disabled={
                   renamingHost ||
                   !subdomainLabel.trim() ||
-                  subdomainLabel.trim() === labelFromHostname(draft.portalHostname)
+                  subdomainLabel.trim() === labelFromHostname(draft.portalHostname) ||
+                  availability?.available === false
                 }
                 onClick={() => void applySubdomain()}
               >

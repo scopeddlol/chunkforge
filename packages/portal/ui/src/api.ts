@@ -76,6 +76,12 @@ export const portalApi = {
   },
   clients: {
     list: () => call<Omit<PortalClientRecord, 'tokenHash'>[]>('/api/clients'),
+    rename: (id: string, name: string) =>
+      call<Omit<PortalClientRecord, 'tokenHash'>>(`/api/clients/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name })
+      }),
     remove: (id: string) => call<{ ok: true }>(`/api/clients/${id}`, { method: 'DELETE' })
   },
   domains: {
