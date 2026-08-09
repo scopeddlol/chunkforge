@@ -6,6 +6,8 @@ import {
   isTrafficFrame,
   type AgentRequestFrame,
   type AgentResponseFrame,
+  type ClientRequestFrame,
+  type ClientResponseFrame,
   type EventPushFrame,
   type PortalFrame,
   type TrafficFrame
@@ -27,6 +29,12 @@ interface OpenTunnel {
   listener: NetServer | DgramSocket
 }
 
+interface PendingClientCall {
+  resolve: (frame: ClientResponseFrame) => void
+  reject: (error: Error) => void
+  timer: NodeJS.Timeout
+}
+
 interface PendingAgentCall {
   resolve: (response: AgentResponseFrame) => void
   reject: (error: Error) => void
@@ -45,6 +53,12 @@ interface PendingAgentCall {
  * server that then finished successfully with nothing pointing at it.
  */
 const AGENT_TIMEOUT_MS = 10 * 60_000
+/**
+ * Much shorter than the agent timeout. An agent call can be a modpack install;
+ * a client call is a list of servers, and an admin waiting on an aggregate
+ * view would rather see "unreachable" quickly than a spinner for ten minutes.
+ */
+const CLIENT_TIMEOUT_MS = 15_000
 const UDP_SESSION_TTL_MS = 60_000
 
 /**
@@ -65,6 +79,7 @@ class PortalRelay {
   private readonly agentReady = new Set<string>()
   /** One socket per control plane, kept open only to carry pushed events downstream. */
   private readonly clientEventSockets = new Map<string, NodeSocket>()
+  private readonly pendingClientCalls = new Map<string, PendingClientCall>()
   private reaper: ReturnType<typeof setInterval> | null = null
 
   private key(protocol: TunnelProtocol, publicPort: number): string {
@@ -114,11 +129,68 @@ class PortalRelay {
     this.clientEventSockets.get(clientId)?.close(1012, 'Replaced by a newer connection')
     this.clientEventSockets.set(clientId, socket)
 
+    socket.on('message', (raw: unknown) => {
+      let frame: ClientResponseFrame
+      try {
+        frame = JSON.parse(String(raw)) as ClientResponseFrame
+      } catch {
+        return
+      }
+      if (frame?.type !== 'client-response') return
+      const pending = this.pendingClientCalls.get(frame.requestId)
+      if (!pending) return
+      clearTimeout(pending.timer)
+      this.pendingClientCalls.delete(frame.requestId)
+      pending.resolve(frame)
+    })
+
     const drop = (): void => {
-      if (this.clientEventSockets.get(clientId) === socket) this.clientEventSockets.delete(clientId)
+      if (this.clientEventSockets.get(clientId) !== socket) return
+      this.clientEventSockets.delete(clientId)
+      // Anything still waiting on this socket will never be answered. Failing
+      // now rather than at the timeout gets the truth to the caller sooner.
+      for (const [requestId, pending] of this.pendingClientCalls) {
+        clearTimeout(pending.timer)
+        pending.reject(new Error('That control plane disconnected.'))
+        this.pendingClientCalls.delete(requestId)
+      }
     }
     socket.on('close', drop)
     socket.on('error', drop)
+  }
+
+  /** Whether a control plane currently holds its channel open. */
+  isClientConnected(clientId: string): boolean {
+    return this.clientEventSockets.has(clientId)
+  }
+
+  /**
+   * Asks a control plane a question and waits for its answer.
+   *
+   * The control plane decides whether to answer: it accepts a fixed, read-only
+   * set of paths and refuses the rest. That asymmetry with `callAgent` is the
+   * point — a node is a worker, a control plane is not, and Portal being able
+   * to run anything on every linked panel would make Portal's own compromise
+   * everyone's.
+   */
+  async callClient(
+    clientId: string,
+    request: { method: string; path: string }
+  ): Promise<ClientResponseFrame> {
+    const socket = this.clientEventSockets.get(clientId)
+    if (!socket) throw new Error('That control plane is not connected to Portal.')
+
+    const requestId = randomUUID()
+    return new Promise<ClientResponseFrame>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingClientCalls.delete(requestId)
+        reject(new Error('That control plane did not answer in time.'))
+      }, CLIENT_TIMEOUT_MS)
+      this.pendingClientCalls.set(requestId, { resolve, reject, timer })
+      socket.send(
+        JSON.stringify({ ...request, type: 'client-request', requestId } satisfies ClientRequestFrame)
+      )
+    })
   }
 
   isNodeConnected(nodeId: string): boolean {

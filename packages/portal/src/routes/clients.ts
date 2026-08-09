@@ -12,6 +12,7 @@ import { dnsRecordsFor, portalPublicHost, wildcardRecord } from '../dns'
 import { broadcastPortal } from '../events'
 import { hasClaimed, nodeClaimants, setClaimants } from '../nodeClaims'
 import { portalRelay } from '../relay'
+import { collectInventory } from '../inventory'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
 import type { ClientKind, PortalClientRecord, PortalNode, TunnelProtocol } from '../types'
@@ -325,6 +326,27 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
    * Core APIs broadcast locally. Nothing is requested over this socket; it
    * only ever receives.
    */
+  /**
+   * What every control plane on this Portal is running, for a linked panel's
+   * own admin view.
+   *
+   * A panel asks Portal because Portal is the only party that can see all of
+   * them — panels have no route to each other and are not meant to. Read-only,
+   * and each panel decides for itself whether to be included.
+   */
+  app.get('/api/client/inventory', { preHandler: requireClient }, async (request) => {
+    const inventory = await collectInventory()
+    return {
+      ...inventory,
+      // So a panel can tell its own servers from a sibling's without having to
+      // guess from names, which collide freely.
+      clients: inventory.clients.map((client) => ({
+        ...client,
+        isSelf: client.clientId === request.portalClientId
+      }))
+    }
+  })
+
   app.get('/api/client/channel', { websocket: true }, (connection, request) => {
     const socket = (
       connection && typeof connection === 'object' && 'socket' in connection

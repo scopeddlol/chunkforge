@@ -214,6 +214,20 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
           : 'An admin has not allowed this account to offer its own machine as a node. Ask them to enable it if you need to run servers here.'}
       </Text>
       {hostError && <Text className={styles.error}>{hostError}</Text>}
+
+      <Switch
+        label="Let this Portal see this panel's servers"
+        disabled={!linked}
+        checked={portal.shareInventoryWithPortal !== false}
+        onChange={(_, data) =>
+          onPatch({ portal: { ...portal, shareInventoryWithPortal: Boolean(data.checked) } })
+        }
+      />
+      <Text size={200} className={styles.muted}>
+        Lets an admin see servers across every Chunkforge attached to this Portal, in one list.
+        Portal only ever asks for names and status — never accounts, files, or anything it could act
+        on. Turning it off hides this panel from that view and changes nothing else.
+      </Text>
     </div>
   )
 }

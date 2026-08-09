@@ -24,6 +24,41 @@ export type PortalFrame =
   | AgentReadyFrame
   | EventPushFrame
 
+/**
+ * The wire contract on the Portal ↔ control-plane socket.
+ *
+ * Until now that socket only ever carried events downward. These two frames
+ * let Portal ask a question and get an answer, mirroring the agent frames
+ * above — same correlation id, same shape — because the problem is the same
+ * one and a second mechanism would be a second thing to get wrong.
+ *
+ * It is deliberately *not* the same authority. A node is a worker that takes
+ * orders; a control plane holds accounts and servers, and Portal is the box
+ * with a public address. So the control plane answers a narrow, fixed set of
+ * read-only requests and refuses everything else — Portal gains visibility,
+ * not control. See `clientRequestAllowed` in the Core API.
+ */
+export type PortalClientFrame = ClientRequestFrame | ClientResponseFrame | EventPushFrame
+
+/** Portal → control plane: answer this, if you are willing to. */
+export interface ClientRequestFrame {
+  type: 'client-request'
+  requestId: string
+  method: string
+  /** Path and query, relative to the control plane's own Core API root. */
+  path: string
+}
+
+/** control plane → Portal: the answer, or a refusal. */
+export interface ClientResponseFrame {
+  type: 'client-response'
+  requestId: string
+  status: number
+  body?: string
+  /** Set instead of a status when the request was never run at all. */
+  error?: string
+}
+
 export interface TrafficFrame {
   type: 'tcp-open' | 'tcp-data' | 'tcp-end' | 'udp-message'
   protocol: TunnelProtocol

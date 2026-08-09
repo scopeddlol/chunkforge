@@ -6,6 +6,7 @@ import {
   getPortalStatus,
   getSettings,
   instanceManager,
+  isPortalLinked,
   listInstanceMetadata,
   loadInstanceMetadata,
   saveInstanceMetadata,
@@ -29,6 +30,7 @@ import {
   checkDomainLabel,
   claimPortalNode,
   connectToPortal,
+  fetchPortalInventory,
   disconnectFromPortal,
   listAllNodes,
   listPortalDomains,
@@ -255,6 +257,28 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       }
     }
   )
+
+  /**
+   * Servers across every control plane on this Portal.
+   *
+   * Admin-only, and asked *of Portal* rather than of the other panels: panels
+   * have no route to one another, which is deliberate. Portal is the only
+   * party that can see them all, and it only sees what each panel agrees to
+   * tell it.
+   */
+  app.get('/api/portal/inventory', { preHandler: requireRole('admin') }, async (_request, reply) => {
+    // No Portal is not a failure — it is a panel with no siblings, which is
+    // the ordinary standalone case. Answering with an empty inventory says
+    // that plainly; a 502 would call a normal configuration an outage.
+    if (!isPortalLinked()) {
+      return { clients: [], serverCount: 0, unreachableCount: 0, portalLinked: false }
+    }
+    try {
+      return { ...(await fetchPortalInventory()), portalLinked: true }
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message })
+    }
+  })
 
   app.get('/api/portal/domains', { preHandler: requireRole('viewer') }, async () =>
     listPortalDomains()

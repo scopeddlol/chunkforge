@@ -47,6 +47,31 @@ export interface PortalClientStatus {
  * them in one file beside the routes they call means the two sides cannot
  * quietly drift apart.
  */
+/** The cross-control-plane view a linked panel can ask Portal for. */
+export interface PortalInventoryView {
+  clients: Array<{
+    clientId: string
+    name: string
+    kind: string
+    connected: boolean
+    isSelf?: boolean
+    servers?: Array<{
+      key: string
+      instanceId: string
+      name: string
+      status?: string
+      serverType?: string
+      minecraftVersion?: string
+      nodeId?: string | null
+      playersOnline?: number
+      portalHostname?: string | null
+    }>
+    problem?: string
+  }>
+  serverCount: number
+  unreachableCount: number
+}
+
 export class PortalClient {
   private readonly baseUrl: string
   private token?: string
@@ -138,6 +163,8 @@ export class PortalClient {
     channelUrl: (token: string) =>
       `${toWebSocketUrl(this.baseUrl)}/api/client/channel?token=${encodeURIComponent(token)}`,
     nodes: () => this.request<PortalNodeView[]>('/api/client/nodes'),
+    /** Every control plane's servers, as Portal sees them. Read-only. */
+    inventory: () => this.request<PortalInventoryView>('/api/client/inventory'),
     claimNode: (nodeId: string) => this.post<PortalNodeView>(`/api/client/nodes/${nodeId}/claim`),
     releaseNode: (nodeId: string) => this.post<PortalNodeView>(`/api/client/nodes/${nodeId}/release`),
     domains: () => this.request<AllocatedDomain[]>('/api/client/domains'),

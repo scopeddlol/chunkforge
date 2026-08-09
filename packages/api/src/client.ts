@@ -134,6 +134,33 @@ export interface NewInviteInput {
   expiresInDays?: number
 }
 
+/** The cross-control-plane view, as an admin sees it. */
+export interface PortalInventory {
+  clients: Array<{
+    clientId: string
+    name: string
+    kind: string
+    connected: boolean
+    isSelf?: boolean
+    servers?: Array<{
+      key: string
+      instanceId: string
+      name: string
+      status?: string
+      serverType?: string
+      minecraftVersion?: string
+      nodeId?: string | null
+      playersOnline?: number
+      portalHostname?: string | null
+    }>
+    problem?: string
+  }>
+  serverCount: number
+  unreachableCount: number
+  /** False when this panel has no Portal, so there is nothing to aggregate. */
+  portalLinked?: boolean
+}
+
 export class ChunkforgeClient {
   private readonly baseUrl: string
   private token?: string
@@ -402,6 +429,8 @@ export class ChunkforgeClient {
     hostLocally: (enabled: boolean) =>
       this.post<PortalSettings>('/api/portal/host-locally', { enabled }),
     domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
+    /** Servers across every control plane on this Portal. Admin-only. */
+    inventory: () => this.get<PortalInventory>('/api/portal/inventory'),
     checkDomain: (label: string, instanceId?: string) => {
       const query = new URLSearchParams({ label })
       if (instanceId) query.set('instanceId', instanceId)

@@ -541,6 +541,15 @@ export interface PortalSettings {
   hostServersLocally?: boolean
   /** Node id Portal issued for this machine, kept so re-registering reuses it. */
   selfNodeId?: string
+  /**
+   * Whether this control plane answers Portal's requests for its server list,
+   * which is what lets an admin see servers across every panel on one Portal.
+   *
+   * Absent means yes — it is the reason to link a Portal at all — and an
+   * operator who would rather keep this panel's inventory to itself turns it
+   * off. Turning it off never affects subdomains, relaying, or nodes.
+   */
+  shareInventoryWithPortal?: boolean
 }
 
 export interface AppSettings {
