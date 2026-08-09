@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto'
+import { dnsRecordsForEndpoint, portalPublicHost, type DnsRecord } from './dns'
+import { removeEndpointRecords, syncEndpointRecords } from './dnsProvider'
 import { normalizeZone, toDnsLabel } from './domains'
 import { portalRelay } from './relay'
 import { portalStore } from './store'
@@ -39,6 +41,11 @@ export interface EndpointMapping {
   /** Hostname this is served on. http only. */
   hostname?: string
   createdAt: string
+}
+
+/** A mapping plus the records that make its hostname resolve. */
+export interface AllocatedEndpoint extends EndpointMapping {
+  dnsRecords: DnsRecord[]
 }
 
 export function endpointTunnelId(mappingId: string): string {
@@ -133,6 +140,12 @@ export async function allocateEndpoint(request: AllocateEndpointRequest): Promis
 
   await portalStore.upsertEndpointMapping(mapping)
   await bindEndpointTunnel(mapping)
+  // Best-effort, exactly as for domains: the mapping and its route are already
+  // live, and a DNS provider being briefly unreachable is not a reason to
+  // refuse an allocation the operator can also publish by hand.
+  await syncEndpointRecords(mapping).catch((err: Error) => {
+    console.error(`Could not publish DNS for ${mapping.hostname ?? mapping.label}: ${err.message}`)
+  })
   return mapping
 }
 
@@ -167,6 +180,9 @@ export async function releaseEndpoint(mappingId: string, clientId: string): Prom
   if (!mapping) return
   if (mapping.clientId !== clientId) throw new Error('That endpoint belongs to another control plane.')
 
+  await removeEndpointRecords(mapping).catch((err: Error) => {
+    console.error(`Could not remove DNS for ${mapping.hostname ?? mapping.label}: ${err.message}`)
+  })
   await portalStore.removeEndpointMapping(mappingId)
 
   const node = portalStore.findNode(mapping.nodeId)
@@ -189,6 +205,18 @@ export async function releaseEndpointsForInstance(instanceId: string, clientId: 
 
 export function listEndpointsForClient(clientId: string): EndpointMapping[] {
   return portalStore.endpointMappings().filter((mapping) => mapping.clientId === clientId)
+}
+
+/**
+ * The same list with the DNS each mapping needs, for a panel to show an
+ * operator whose zone Portal cannot write to itself.
+ */
+export function describeEndpointsForClient(clientId: string): AllocatedEndpoint[] {
+  const address = portalPublicHost()
+  return listEndpointsForClient(clientId).map((mapping) => ({
+    ...mapping,
+    dnsRecords: dnsRecordsForEndpoint(mapping, address)
+  }))
 }
 
 /** The mapping serving a given hostname, for the HTTP proxy to route by. */

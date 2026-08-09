@@ -74,12 +74,28 @@ export const ENDPOINT_PROFILES: EndpointProfile[] = [
  * Most add-ons are in that second category, so returning null is the ordinary
  * answer rather than a failure.
  */
-export function profileFor(slugOrId: string): EndpointProfile | null {
-  const needle = slugOrId.trim().toLowerCase()
+export function profileFor(slugOrId: string | undefined | null): EndpointProfile | null {
+  const needle = canonical(slugOrId ?? '')
   if (!needle) return null
   return (
     ENDPOINT_PROFILES.find((profile) =>
-      profile.slugs.some((slug) => slug === needle || needle.includes(slug))
+      profile.slugs.some((slug) => {
+        const target = canonical(slug)
+        return needle === target || needle.includes(target)
+      })
     ) ?? null
   )
+}
+
+/**
+ * Reduces a slug or a display name to letters and digits.
+ *
+ * Sources disagree about punctuation for the same project — Modrinth's
+ * `simple-voice-chat`, a CurseForge display name of "Simple Voice Chat" and a
+ * jar called `voicechat_1.21` are all the same add-on. Comparing the letters
+ * alone means a profile keeps matching when a source changes its formatting,
+ * which is the failure that would otherwise be silent.
+ */
+function canonical(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
 }

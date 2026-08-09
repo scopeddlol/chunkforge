@@ -20,6 +20,8 @@ import type {
   PluginSearchResult,
   PluginSource,
   PluginVersion,
+  EndpointProtocol,
+  ServerEndpoint,
   ServerGroup,
   ServerType,
   DashboardStats,
@@ -29,6 +31,37 @@ import type {
 import type { ServerEvent } from './eventTypes'
 
 export type { ServerEvent, ServerEventType, ServerEventPayloads } from './eventTypes'
+
+/**
+ * What installing an add-on produced.
+ *
+ * `endpoint` is non-null only for the handful of add-ons that need a port of
+ * their own; `configHint` tells the user where to put the allocated number,
+ * because the port is whatever was free rather than the one the add-on's own
+ * documentation names.
+ */
+/** A server endpoint as the panel sees it: the node's half and Portal's half. */
+export interface EndpointView extends ServerEndpoint {
+  mappingId?: string
+  publicHostname?: string
+  published: boolean
+}
+
+/**
+ * The endpoint an add-on install created, before or after publishing.
+ *
+ * `published` is optional because the install route answers before anything
+ * has been published — the caller fills it in if it goes on to publish.
+ */
+export interface AddonEndpoint extends Omit<EndpointView, 'published'> {
+  configHint?: string
+  published?: boolean
+}
+
+export interface AddonInstallResult {
+  path: string
+  endpoint: AddonEndpoint | null
+}
 
 /** Whether a requested subdomain label can be used. Mirrors Portal's own shape. */
 export interface DomainAvailability {
@@ -310,12 +343,40 @@ export class ChunkforgeClient {
         `/api/addons/versions?source=${source}&projectId=${encodeURIComponent(projectId)}`
       ),
     installed: (id: string) => this.get<InstalledPlugin[]>(`/api/servers/${id}/addons`),
-    install: (id: string, version: PluginVersion, name: string) =>
-      this.post<{ path: string }>(`/api/servers/${id}/addons`, { version, name }),
+    /**
+     * `projectId` is the source's own slug, and is what an endpoint profile is
+     * matched on. Passing it is optional so an older caller keeps working, but
+     * without it the match falls back to the display name.
+     */
+    install: (id: string, version: PluginVersion, name: string, projectId?: string) =>
+      this.post<AddonInstallResult>(`/api/servers/${id}/addons`, { version, name, projectId }),
     setEnabled: (id: string, filename: string, enabled: boolean) =>
       this.patch<{ ok: true }>(`/api/servers/${id}/addons/${encodeURIComponent(filename)}`, { enabled }),
     uninstall: (id: string, filename: string) =>
       this.del<{ ok: true }>(`/api/servers/${id}/addons/${encodeURIComponent(filename)}`)
+  }
+
+  // ---- endpoints ----
+  //
+  // A server's network endpoints. The local port belongs to the machine that
+  // listens on it and the public one to Portal, so these calls are split
+  // across both by the Core API rather than by the caller.
+  endpoints = {
+    list: (id: string) => this.get<EndpointView[]>(`/api/servers/${id}/endpoints`),
+    add: (
+      id: string,
+      input: { label: string; protocol: EndpointProtocol; localPort?: number; publish?: boolean }
+    ) => this.post<EndpointView>(`/api/servers/${id}/endpoints`, input),
+    publish: (id: string, endpointId: string) =>
+      this.post<EndpointView>(
+        `/api/servers/${id}/endpoints/${encodeURIComponent(endpointId)}/publish`
+      ),
+    unpublish: (id: string, endpointId: string) =>
+      this.del<{ ok: true }>(
+        `/api/servers/${id}/endpoints/${encodeURIComponent(endpointId)}/publish`
+      ),
+    remove: (id: string, endpointId: string) =>
+      this.del<{ ok: true }>(`/api/servers/${id}/endpoints/${encodeURIComponent(endpointId)}`)
   }
 
   // ---- modpacks ----

@@ -258,14 +258,26 @@ class PortalRelay {
   }
 
   private async listenTcp(nodeId: string, tunnel: PortalTunnel): Promise<NetServer> {
+    const key = this.key(tunnel.protocol, tunnel.publicPort)
+    /**
+     * The target is read per connection, not captured.
+     *
+     * `syncNodeTunnels` updates a tunnel in place when only its target moved —
+     * no rebind, so the public port players already have keeps working. A
+     * listener that closed over the original target would go on relaying to
+     * the old port, which reads as the service having silently died.
+     */
+    const target = (): PortalTunnel => this.tunnels.get(key)?.tunnel ?? tunnel
+
     const server = net.createServer((incoming) => {
       const connectionId = randomUUID()
+      const targetPort = target().targetPort
       this.tcpConnections.set(connectionId, incoming)
       this.sendToNode(nodeId, {
         type: 'tcp-open',
         protocol: 'tcp',
         publicPort: tunnel.publicPort,
-        targetPort: tunnel.targetPort,
+        targetPort,
         connectionId,
         remoteAddress: incoming.remoteAddress,
         remotePort: incoming.remotePort
@@ -275,7 +287,7 @@ class PortalRelay {
           type: 'tcp-data',
           protocol: 'tcp',
           publicPort: tunnel.publicPort,
-          targetPort: tunnel.targetPort,
+          targetPort,
           connectionId,
           payload: chunk.toString('base64')
         })
@@ -286,7 +298,7 @@ class PortalRelay {
           type: 'tcp-end',
           protocol: 'tcp',
           publicPort: tunnel.publicPort,
-          targetPort: tunnel.targetPort,
+          targetPort,
           connectionId
         })
       }
@@ -308,6 +320,9 @@ class PortalRelay {
   }
 
   private async listenUdp(nodeId: string, tunnel: PortalTunnel): Promise<DgramSocket> {
+    const key = this.key(tunnel.protocol, tunnel.publicPort)
+    const target = (): PortalTunnel => this.tunnels.get(key)?.tunnel ?? tunnel
+
     const socket = dgram.createSocket('udp4')
     socket.on('message', (message: Buffer, remote: RemoteInfo) => {
       // UDP has no connections, so the peer's address *is* the session key —
@@ -322,7 +337,7 @@ class PortalRelay {
         type: 'udp-message',
         protocol: 'udp',
         publicPort: tunnel.publicPort,
-        targetPort: tunnel.targetPort,
+        targetPort: target().targetPort,
         connectionId,
         payload: message.toString('base64'),
         remoteAddress: remote.address,

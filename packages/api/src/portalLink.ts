@@ -10,9 +10,14 @@ import {
   type InstanceMetadata,
   type Node,
   type PortalDomainBinding,
-  type PortalSettings
+  type PortalSettings,
+  type ServerEndpoint
 } from '@chunkforge/core'
-import { PortalClient, type PortalInventoryView } from '@chunkforge/portal/client'
+import {
+  PortalClient,
+  type AllocatedEndpoint,
+  type PortalInventoryView
+} from '@chunkforge/portal/client'
 import type { LabelAvailability } from '@chunkforge/portal/domains'
 import { localNodeId } from './localNode'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
@@ -228,6 +233,72 @@ export async function provisionInstanceDomain(
     publicPort: allocated.publicPort,
     dnsRecords: allocated.dnsRecords
   }
+}
+
+/**
+ * Publishes one endpoint through Portal.
+ *
+ * The id sent up is `<instanceId>:<endpointId>` because that is exactly what
+ * the node registers under. Portal refuses any allocation it cannot match
+ * against a registration, so the two names have to be the same string — a
+ * mismatch here reads as "that node has not registered that endpoint" rather
+ * than as a typo, which is the point of the check.
+ */
+export async function publishEndpoint(input: {
+  instanceId: string
+  nodeId: string
+  endpoint: ServerEndpoint
+}): Promise<AllocatedEndpoint | null> {
+  if (!isPortalLinked()) return null
+  return clientFor(getPortalStatus()).client.allocateEndpoint({
+    nodeId: input.nodeId,
+    instanceId: input.instanceId,
+    endpointId: `${input.instanceId}:${input.endpoint.id}`,
+    label: input.endpoint.label,
+    protocol: input.endpoint.protocol,
+    targetPort: input.endpoint.localPort
+  })
+}
+
+/** Every public mapping this control plane owns. Empty without a Portal. */
+export async function listEndpointMappings(): Promise<AllocatedEndpoint[]> {
+  if (!isPortalLinked()) return []
+  try {
+    return await clientFor(getPortalStatus()).client.endpoints()
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Takes an endpoint's public mapping down.
+ *
+ * Looked up by the node-side id rather than passed in, so a caller deleting an
+ * endpoint does not have to have fetched Portal's list first — and so a
+ * mapping left behind by a previous attempt is still found and released.
+ */
+export async function unpublishEndpoint(instanceId: string, endpointId: string): Promise<void> {
+  if (!isPortalLinked()) return
+  const wanted = `${instanceId}:${endpointId}`
+  try {
+    const client = clientFor(getPortalStatus())
+    const mine = await client.client.endpoints()
+    for (const mapping of mine.filter((entry) => entry.endpointId === wanted)) {
+      await client.client.releaseEndpoint(mapping.id)
+    }
+  } catch {
+    // The endpoint is going away on the node either way. A leftover mapping is
+    // visible on Portal's own page and can be pruned there; refusing the
+    // delete would leave the user with an endpoint they cannot remove.
+  }
+}
+
+/** Releases every mapping a server had, for when the server itself is deleted. */
+export async function releaseInstanceEndpoints(instanceId: string): Promise<void> {
+  if (!isPortalLinked()) return
+  await clientFor(getPortalStatus())
+    .client.releaseEndpointsForInstance(instanceId)
+    .catch(() => undefined)
 }
 
 /**

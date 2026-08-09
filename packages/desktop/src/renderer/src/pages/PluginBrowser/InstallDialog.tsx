@@ -26,6 +26,7 @@ import {
   type PluginSource,
   type PluginVersion
 } from '@shared/types'
+import type { AddonEndpoint } from '@chunkforge/api/client'
 import { api } from '../../api'
 import { native } from '../../native'
 
@@ -68,6 +69,7 @@ export function InstallDialog({
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [endpoint, setEndpoint] = useState<AddonEndpoint | null>(null)
 
   // Every place this plugin can be fetched from, primary first.
   const sourceChoices = plugin
@@ -85,6 +87,7 @@ export function InstallDialog({
     if (!plugin) return
     setError(null)
     setDone(false)
+    setEndpoint(null)
     setInstanceId(preselectedInstanceId ?? instances[0]?.id ?? null)
     setChosenSource(plugin.source)
   }, [plugin, preselectedInstanceId, instances])
@@ -128,7 +131,27 @@ export function InstallDialog({
     setInstalling(true)
     setError(null)
     try {
-      await api().addons.install(instanceId, selectedVersion, plugin.name)
+      const choice = sourceChoices.find((c) => c.source === chosenSource)
+      const result = await api().addons.install(
+        instanceId,
+        selectedVersion,
+        plugin.name,
+        choice?.id
+      )
+      /**
+       * The add-on's port is open on the machine that runs the server; making
+       * it reachable from outside is a Portal matter, and only this control
+       * plane can ask. Best-effort — the install succeeded either way, and the
+       * endpoint can be published from the server's Settings tab.
+       */
+      let endpointResult = result.endpoint
+      if (endpointResult) {
+        const published = await api()
+          .endpoints.publish(instanceId, endpointResult.id)
+          .catch(() => null)
+        if (published) endpointResult = { ...published, configHint: endpointResult.configHint }
+      }
+      setEndpoint(endpointResult)
       setDone(true)
       onInstalled()
     } catch (err) {
@@ -152,6 +175,25 @@ export function InstallDialog({
             {done && (
               <MessageBar intent="success">
                 <MessageBarBody>Installed to {selectedInstance?.name}. Restart the server to load it.</MessageBarBody>
+              </MessageBar>
+            )}
+            {/*
+              This add-on wants a port of its own, and Chunkforge has already
+              opened one. The number is whatever was free rather than the one
+              the add-on's documentation names, so it is worth stating plainly
+              along with where to put it.
+            */}
+            {done && endpoint && (
+              <MessageBar intent="info">
+                <MessageBarBody>
+                  {`Opened ${endpoint.protocol.toUpperCase()} port ${endpoint.localPort} for ${endpoint.label}. `}
+                  {endpoint.publicHostname
+                    ? `Reachable at ${endpoint.publicHostname}. `
+                    : endpoint.publicPort
+                      ? `Published on port ${endpoint.publicPort}. `
+                      : ''}
+                  {endpoint.configHint}
+                </MessageBarBody>
               </MessageBar>
             )}
 

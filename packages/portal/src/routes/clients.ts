@@ -8,13 +8,13 @@ import {
   releaseDomain,
   renameDomain
 } from '../domains'
-import { dnsRecordsFor, portalPublicHost, wildcardRecord } from '../dns'
+import { dnsRecordsFor, dnsRecordsForEndpoint, portalPublicHost, wildcardRecord } from '../dns'
 import { broadcastPortal } from '../events'
 import { hasClaimed, nodeClaimants, setClaimants } from '../nodeClaims'
 import { portalRelay } from '../relay'
 import {
   allocateEndpoint,
-  listEndpointsForClient,
+  describeEndpointsForClient,
   releaseEndpoint,
   releaseEndpointsForInstance
 } from '../endpoints'
@@ -360,7 +360,7 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
   // control plane naming an arbitrary port on a machine it has claimed.
 
   app.get('/api/client/endpoints', { preHandler: requireClient }, async (request) =>
-    listEndpointsForClient(request.portalClientId!)
+    describeEndpointsForClient(request.portalClientId!)
   )
 
   app.post<{
@@ -374,7 +374,10 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
     }
   }>('/api/client/endpoints', { preHandler: requireClient }, async (request, reply) => {
     try {
-      return await allocateEndpoint({ ...request.body, clientId: request.portalClientId! })
+      const mapping = await allocateEndpoint({ ...request.body, clientId: request.portalClientId! })
+      // Same shape the list route returns, so a caller that allocates and a
+      // caller that reloads see one thing rather than two.
+      return { ...mapping, dnsRecords: dnsRecordsForEndpoint(mapping, portalPublicHost()) }
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message })
     }

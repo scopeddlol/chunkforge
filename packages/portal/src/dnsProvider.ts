@@ -1,5 +1,6 @@
 import { deleteRecord, resolveZoneId, upsertRecord, verifyCredentials, type CloudflareCredentials } from './cloudflare'
-import { dnsRecordsFor, portalPublicHost, wildcardRecord, type DnsRecord } from './dns'
+import { dnsRecordsFor, dnsRecordsForEndpoint, portalPublicHost, wildcardRecord, type DnsRecord } from './dns'
+import type { EndpointMapping } from './endpoints'
 import { portalStore } from './store'
 import type { PortalDomain } from './types'
 
@@ -82,6 +83,28 @@ export async function removeDomainRecords(domain: PortalDomain): Promise<void> {
   if (!credentials) return
   const records = dnsRecordsFor(domain, portalPublicHost())
   for (const record of records) {
+    await deleteRecord(credentials, record)
+  }
+}
+
+/**
+ * Publishes the records an HTTP endpoint's hostname needs. A no-op for tcp and
+ * udp endpoints, and a no-op when Cloudflare is not configured — the caller
+ * does not have to distinguish.
+ */
+export async function syncEndpointRecords(mapping: EndpointMapping): Promise<void> {
+  const credentials = cloudflareCredentials()
+  if (!credentials) return
+  for (const record of dnsRecordsForEndpoint(mapping, portalPublicHost())) {
+    await upsertRecord(credentials, record)
+  }
+}
+
+/** Removes what `syncEndpointRecords` published, when a mapping is released. */
+export async function removeEndpointRecords(mapping: EndpointMapping): Promise<void> {
+  const credentials = cloudflareCredentials()
+  if (!credentials) return
+  for (const record of dnsRecordsForEndpoint(mapping, portalPublicHost())) {
     await deleteRecord(credentials, record)
   }
 }

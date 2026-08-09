@@ -32,6 +32,15 @@ export interface ServerEventPayloads {
   'backup-created': { instanceId: string; filename: string }
   'backup-failed': { instanceId: string; message: string }
   'filehub-upload': BackupUploadProgress
+  /**
+   * A server's endpoint list changed on this machine.
+   *
+   * Carried as an event so a node re-declares its ports to Portal at once
+   * rather than on its next heartbeat — otherwise an endpoint added and then
+   * published a second later is refused, because Portal has not been told the
+   * node runs anything there yet.
+   */
+  'endpoints-changed': { instanceId: string }
   'portal-status': PortalSettings
   'node-updated': Node
 }

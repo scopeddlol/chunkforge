@@ -1,7 +1,11 @@
 import type { DnsRecord } from './dns'
 import type { LabelAvailability } from './domains'
+import type { AllocatedEndpoint } from './endpoints'
+
+export type { AllocatedEndpoint }
 import type {
   ClientKind,
+  NodeEndpoint,
   PortalConfig,
   PortalDomain,
   PortalNodeStats,
@@ -139,6 +143,12 @@ export class PortalClient {
       this.post<PortalNodeView>('/api/node/heartbeat', { stats, agentReady }),
     announceTunnels: (tunnels: PortalTunnel[]) =>
       this.post<{ tunnels: PortalTunnel[] }>('/api/node/tunnels', { tunnels }),
+    /** Which of this node's ports Portal may publish, and for which server. */
+    declareEndpoints: (endpoints: NodeEndpoint[]) =>
+      this.request<{ endpoints: NodeEndpoint[] }>('/api/node/endpoints', {
+        method: 'PUT',
+        body: JSON.stringify({ endpoints })
+      }),
     /** The one outbound socket a node keeps open for traffic and control. */
     channelUrl: (token: string) =>
       `${toWebSocketUrl(this.baseUrl)}/api/node/channel?token=${encodeURIComponent(token)}`
@@ -183,6 +193,27 @@ export class PortalClient {
       }),
     renameDomain: (hostname: string, label: string) =>
       this.post<AllocatedDomain>(`/api/client/domains/${encodeURIComponent(hostname)}/rename`, { label }),
+
+    /** Public mappings this control plane owns, with the DNS each one needs. */
+    endpoints: () => this.request<AllocatedEndpoint[]>('/api/client/endpoints'),
+    allocateEndpoint: (input: {
+      nodeId: string
+      instanceId: string
+      endpointId: string
+      label: string
+      protocol: TunnelProtocol | 'http'
+      targetPort: number
+    }) => this.post<AllocatedEndpoint>('/api/client/endpoints', input),
+    releaseEndpoint: (id: string) =>
+      this.request<{ ok: true }>(`/api/client/endpoints/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      }),
+    /** Takes every mapping a server had with it, for when the server is deleted. */
+    releaseEndpointsForInstance: (instanceId: string) =>
+      this.request<{ released: number }>(
+        `/api/client/endpoints/instance/${encodeURIComponent(instanceId)}`,
+        { method: 'DELETE' }
+      ),
 
     checkDomain: (label: string, instanceId?: string) => {
       const query = new URLSearchParams({ label })
