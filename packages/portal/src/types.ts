@@ -38,6 +38,14 @@ export interface PortalNode {
   /** Ports the node has told Portal it can accept traffic on. */
   tunnels: PortalTunnel[]
   /**
+   * Ports this node has declared exposable, and for which server.
+   *
+   * Portal refuses to open a tunnel to any port not listed here — see
+   * `NodeEndpoint`. Re-registered wholesale on each announcement, so a service
+   * that goes away stops being exposable without a separate release call.
+   */
+  endpoints?: NodeEndpoint[]
+  /**
    * The control planes that have adopted this node. Until one does, the node is
    * reachable but unmanaged — Portal will proxy for it but nothing is driving
    * it.
@@ -71,6 +79,33 @@ export interface PortalNodeStats {
   totalStorageBytes: number
   usedStorageBytes: number
   latencyMs?: number
+}
+
+/**
+ * A port on a node that Portal is permitted to expose.
+ *
+ * This is the whole security model for endpoints, and it is deliberately
+ * inverted from how tunnels used to be requested. A control plane could ask
+ * Portal to bind a public port to *any* target port on a node it had claimed —
+ * nothing checked that the port belonged to a Chunkforge server, so the same
+ * call that published a Minecraft server could have published a database or an
+ * SSH daemon on the same host.
+ *
+ * A node is the only party that knows which of its own ports belong to
+ * processes Chunkforge started. So the node registers them, and Portal will
+ * not bind a tunnel to anything absent from this list. A control plane may
+ * still choose *which* registered endpoint to expose; it can no longer invent
+ * one.
+ */
+export interface NodeEndpoint {
+  /** Stable id, assigned by whoever created the endpoint on the node. */
+  id: string
+  /** The Chunkforge server this belongs to, so it can be released with it. */
+  instanceId: string
+  label: string
+  protocol: TunnelProtocol | 'http'
+  /** The port on the node. The only port Portal will forward to for this id. */
+  localPort: number
 }
 
 /** One forwarded port on a node. */

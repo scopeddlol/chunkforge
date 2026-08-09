@@ -75,6 +75,52 @@ export interface NodeStats {
 export type TunnelProtocol = 'tcp' | 'udp'
 
 /** One public route Portal has opened, as this control plane sees it. */
+/**
+ * What a network endpoint speaks.
+ *
+ * `http` is not simply "tcp with a hostname": Portal serves it by name on one
+ * shared port rather than binding a port per service, so a map or a web
+ * console costs a subdomain instead of a number players have to be told.
+ */
+export type EndpointProtocol = 'tcp' | 'udp' | 'http'
+
+/**
+ * One way into a server.
+ *
+ * A Minecraft server has stopped being a single port. Voice chat wants UDP,
+ * a map wants HTTP, and a modpack may want several of each — so the port on
+ * `InstanceMetadata` is now just the first of these rather than the whole
+ * story.
+ *
+ * `localPort` is on the machine that runs the server; `publicPort` and
+ * `hostname` are what Portal exposes. The split matters because the node
+ * allocates the first and Portal allocates the second, and neither may assume
+ * the other's answer.
+ */
+export interface ServerEndpoint {
+  id: string
+  /** What a person calls it: "Minecraft", "Voice Chat", "BlueMap". */
+  label: string
+  protocol: EndpointProtocol
+  /** Port on the node. Allocated there when a caller does not pin one. */
+  localPort: number
+  /** Public port Portal accepts traffic on. Absent for http, which shares one. */
+  publicPort?: number
+  /** Hostname Portal serves this on. Only meaningful for http. */
+  hostname?: string
+  /**
+   * What asked for this endpoint.
+   *
+   * `server` is the game port itself and cannot be removed; `addon` endpoints
+   * are released when their add-on is uninstalled; `custom` ones are the
+   * operator's own and are only ever removed by hand.
+   */
+  source: 'server' | 'addon' | 'custom'
+  /** Which add-on declared it, when source is `addon`. */
+  addonId?: string
+  enabled: boolean
+}
+
 export interface PortalTunnelPort {
   id: string
   label: string

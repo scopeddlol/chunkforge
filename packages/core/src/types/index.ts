@@ -1,4 +1,10 @@
-import { LOCAL_NODE_ID, type Node, type PortalTunnelPort, type Project } from './models'
+import {
+  LOCAL_NODE_ID,
+  type Node,
+  type PortalTunnelPort,
+  type Project,
+  type ServerEndpoint
+} from './models'
 
 // The platform models live in their own module but are part of the same public
 // surface, so callers keep importing everything from one place.
@@ -116,6 +122,14 @@ export interface InstanceMetadata extends InstanceSummary {
   path: string
   toggles: InstanceToggles
   exposedPorts?: PortalTunnelPort[]
+  /**
+   * Every way into this server, including the game port itself.
+   *
+   * Absent on servers created before endpoints existed; `endpointsFor()`
+   * derives the game endpoint from `port` so those still read as having one
+   * rather than none.
+   */
+  endpoints?: ServerEndpoint[]
 }
 
 export interface InstanceToggles {
@@ -159,6 +173,8 @@ export interface CreateInstanceConfig {
   /** Modpack to install over the fresh server, replacing manual mod picking. */
   modpack?: SelectedModpack | null
   exposedPorts?: PortalTunnelPort[]
+  /** Extra endpoints to create alongside the game port. */
+  endpoints?: ServerEndpoint[]
   /**
    * Where to build the server. `local` (the default) means this machine;
    * anything else is a Portal node id, and the whole creation is carried out on
