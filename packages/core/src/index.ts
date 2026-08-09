@@ -35,6 +35,11 @@ export { detectInstalledJava, ensureJavaRuntime } from './services/javaManager'
 
 // Endpoints
 export {
+  ENDPOINT_PROFILES,
+  profileFor,
+  type EndpointProfile
+} from './services/endpointProfiles'
+export {
   endpointsFor,
   extraEndpoints,
   addEndpoint,

@@ -2,6 +2,7 @@ import { existsSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { randomBytes } from 'crypto'
+import type { EndpointMapping } from './endpoints'
 import { nodeClaimants, setClaimants } from './nodeClaims'
 import {
   defaultPortalConfig,
@@ -17,6 +18,7 @@ interface PortalFile {
   nodes: PortalNode[]
   clients: PortalClientRecord[]
   domains: PortalDomain[]
+  endpointMappings: EndpointMapping[]
   pins: PortalPin[]
   users: PortalUser[]
 }
@@ -196,6 +198,24 @@ class PortalStore {
     return this.data.domains.find((domain) => domain.hostname === needle)
   }
 
+  endpointMappings(): EndpointMapping[] {
+    return this.data.endpointMappings ?? []
+  }
+
+  async upsertEndpointMapping(mapping: EndpointMapping): Promise<EndpointMapping> {
+    this.data.endpointMappings = [
+      ...this.endpointMappings().filter((entry) => entry.id !== mapping.id),
+      mapping
+    ]
+    await this.persist()
+    return mapping
+  }
+
+  async removeEndpointMapping(id: string): Promise<void> {
+    this.data.endpointMappings = this.endpointMappings().filter((entry) => entry.id !== id)
+    await this.persist()
+  }
+
   async upsertDomain(domain: PortalDomain): Promise<PortalDomain> {
     const index = this.data.domains.findIndex((entry) => entry.hostname === domain.hostname)
     if (index >= 0) this.data.domains[index] = domain
@@ -269,6 +289,7 @@ function emptyFile(): PortalFile {
     nodes: [],
     clients: [],
     domains: [],
+    endpointMappings: [],
     pins: [],
     users: []
   }

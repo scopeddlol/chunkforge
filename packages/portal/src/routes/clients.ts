@@ -12,6 +12,12 @@ import { dnsRecordsFor, portalPublicHost, wildcardRecord } from '../dns'
 import { broadcastPortal } from '../events'
 import { hasClaimed, nodeClaimants, setClaimants } from '../nodeClaims'
 import { portalRelay } from '../relay'
+import {
+  allocateEndpoint,
+  listEndpointsForClient,
+  releaseEndpoint,
+  releaseEndpointsForInstance
+} from '../endpoints'
 import { collectInventory } from '../inventory'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
@@ -346,6 +352,56 @@ export async function registerClientRoutes(app: FastifyInstance): Promise<void> 
       }))
     }
   })
+
+  // ---- endpoints ----
+  //
+  // Public mappings for the extra services a server exposes. Every allocation
+  // is checked against what the node itself registered, which is what stops a
+  // control plane naming an arbitrary port on a machine it has claimed.
+
+  app.get('/api/client/endpoints', { preHandler: requireClient }, async (request) =>
+    listEndpointsForClient(request.portalClientId!)
+  )
+
+  app.post<{
+    Body: {
+      nodeId: string
+      instanceId: string
+      endpointId: string
+      label: string
+      protocol: 'tcp' | 'udp' | 'http'
+      targetPort: number
+    }
+  }>('/api/client/endpoints', { preHandler: requireClient }, async (request, reply) => {
+    try {
+      return await allocateEndpoint({ ...request.body, clientId: request.portalClientId! })
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message })
+    }
+  })
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/client/endpoints/:id',
+    { preHandler: requireClient },
+    async (request, reply) => {
+      try {
+        await releaseEndpoint(request.params.id, request.portalClientId!)
+        return { ok: true }
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /** Releases every endpoint a server had, for when the server is deleted. */
+  app.delete<{ Params: { instanceId: string } }>(
+    '/api/client/endpoints/instance/:instanceId',
+    { preHandler: requireClient },
+    async (request) => {
+      const released = await releaseEndpointsForInstance(request.params.instanceId, request.portalClientId!)
+      return { released }
+    }
+  )
 
   app.get('/api/client/channel', { websocket: true }, (connection, request) => {
     const socket = (
