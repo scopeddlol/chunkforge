@@ -3,7 +3,7 @@ import { hasClaimed, nodeClaimants } from './nodeClaims'
 import { portalStore } from './store'
 import type { PortalNode, PortalNodeView, PortalOverview } from './types'
 
-export const PORTAL_VERSION = '0.9.0'
+export const PORTAL_VERSION = '0.10.0'
 
 const startedAt = Date.now()
 
