@@ -277,6 +277,9 @@ export class ChunkforgeClient {
     create: (config: CreateInstanceConfig) => this.post<InstanceMetadata>('/api/servers', config),
     start: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/start`),
     stop: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/stop`),
+    restart: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/restart`),
+    /** Ends the process without saving. Admin-only. */
+    kill: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/kill`),
     logs: (id: string, limit?: number) =>
       this.get<LogLineEvent[]>(
         `/api/servers/${id}/logs${limit ? `?limit=${limit}` : ''}`

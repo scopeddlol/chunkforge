@@ -302,9 +302,35 @@ export interface FileEntry {
 }
 
 export interface BackupEntry {
+  /** What this archive actually contains. Absent on archives made before this existed. */
+  contents?: BackupContents
   filename: string
   sizeBytes: number
   createdAt: number
+}
+
+/**
+ * What goes into a backup.
+ *
+ * Separated because the three answer different questions. A world is the thing
+ * players would mourn; add-ons are re-downloadable but a specific working set
+ * of versions is not; configs are small, fiddly, and the part someone spent an
+ * evening tuning. Backing up all three every time would multiply the size of
+ * the expensive one for the sake of the cheap ones.
+ */
+export interface BackupContents {
+  /** world, world_nether, world_the_end. */
+  worlds: boolean
+  /** plugins/ and mods/, including their own config folders. */
+  addons: boolean
+  /** server.properties, the loader's yml/toml files, ops and whitelist. */
+  configs: boolean
+}
+
+export const defaultBackupContents: BackupContents = {
+  worlds: true,
+  addons: false,
+  configs: false
 }
 
 export interface BackupSchedule {
@@ -314,13 +340,16 @@ export interface BackupSchedule {
   keepCount: number
   uploadToFileHub: boolean
   lastRunAt?: number
+  /** Absent means worlds only, which is what every backup was before this. */
+  contents?: BackupContents
 }
 
 export const defaultBackupSchedule: BackupSchedule = {
   enabled: false,
   intervalHours: 6,
   keepCount: 5,
-  uploadToFileHub: false
+  uploadToFileHub: false,
+  contents: defaultBackupContents
 }
 
 export type PluginSource = 'modrinth' | 'hangar' | 'spiget' | 'curseforge'

@@ -226,6 +226,54 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     }
   )
 
+  app.post<{ Params: { id: string } }>(
+    '/api/servers/:id/restart',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      // Existence is settled before acting, so "no such server" is a 404 and
+      // not a 400 about whatever went wrong further down.
+      let metadata: InstanceMetadata
+      try {
+        metadata = await loadInstanceMetadata(request.params.id)
+      } catch {
+        return reply.code(404).send({ error: 'No such server' })
+      }
+      try {
+        await instanceManager.restartInstance(metadata)
+        return { ok: true }
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /**
+   * Ends the process without asking it to save. Separate from stop on purpose
+   * — see `killInstance`. Requires admin, because the cost of getting this
+   * wrong is a world rolled back to its last autosave.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/servers/:id/kill',
+    { preHandler: requireRole('admin') },
+    async (request, reply) => {
+      // `killInstance` returns quietly when nothing is running, which for an
+      // id that does not exist would be a cheerful 200 about a server that was
+      // never there. Confirming it is real first is what makes the answer mean
+      // something.
+      try {
+        await loadInstanceMetadata(request.params.id)
+      } catch {
+        return reply.code(404).send({ error: 'No such server' })
+      }
+      try {
+        await instanceManager.killInstance(request.params.id)
+        return { ok: true }
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
   app.post<{ Params: { id: string }; Body: { command: string } }>(
     '/api/servers/:id/command',
     { preHandler: requireRole('member') },

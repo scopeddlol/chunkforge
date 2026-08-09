@@ -3,6 +3,7 @@ import {
   backupScheduler,
   createBackup,
   createDirectory,
+  defaultBackupContents,
   defaultBackupSchedule,
   deleteBackup,
   deleteEntry,
@@ -16,6 +17,7 @@ import {
   restoreBackup,
   saveInstanceMetadata,
   writeTextFile,
+  type BackupContents,
   type BackupSchedule
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
@@ -138,10 +140,19 @@ export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<
     async (request, reply) => guard(reply, async () => listBackups(await instancePath(request.params.id)))
   )
 
-  app.post<{ Params: { id: string } }>(
+  app.post<{ Params: { id: string }; Body?: { contents?: BackupContents } }>(
     '/api/servers/:id/backups',
     { preHandler: requireRole('member') },
-    async (request, reply) => guard(reply, async () => createBackup(await instancePath(request.params.id)))
+    async (request, reply) =>
+      guard(reply, async () => {
+        // Falls back to the server's own schedule choice, then to worlds — so
+        // a one-off backup captures what that server normally captures rather
+        // than something narrower the caller never chose.
+        const metadata = await loadInstanceMetadata(request.params.id)
+        const contents =
+          request.body?.contents ?? metadata.backupSchedule?.contents ?? defaultBackupContents
+        return createBackup(metadata.path, contents)
+      })
   )
 
   app.post<{ Params: { id: string; filename: string } }>(

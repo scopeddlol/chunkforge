@@ -8,12 +8,26 @@ import {
   Spinner,
   TabList,
   Tab,
-  Badge
+  Badge,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+  Dialog,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@fluentui/react-components'
 import {
   ArrowLeft20Regular,
   Play20Filled,
   Stop20Filled,
+  ArrowSync20Regular,
+  MoreHorizontal20Regular,
+  Prohibited20Regular,
   FolderOpen20Regular,
   Window20Regular,
   Chat20Regular,
@@ -78,6 +92,7 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
   const [metadata, setMetadata] = useState<InstanceMetadata | null>(null)
   const [status, setStatus] = useState<InstanceStatus>('stopped')
   const [tab, setTab] = useState<TabKey>('console')
+  const [confirmKill, setConfirmKill] = useState(false)
   const [onlinePlayers, setOnlinePlayers] = useState<string[]>([])
   const applyStatus = useInstancesStore((s) => s.applyStatus)
   const refreshInstances = useInstancesStore((s) => s.refresh)
@@ -172,6 +187,15 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
             onClick={() => native().openFolder(metadata.id)}
           />
           <Button
+            appearance="secondary"
+            disabled={isBusy}
+            icon={<ArrowSync20Regular />}
+            title="Stop and start again"
+            onClick={() => void api().servers.restart(instanceId)}
+          >
+            Restart
+          </Button>
+          <Button
             appearance="primary"
             disabled={isBusy}
             icon={isRunning ? <Stop20Filled /> : <Play20Filled />}
@@ -183,8 +207,53 @@ export function InstancePage({ instanceId, onBack, onBrowsePlugins }: InstancePa
           >
             {isRunning ? 'Stop Server' : isBusy ? 'Working…' : 'Start Server'}
           </Button>
+          {/* Killing is destructive and sits behind a menu rather than beside
+              "Stop", so it is never the button someone hits by muscle memory. */}
+          {isRunning && (
+            <Menu>
+              <MenuTrigger disableButtonEnhancement>
+                <Button appearance="subtle" icon={<MoreHorizontal20Regular />} title="More actions" />
+              </MenuTrigger>
+              <MenuPopover>
+                <MenuList>
+                  <MenuItem icon={<Prohibited20Regular />} onClick={() => setConfirmKill(true)}>
+                    Kill process…
+                  </MenuItem>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
+          )}
         </div>
       </div>
+
+      <Dialog open={confirmKill} onOpenChange={(_, d) => !d.open && setConfirmKill(false)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Kill “{metadata.name}”?</DialogTitle>
+            <DialogContent>
+              <Text>
+                This ends the process immediately without asking Minecraft to save. Anything since
+                the last autosave is lost, and the world can be left needing a repair on next start.
+              </Text>
+              <Text block style={{ marginTop: '10px' }}>
+                Use <b>Stop Server</b> unless the server has stopped responding.
+              </Text>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmKill(false)}>Cancel</Button>
+              <Button
+                appearance="primary"
+                onClick={() => {
+                  setConfirmKill(false)
+                  void api().servers.kill(instanceId)
+                }}
+              >
+                Kill process
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
 
       <TabList
         className={styles.tabs}
