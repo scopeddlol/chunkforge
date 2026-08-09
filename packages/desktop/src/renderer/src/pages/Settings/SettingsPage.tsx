@@ -324,7 +324,7 @@ export function SettingsPage(): JSX.Element {
                   Chunkforge
                 </Text>
                 <Text size={200} className={styles.muted} block>
-                  Version 0.2.0 — Forge Your World.
+                  Forge Your World.
                 </Text>
               </div>
             </div>
