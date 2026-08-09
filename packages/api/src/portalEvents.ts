@@ -1,8 +1,9 @@
 import WebSocket from 'ws'
 import { getPortalStatus, isPortalLinked, savePortalStatus } from '@chunkforge/core'
 import { PortalClient } from '@chunkforge/portal/client'
-import type { EventPushFrame } from '@chunkforge/portal/protocol'
+import type { ClientRequestFrame, EventPushFrame } from '@chunkforge/portal/protocol'
 import { broadcast } from './events'
+import { answerClientRequest } from './portalRequests'
 import type { ServerEvent } from './eventTypes'
 
 /**
@@ -69,12 +70,23 @@ function connect(): void {
     void markLink('connected')
   })
   ws.on('message', (data: unknown) => {
-    let frame: EventPushFrame
+    let frame: EventPushFrame | ClientRequestFrame
     try {
-      frame = JSON.parse(String(data)) as EventPushFrame
+      frame = JSON.parse(String(data)) as EventPushFrame | ClientRequestFrame
     } catch {
       return
     }
+
+    if (frame.type === 'client-request') {
+      // Portal asking this control plane something. What it may ask is fixed
+      // and read-only — see portalRequests.ts — and the reply always goes back
+      // so a refusal is distinguishable from a panel that simply never answers.
+      void answerClientRequest(frame)
+        .then((response) => ws.send(JSON.stringify(response)))
+        .catch(() => undefined)
+      return
+    }
+
     if (frame.type !== 'event-push') return
     // The node emitted this from its own attachCoreEvents(), so it is already
     // a well-formed ServerEvent — Portal only relayed it, never inspected it.

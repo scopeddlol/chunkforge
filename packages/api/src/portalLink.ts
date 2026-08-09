@@ -12,7 +12,7 @@ import {
   type PortalDomainBinding,
   type PortalSettings
 } from '@chunkforge/core'
-import { PortalClient } from '@chunkforge/portal/client'
+import { PortalClient, type PortalInventoryView } from '@chunkforge/portal/client'
 import type { LabelAvailability } from '@chunkforge/portal/domains'
 import { localNodeId } from './localNode'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
@@ -166,6 +166,11 @@ export async function listAllNodes(): Promise<Node[]> {
   } catch {
     return [local]
   }
+}
+
+/** Asks Portal what every linked control plane is running. */
+export async function fetchPortalInventory(): Promise<PortalInventoryView> {
+  return clientFor(requirePortalLink()).client.inventory()
 }
 
 export async function claimPortalNode(nodeId: string): Promise<void> {

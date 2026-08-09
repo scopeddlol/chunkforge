@@ -21,6 +21,7 @@ import {
 import { isCloudflareManaged, isPublicBaseUrlManaged } from '../environment'
 import { broadcastPortal, subscribePortalEvents } from '../events'
 import { portalRelay } from '../relay'
+import { collectInventory } from '../inventory'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
 import type { PortalConfig, PortalConfigView, PairingKind } from '../types'
@@ -102,6 +103,16 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   // ---- overview and config ----
 
   app.get('/api/overview', { preHandler: requireOperator }, async () => buildOverview())
+
+  /**
+   * Everything every linked control plane is running.
+   *
+   * Read-only, and only as truthful as the panels are willing to be: each one
+   * answers a fixed set of requests and can decline entirely. A panel that
+   * declines or cannot be reached appears with a reason rather than being
+   * dropped, so this never quietly under-reports.
+   */
+  app.get('/api/inventory', { preHandler: requireOperator }, async () => collectInventory())
 
   app.get('/api/config', { preHandler: requireOperator }, async () => toConfigView(portalStore.config()))
 

@@ -15,6 +15,7 @@ import { ensureJavaRuntime } from './javaManager'
 import { acquireServer } from './jarAcquisition'
 import { defaultLaunchArgs, installGeyser } from './loaders'
 import { resolveServerRequirements } from './minecraftVersions'
+import { findFreePort, portProblem } from './portService'
 import { renderEula, renderServerProperties } from './serverProperties'
 import { resolveInstanceDir, saveInstanceMetadata, slugifyInstanceName } from '../store/instancesStore'
 
@@ -83,6 +84,27 @@ class InstanceManager extends EventEmitter {
     this.emitProgress({ instanceId: id, stage: 'preparing', message: 'Setting up server folder…', percent: null })
     await mkdir(dir, { recursive: true })
 
+    /**
+     * The port is settled here, before anything is written.
+     *
+     * The requested port is usually just the default — 25565 — which is
+     * correct for a machine's first server and wrong for its second. Taking it
+     * on trust meant the second server was created pointing at a port it could
+     * never bind, and only said so much later, as a Java stack trace in a
+     * console nobody was watching. Moving to the next free port instead is
+     * both what the operator wanted and what they would have done by hand.
+     */
+    const port = await findFreePort(config.port, { excludeInstanceId: id })
+    if (port !== config.port) {
+      this.emitProgress({
+        instanceId: id,
+        stage: 'preparing',
+        message: `Port ${config.port} is taken; using ${port} instead.`,
+        percent: null
+      })
+    }
+    const resolved: CreateInstanceConfig = { ...config, port }
+
     this.emitProgress({
       instanceId: id,
       stage: 'resolving-java',
@@ -139,7 +161,7 @@ class InstanceManager extends EventEmitter {
 
     this.emitProgress({ instanceId: id, stage: 'accepting-eula', message: 'Accepting Minecraft EULA…', percent: null })
     await writeFile(join(dir, 'eula.txt'), renderEula(), 'utf-8')
-    await writeFile(join(dir, 'server.properties'), renderServerProperties(config.port, config.toggles), 'utf-8')
+    await writeFile(join(dir, 'server.properties'), renderServerProperties(resolved.port, resolved.toggles), 'utf-8')
 
     const metadata: InstanceMetadata = {
       id,
@@ -152,7 +174,7 @@ class InstanceManager extends EventEmitter {
       ramAllocatedMb: config.maxRamMb,
       accentColor: config.accentColor,
       createdAt: new Date().toISOString(),
-      port: config.port,
+      port: resolved.port,
       javaPath,
       minRamMb: config.minRamMb,
       maxRamMb: config.maxRamMb,
@@ -164,16 +186,16 @@ class InstanceManager extends EventEmitter {
           id: 'minecraft-default',
           label: 'Minecraft',
           protocol: 'tcp',
-          targetPort: config.port,
-          publicPort: config.port,
+          targetPort: resolved.port,
+          publicPort: resolved.port,
           enabled: true
         },
         {
           id: 'minecraft-query',
           label: 'Minecraft Query',
           protocol: 'udp',
-          targetPort: config.port,
-          publicPort: config.port,
+          targetPort: resolved.port,
+          publicPort: resolved.port,
           enabled: false
         }
       ],
@@ -222,6 +244,27 @@ class InstanceManager extends EventEmitter {
     if (this.running.has(input.id)) return
 
     this.emitStatus(input.id, 'starting')
+
+    /**
+     * Refuse rather than launch into a port that is already taken.
+     *
+     * Java's own failure here is a stack trace ending in "Perhaps a server is
+     * already running on that port?", which lands in a console the operator is
+     * usually not looking at, after a startup that appeared to be working. One
+     * line up front, before anything is spawned, is the same information at
+     * the moment it is useful.
+     */
+    const conflict = await portProblem(input.port, input.id)
+    if (conflict) {
+      this.emitLog(input.id, 'system', `${conflict}\n`)
+      this.emitLog(
+        input.id,
+        'system',
+        'Change the port in this server\'s Settings, or stop whatever is using it.\n'
+      )
+      this.emitStatus(input.id, 'stopped')
+      throw new Error(conflict)
+    }
 
     let metadata: InstanceMetadata
     try {

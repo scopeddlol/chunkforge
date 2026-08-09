@@ -33,6 +33,14 @@ export { renderEula, renderServerProperties } from './services/serverProperties'
 // Java
 export { detectInstalledJava, ensureJavaRuntime } from './services/javaManager'
 
+// Ports
+export {
+  isPortFree,
+  findFreePort,
+  portProblem,
+  portsReservedByInstances
+} from './services/portService'
+
 // Add-ons
 export {
   searchPlugins,
@@ -45,6 +53,7 @@ export {
   getProvider
 } from './services/plugins/pluginRegistry'
 export { searchModpacks, listModpackVersions } from './services/plugins/modpacks'
+export { verifyCurseForgeKey, type CurseForgeKeyStatus } from './services/plugins/curseforge'
 export { listGameVersions } from './services/plugins/gameVersions'
 export {
   judgeCompatibility,

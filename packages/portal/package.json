@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/portal",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Chunkforge Portal \u2014 subdomain manager and proxy service with its own admin web UI",
   "private": true,
   "type": "module",

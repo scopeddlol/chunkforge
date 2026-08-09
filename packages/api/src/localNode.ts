@@ -34,6 +34,11 @@ export function setLocalCoreApi(api: RunningCoreApi): void {
   localCoreApi = api
 }
 
+/** The running Core API in this process, for callers that need to reach it. */
+export function getLocalCoreApi(): RunningCoreApi | null {
+  return localCoreApi
+}
+
 export function localNodeId(): string | null {
   return running?.nodeId ?? getSettings().portal.selfNodeId ?? null
 }

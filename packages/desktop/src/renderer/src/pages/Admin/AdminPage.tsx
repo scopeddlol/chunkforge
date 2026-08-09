@@ -22,6 +22,7 @@ import { Delete20Regular, Edit20Regular, PersonAdd20Regular } from '@fluentui/re
 import type { InviteRecord, ManagedUser } from '@chunkforge/api/client'
 import type { Node } from '@shared/types'
 import { UserEditor } from './UserEditor'
+import { FleetPanel } from './FleetPanel'
 import { InvitePanel } from './InvitePanel'
 import { NodeAccessPicker } from './NodeAccessPicker'
 import { useSessionStore } from '../../state/sessionStore'
@@ -174,6 +175,13 @@ export function AdminPage(): JSX.Element {
                 Add account
               </Button>
             </div>
+          </section>
+
+          <section className={styles.panel}>
+            <Text weight="semibold" className={styles.panelTitle}>
+              Servers everywhere
+            </Text>
+            <FleetPanel />
           </section>
 
           <section className={styles.panel}>

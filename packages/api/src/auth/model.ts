@@ -19,6 +19,14 @@ export interface User {
   role: Role
   /** Per-project overrides; a grant here can raise the user's role for one project. */
   projectGrants: Record<string, Role>
+  /**
+   * Per-server overrides, keyed by instance id.
+   *
+   * This is how someone is put on one server without being given the run of
+   * the panel: a viewer with a `member` grant here can start, stop and
+   * configure that server and nothing else.
+   */
+  serverGrants?: Record<string, Role>
   createdAt: string
   disabled?: boolean
   /**
@@ -180,4 +188,51 @@ export function effectiveRole(user: User, projectId?: string | null): Role {
   const granted = user.projectGrants[projectId]
   if (!granted) return user.role
   return ROLES.indexOf(granted) > ROLES.indexOf(user.role) ? granted : user.role
+}
+
+/** Which server a permission question is about, and where it sits. */
+export interface ServerRef {
+  id: string
+  projectId?: string | null
+  nodeId?: string | null
+}
+
+/**
+ * The role a user actually holds over one server.
+ *
+ * Grants only ever *raise* — the answer is the highest of the base role, any
+ * project grant, and any server grant. Lowering is deliberately not expressible
+ * here: `nodeAccess` already restricts, and a mechanism that could push in both
+ * directions produces combinations nobody can predict from looking at an
+ * account.
+ */
+export function effectiveServerRole(user: User, server: ServerRef): Role {
+  let best = user.role
+  const raise = (candidate: Role | undefined): void => {
+    if (candidate && ROLES.indexOf(candidate) > ROLES.indexOf(best)) best = candidate
+  }
+  if (server.projectId) raise(user.projectGrants?.[server.projectId])
+  raise(user.serverGrants?.[server.id])
+  return best
+}
+
+/** Whether a user holds at least `required` over one server. */
+export function serverRoleAtLeast(user: User, server: ServerRef, required: Role): boolean {
+  return roleAtLeast(effectiveServerRole(user, server), required)
+}
+
+/**
+ * Whether a server should appear for this user at all.
+ *
+ * An explicit grant wins over a node restriction. Restricting someone to two
+ * nodes says where they work; putting them on one particular server elsewhere
+ * is a more specific instruction than that, and reading it the other way would
+ * make "add this person to this server" silently do nothing for exactly the
+ * locked-down accounts it exists for.
+ */
+export function canSeeServer(user: User, server: ServerRef): boolean {
+  if (roleAtLeast(user.role, 'admin')) return true
+  if (user.serverGrants?.[server.id]) return true
+  if (server.projectId && user.projectGrants?.[server.projectId]) return true
+  return canUseNode(user, server.nodeId || 'local')
 }

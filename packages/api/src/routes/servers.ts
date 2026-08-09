@@ -19,7 +19,9 @@ import {
   type ServerType
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
-import { filterByNodeAccess, guardNodeAccess } from '../auth/nodeAccess'
+import { authStore } from '../auth/store'
+import { guardNodeAccess } from '../auth/nodeAccess'
+import { visibleServers } from '../auth/serverAccess'
 import { forgetLogLines, recentLogLines } from '../logBuffer'
 import {
   callNodeAgent,
@@ -101,12 +103,14 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
   // their nodes through Portal and appear beside the local ones.
   app.get('/api/servers', { preHandler: requireRole('viewer') }, async (request) => {
     const [local, remote] = await Promise.all([listLocalSummaries(), listRemoteInstances()])
-    // A user restricted to some nodes should not see the servers on the rest;
-    // node access is about machines, but what a machine *holds* is the part
-    // that is actually visible in the UI.
-    const visible = filterByNodeAccess(request, [...local, ...remote], (summary) =>
-      nodeForInstance(summary.id)
-    )
+    // Node access decides which machines someone works on; a grant on one
+    // particular server overrides that for that server alone, which is what
+    // makes "put this person on this server" work for a locked-down account.
+    const visible = visibleServers(request.user, [...local, ...remote], (summary) => ({
+      id: summary.id,
+      nodeId: nodeForInstance(summary.id),
+      projectId: summary.projectId ?? summary.groupId ?? null
+    }))
     return withPortalAddresses(visible)
   })
 
@@ -242,9 +246,43 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     '/api/servers/:id',
     { preHandler: requireRole('member') },
     async (request, reply) => {
+      const patchBody = request.body ?? {}
+      const remoteNode = nodeForInstance(request.params.id)
+
+      /**
+       * A port change on a server that lives on a node.
+       *
+       * The node owns the metadata and server.properties, so the write still
+       * goes there — but the Portal route pointing at that server, and the DNS
+       * record carrying its port, are this control plane's to fix. Nothing did
+       * that before, so changing a port left the subdomain aimed at the old
+       * one and players connecting to a closed door.
+       */
+      if (remoteNode && 'port' in patchBody) {
+        if (!(await guardNodeAccess(request, reply, remoteNode))) return
+        try {
+          const response = await callNodeAgent(
+            remoteNode,
+            'PATCH',
+            `/api/servers/${encodeURIComponent(request.params.id)}`,
+            patchBody
+          )
+          const updated = (await response.json().catch(() => null)) as InstanceMetadata | null
+          if (!response.ok || !updated) {
+            return reply.code(response.status || 502).send({ error: 'That node would not accept the change.' })
+          }
+          // Re-provisioning is idempotent for a server that already has an
+          // address: the hostname is kept and only the target port moves.
+          await provisionInstanceDomain({ ...updated, nodeId: remoteNode }).catch(() => null)
+          return updated
+        } catch (err) {
+          return reply.code(502).send({ error: (err as Error).message })
+        }
+      }
+
       try {
         const metadata = await loadInstanceMetadata(request.params.id)
-        const patch = request.body ?? {}
+        const patch = patchBody
         const next: InstanceMetadata = {
           ...metadata,
           name: patch.name ?? metadata.name,
@@ -261,7 +299,13 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           portalHostname:
             'portalHostname' in patch ? (patch.portalHostname ?? undefined) : metadata.portalHostname,
           portalPublicPort:
-            'portalPublicPort' in patch ? (patch.portalPublicPort ?? undefined) : metadata.portalPublicPort
+            'portalPublicPort' in patch ? (patch.portalPublicPort ?? undefined) : metadata.portalPublicPort,
+          // Group membership arrives here too — from the group routes, and on
+          // a node from the control plane that owns the group list. Leaving it
+          // out of this whitelist meant those writes were accepted and then
+          // silently dropped.
+          groupId: 'groupId' in patch ? (patch.groupId ?? null) : metadata.groupId,
+          projectId: patch.projectId ?? metadata.projectId
         }
         await saveInstanceMetadata(next)
         await writeFile(
@@ -269,6 +313,12 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           renderServerProperties(next.port, next.toggles),
           'utf-8'
         )
+        // A local server can hold a Portal address too, when this machine is
+        // offered to Portal as a node. Same reasoning as the remote path: the
+        // route has to follow the port.
+        if (next.port !== metadata.port && next.portalHostname) {
+          await provisionInstanceDomain(next).catch(() => null)
+        }
         return next
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
@@ -294,6 +344,10 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
         await releaseInstanceDomain({ id, nodeId: remoteNode })
         await forgetRemoteInstance(id)
         forgetLogLines(id)
+        // Grants outlive the server unless something clears them, and instance
+        // ids are slugified names — so a later server called the same thing
+        // would inherit access nobody granted it.
+        await authStore.forgetServerGrants(id)
         return { ok: true }
       }
 
@@ -305,6 +359,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
       }
       await removeInstanceFromIndex(id)
       forgetLogLines(id)
+      await authStore.forgetServerGrants(id)
       return { ok: true }
     }
   )

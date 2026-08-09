@@ -67,8 +67,19 @@ export interface CurrentUser {
   projectGrants: Record<string, string>
   /** Node ids this account is limited to, or undefined for every node. */
   nodeAccess?: string[]
+  /** Per-server role overrides, keyed by instance id. Grants only ever raise. */
+  serverGrants: Record<string, string>
   canConfigurePersonalNode: boolean
   isAdmin: boolean
+}
+
+/** One account's access to a particular server. */
+export interface ServerAccessEntry {
+  userId: string
+  username: string
+  role: string
+  /** True when they would reach the server anyway, grant or not. */
+  implicit: boolean
 }
 
 /** A user as the admin panel sees them. `nodeAccess: null` means every node. */
@@ -78,6 +89,7 @@ export interface ManagedUser {
   role: string
   disabled: boolean
   nodeAccess: string[] | null
+  serverGrants: Record<string, string>
   canConfigurePersonalNode: boolean
   createdAt: string
 }
@@ -120,6 +132,33 @@ export interface NewInviteInput {
   note?: string
   uses?: number
   expiresInDays?: number
+}
+
+/** The cross-control-plane view, as an admin sees it. */
+export interface PortalInventory {
+  clients: Array<{
+    clientId: string
+    name: string
+    kind: string
+    connected: boolean
+    isSelf?: boolean
+    servers?: Array<{
+      key: string
+      instanceId: string
+      name: string
+      status?: string
+      serverType?: string
+      minecraftVersion?: string
+      nodeId?: string | null
+      playersOnline?: number
+      portalHostname?: string | null
+    }>
+    problem?: string
+  }>
+  serverCount: number
+  unreachableCount: number
+  /** False when this panel has no Portal, so there is nothing to aggregate. */
+  portalLinked?: boolean
 }
 
 export class ChunkforgeClient {
@@ -202,6 +241,17 @@ export class ChunkforgeClient {
     remove: (id: string) => this.del<{ ok: true }>(`/api/users/${id}`),
     resetPassword: (id: string, password: string) =>
       this.post<{ ok: true }>(`/api/users/${id}/password`, { password })
+  }
+
+  /** Who is on a given server, and at what role. Admin-only. */
+  serverAccess = {
+    list: (instanceId: string) => this.get<ServerAccessEntry[]>(`/api/servers/${instanceId}/access`),
+    /** Pass a null role to take someone off the server. */
+    set: (instanceId: string, userId: string, role: string | null) =>
+      this.put<{ userId: string; username: string; role: string | null }>(
+        `/api/servers/${instanceId}/access`,
+        { userId, role }
+      )
   }
 
   // ---- invites ----
@@ -318,7 +368,13 @@ export class ChunkforgeClient {
 
   settings = {
     get: () => this.get<AppSettings>('/api/settings'),
-    update: (patch: Partial<AppSettings>) => this.patch<AppSettings>('/api/settings', patch)
+    update: (patch: Partial<AppSettings>) => this.patch<AppSettings>('/api/settings', patch),
+    /** Omit the key to test the saved one. */
+    testCurseForgeKey: (apiKey?: string) =>
+      this.post<{ configured: boolean; valid: boolean; message: string }>(
+        '/api/settings/curseforge/test',
+        { apiKey }
+      )
   }
 
   groups = {
@@ -341,6 +397,22 @@ export class ChunkforgeClient {
 
   // Nodes are paired at the Portal, not here — this Chunkforge only discovers
   // them and claims the ones it wants to manage.
+  ports = {
+    /** Asks the machine that would run the server, not necessarily this one. */
+    check: (port: number, nodeId?: string, instanceId?: string) => {
+      const query = new URLSearchParams({ port: String(port) })
+      if (nodeId) query.set('nodeId', nodeId)
+      if (instanceId) query.set('instanceId', instanceId)
+      return this.get<{
+        port: number
+        available: boolean
+        reason: string | null
+        suggestion?: number | null
+        unknown?: boolean
+      }>(`/api/ports/check?${query.toString()}`)
+    }
+  }
+
   nodes = {
     list: () => this.get<Node[]>('/api/nodes'),
     claim: (id: string) => this.post<Node>(`/api/nodes/${id}/claim`),
@@ -357,6 +429,8 @@ export class ChunkforgeClient {
     hostLocally: (enabled: boolean) =>
       this.post<PortalSettings>('/api/portal/host-locally', { enabled }),
     domains: () => this.get<PortalDomainBinding[]>('/api/portal/domains'),
+    /** Servers across every control plane on this Portal. Admin-only. */
+    inventory: () => this.get<PortalInventory>('/api/portal/inventory'),
     checkDomain: (label: string, instanceId?: string) => {
       const query = new URLSearchParams({ label })
       if (instanceId) query.set('instanceId', instanceId)
