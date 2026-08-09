@@ -86,6 +86,55 @@ function authHeaders(): Record<string, string> {
   return { 'x-api-key': key }
 }
 
+/** What a key check found out. */
+export interface CurseForgeKeyStatus {
+  configured: boolean
+  valid: boolean
+  message: string
+}
+
+/**
+ * Checks a CurseForge key by actually calling CurseForge.
+ *
+ * A key that is merely *present* tells you nothing — a typo or a revoked key
+ * looks identical to a good one until a search quietly returns nothing or a
+ * modpack install dies halfway through. `/v1/games` is the cheapest endpoint
+ * that still requires authentication, so it answers the only question that
+ * matters: will this credential work when it is needed?
+ *
+ * Pass a key to test one before saving it; omit to test the saved one.
+ */
+export async function verifyCurseForgeKey(candidate?: string): Promise<CurseForgeKeyStatus> {
+  const key = candidate?.trim() || apiKey()
+  if (!key) {
+    return { configured: false, valid: false, message: 'No CurseForge API key is set.' }
+  }
+  try {
+    const response = await fetch(`${BASE}/games`, {
+      headers: { 'x-api-key': key, Accept: 'application/json' }
+    })
+    if (response.status === 401 || response.status === 403) {
+      return { configured: true, valid: false, message: 'CurseForge rejected that key.' }
+    }
+    if (!response.ok) {
+      // Not the key's fault — say so rather than telling someone to replace a
+      // credential that is probably fine.
+      return {
+        configured: true,
+        valid: false,
+        message: `CurseForge answered ${response.status}. Try again shortly.`
+      }
+    }
+    return { configured: true, valid: true, message: 'Key works.' }
+  } catch (err) {
+    return {
+      configured: true,
+      valid: false,
+      message: `Could not reach CurseForge: ${(err as Error).message}`
+    }
+  }
+}
+
 export const curseForgeProvider: PluginProvider = {
   source: 'curseforge',
 

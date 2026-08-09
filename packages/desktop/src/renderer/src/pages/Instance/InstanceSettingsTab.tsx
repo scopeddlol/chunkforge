@@ -20,7 +20,8 @@ import {
   Checkbox
 } from '@fluentui/react-components'
 import { FolderOpen20Regular, Save20Regular, Delete20Regular } from '@fluentui/react-icons'
-import type { InstanceMetadata, InstanceToggles } from '@shared/types'
+import type { InstanceMetadata, InstanceToggles, ServerGroup } from '@shared/types'
+import { usePortAvailability } from '../../components/usePortAvailability'
 import { IconPanel } from './IconPanel'
 import { StartupPanel } from './StartupPanel'
 import { CopyableAddress } from '../../components/CopyableAddress'
@@ -73,6 +74,10 @@ interface InstanceSettingsTabProps {
 export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSettingsTabProps): JSX.Element {
   const styles = useStyles()
   const [draft, setDraft] = useState<InstanceMetadata>(metadata)
+  const [groups, setGroups] = useState<ServerGroup[]>([])
+  const [groupSaving, setGroupSaving] = useState(false)
+  // Excludes this server, so its own port never reads as a conflict.
+  const portCheck = usePortAvailability(draft.port, metadata.nodeId, metadata.id)
   const [saving, setSaving] = useState(false)
   const [hostError, setHostError] = useState<string | null>(null)
   const [subdomainLabel, setSubdomainLabel] = useState(labelFromHostname(metadata.portalHostname))
@@ -106,6 +111,12 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // Groups are optional; failing to load them just hides the picker rather
+  // than blocking the rest of the settings.
+  useEffect(() => {
+    void api().groups.list().then(setGroups).catch(() => setGroups([]))
   }, [])
 
   function patch(next: Partial<InstanceMetadata>): void {
@@ -174,12 +185,51 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
         <Field label="Server name">
           <Input value={draft.name} onChange={(_, d) => patch({ name: d.value })} />
         </Field>
-        <Field label="Port">
+        <Field
+          label="Port"
+          validationState={
+            portCheck.checking || portCheck.unknown ? 'none' : portCheck.available ? 'success' : 'error'
+          }
+          validationMessage={portCheck.checking ? undefined : (portCheck.reason ?? undefined)}
+          hint={
+            draft.portalHostname
+              ? 'Changing this also re-points the server\'s public address and its DNS record.'
+              : undefined
+          }
+        >
           <Input
             type="number"
             value={String(draft.port)}
             onChange={(_, d) => patch({ port: Number(d.value) || draft.port })}
           />
+        </Field>
+        {/* Written through the group route rather than with the rest of this
+            form: membership lives on the server record, but for a server on a
+            node that record is on the node, and the group route already knows
+            how to get there. */}
+        <Field label="Group" hint="Groups let you start and stop related servers together.">
+          <Dropdown
+            value={groups.find((g) => g.id === draft.groupId)?.name ?? 'No group'}
+            selectedOptions={[draft.groupId ?? 'none']}
+            disabled={groupSaving}
+            onOptionSelect={(_, data) => {
+              const next = data.optionValue === 'none' ? null : (data.optionValue ?? null)
+              setGroupSaving(true)
+              void api()
+                .groups.assign(draft.id, next)
+                .then(() => patch({ groupId: next }))
+                .finally(() => setGroupSaving(false))
+            }}
+          >
+            <Option value="none" text="No group">
+              No group
+            </Option>
+            {groups.map((group) => (
+              <Option key={group.id} value={group.id} text={group.name}>
+                {group.name}
+              </Option>
+            ))}
+          </Dropdown>
         </Field>
 
         <Divider />

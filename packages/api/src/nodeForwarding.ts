@@ -24,6 +24,14 @@ export async function registerNodeForwarding(app: FastifyInstance): Promise<void
     // node destroys the files, and this control plane has to release the
     // subdomain and drop its pointer. Its handler forwards deliberately.
     if (request.method === 'DELETE' && isBareInstancePath(request.url)) return
+    // A port change has work on both sides: the node rewrites
+    // server.properties, and this control plane has to re-point the Portal
+    // route and its DNS at the new port. Its handler forwards deliberately.
+    if (request.method === 'PATCH' && isBareInstancePath(request.url) && changesPort(request.body)) return
+    // Modpack installation needs something only this control plane holds — the
+    // CurseForge key — added to the body before it travels. Its handler
+    // forwards by hand for that reason.
+    if (request.method === 'POST' && isModpackPath(request.url)) return
 
     const nodeId = nodeForInstance(instanceId)
     if (!nodeId) return
@@ -75,4 +83,14 @@ function instanceIdFromPath(url: string): string | null {
 /** True for `/api/servers/<id>` with nothing after it. */
 function isBareInstancePath(url: string): boolean {
   return /^\/api\/servers\/[^/]+$/.test(url.split('?')[0])
+}
+
+/** True when a PATCH body actually sets a port. */
+function changesPort(body: unknown): boolean {
+  return Boolean(body && typeof body === 'object' && 'port' in (body as Record<string, unknown>))
+}
+
+/** True for `/api/servers/<id>/modpack`. */
+function isModpackPath(url: string): boolean {
+  return /^\/api\/servers\/[^/]+\/modpack$/.test(url.split('?')[0])
 }

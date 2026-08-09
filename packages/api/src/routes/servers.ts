@@ -242,9 +242,43 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     '/api/servers/:id',
     { preHandler: requireRole('member') },
     async (request, reply) => {
+      const patchBody = request.body ?? {}
+      const remoteNode = nodeForInstance(request.params.id)
+
+      /**
+       * A port change on a server that lives on a node.
+       *
+       * The node owns the metadata and server.properties, so the write still
+       * goes there — but the Portal route pointing at that server, and the DNS
+       * record carrying its port, are this control plane's to fix. Nothing did
+       * that before, so changing a port left the subdomain aimed at the old
+       * one and players connecting to a closed door.
+       */
+      if (remoteNode && 'port' in patchBody) {
+        if (!(await guardNodeAccess(request, reply, remoteNode))) return
+        try {
+          const response = await callNodeAgent(
+            remoteNode,
+            'PATCH',
+            `/api/servers/${encodeURIComponent(request.params.id)}`,
+            patchBody
+          )
+          const updated = (await response.json().catch(() => null)) as InstanceMetadata | null
+          if (!response.ok || !updated) {
+            return reply.code(response.status || 502).send({ error: 'That node would not accept the change.' })
+          }
+          // Re-provisioning is idempotent for a server that already has an
+          // address: the hostname is kept and only the target port moves.
+          await provisionInstanceDomain({ ...updated, nodeId: remoteNode }).catch(() => null)
+          return updated
+        } catch (err) {
+          return reply.code(502).send({ error: (err as Error).message })
+        }
+      }
+
       try {
         const metadata = await loadInstanceMetadata(request.params.id)
-        const patch = request.body ?? {}
+        const patch = patchBody
         const next: InstanceMetadata = {
           ...metadata,
           name: patch.name ?? metadata.name,
@@ -261,7 +295,13 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           portalHostname:
             'portalHostname' in patch ? (patch.portalHostname ?? undefined) : metadata.portalHostname,
           portalPublicPort:
-            'portalPublicPort' in patch ? (patch.portalPublicPort ?? undefined) : metadata.portalPublicPort
+            'portalPublicPort' in patch ? (patch.portalPublicPort ?? undefined) : metadata.portalPublicPort,
+          // Group membership arrives here too — from the group routes, and on
+          // a node from the control plane that owns the group list. Leaving it
+          // out of this whitelist meant those writes were accepted and then
+          // silently dropped.
+          groupId: 'groupId' in patch ? (patch.groupId ?? null) : metadata.groupId,
+          projectId: patch.projectId ?? metadata.projectId
         }
         await saveInstanceMetadata(next)
         await writeFile(
@@ -269,6 +309,12 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           renderServerProperties(next.port, next.toggles),
           'utf-8'
         )
+        // A local server can hold a Portal address too, when this machine is
+        // offered to Portal as a node. Same reasoning as the remote path: the
+        // route has to follow the port.
+        if (next.port !== metadata.port && next.portalHostname) {
+          await provisionInstanceDomain(next).catch(() => null)
+        }
         return next
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })

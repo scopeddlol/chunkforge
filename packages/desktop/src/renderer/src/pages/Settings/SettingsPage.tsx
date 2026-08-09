@@ -11,12 +11,10 @@ import {
   Button,
   Divider,
   Spinner,
-  Badge,
-  Link
+  Badge
 } from '@fluentui/react-components'
 import {
   FolderOpen20Regular,
-  Open16Regular,
   ArrowClockwise20Regular,
   Save20Regular,
   ArrowUndo20Regular
@@ -29,6 +27,7 @@ import {
 } from '@shared/types'
 import { ChunkforgeMark } from '../../components/ChunkforgeMark'
 import { AccountPanel } from './AccountPanel'
+import { CurseForgeKeyField } from './CurseForgeKeyField'
 import { FileHubPanel } from './FileHubPanel'
 import { PortalPanel } from './PortalPanel'
 import { ThemePicker } from './ThemePicker'
@@ -260,23 +259,10 @@ export function SettingsPage(): JSX.Element {
               ))}
             </div>
             <Divider />
-            <Field
-              label="CurseForge API key"
-              hint="CurseForge requires a free personal key for third-party apps. Without one, CurseForge results stay disabled."
-            >
-              <Input
-                type="password"
-                placeholder="Paste your key…"
-                value={draft.curseForgeApiKey}
-                onChange={(_, d) => patch({ curseForgeApiKey: d.value })}
-              />
-            </Field>
-            <Link
-              appearance="subtle"
-              onClick={() => native().openExternal('https://console.curseforge.com/')}
-            >
-              Get a key at console.curseforge.com <Open16Regular />
-            </Link>
+            <CurseForgeKeyField
+              value={draft.curseForgeApiKey}
+              onChange={(value) => patch({ curseForgeApiKey: value })}
+            />
           </div>
 
           <PortalPanel settings={draft} onPatch={patch} />

@@ -12,6 +12,12 @@ import {
   MenuList,
   MenuItem,
   ToggleButton,
+  Dialog,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   mergeClasses
 } from '@fluentui/react-components'
 import {
@@ -20,6 +26,8 @@ import {
   AppsList20Regular,
   Play20Filled,
   Stop20Filled,
+  Edit20Regular,
+  Delete20Regular,
   MoreHorizontal20Regular
 } from '@fluentui/react-icons'
 import type { DashboardView, ServerGroup } from '@shared/types'
@@ -106,6 +114,9 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
   const [groups, setGroups] = useState<ServerGroup[]>([])
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+  // The group being edited, or null when the dialog is creating a new one.
+  const [editingGroup, setEditingGroup] = useState<ServerGroup | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState<ServerGroup | null>(null)
 
   const loadGroups = useCallback(() => {
     api().groups.list().then(setGroups)
@@ -231,14 +242,16 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
                         Stop all in group
                       </MenuItem>
                       <MenuItem
-                        onClick={async () => {
-                          await api().groups.remove(group.id)
-                          setActiveGroup(null)
-                          loadGroups()
-                          refresh()
+                        icon={<Edit20Regular />}
+                        onClick={() => {
+                          setEditingGroup(group)
+                          setGroupDialogOpen(true)
                         }}
                       >
-                        Delete group
+                        Edit group…
+                      </MenuItem>
+                      <MenuItem icon={<Delete20Regular />} onClick={() => setDeletingGroup(group)}>
+                        Delete group…
                       </MenuItem>
                     </MenuList>
                   </MenuPopover>
@@ -247,7 +260,14 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
             )
           })}
 
-          <Button appearance="subtle" size="small" onClick={() => setGroupDialogOpen(true)}>
+          <Button
+            appearance="subtle"
+            size="small"
+            onClick={() => {
+              setEditingGroup(null)
+              setGroupDialogOpen(true)
+            }}
+          >
             + Group
           </Button>
         </div>
@@ -296,12 +316,49 @@ export function DashboardPage({ onOpenWizard, onOpenInstance }: DashboardPagePro
       <GroupDialog
         open={groupDialogOpen}
         instances={instances}
+        group={editingGroup}
         onClose={() => setGroupDialogOpen(false)}
         onSaved={() => {
           loadGroups()
           refresh()
         }}
       />
+
+      {/* Deleting a group does not delete its servers — they fall back to no
+          group — so this confirms rather than warns, and says as much. */}
+      <Dialog open={deletingGroup !== null} onOpenChange={(_, d) => !d.open && setDeletingGroup(null)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Delete {deletingGroup?.name ?? ''}?</DialogTitle>
+            <DialogContent>
+              <Text>
+                The servers in it are kept — they simply stop belonging to a group. This cannot be
+                undone, but you can make the group again.
+              </Text>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setDeletingGroup(null)}>Cancel</Button>
+              <Button
+                appearance="primary"
+                onClick={() => {
+                  const id = deletingGroup?.id
+                  setDeletingGroup(null)
+                  if (!id) return
+                  void api()
+                    .groups.remove(id)
+                    .then(() => {
+                      setActiveGroup(null)
+                      loadGroups()
+                      refresh()
+                    })
+                }}
+              >
+                Delete group
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
 
       {confirmStopDialog}
     </div>

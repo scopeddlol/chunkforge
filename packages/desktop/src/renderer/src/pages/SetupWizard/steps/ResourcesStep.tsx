@@ -1,7 +1,17 @@
 import type { JSX } from 'react'
-import { makeStyles, tokens, Text, Title3, Field, Slider, Input } from '@fluentui/react-components'
+import {
+  makeStyles,
+  tokens,
+  Text,
+  Title3,
+  Field,
+  Slider,
+  Input,
+  Button
+} from '@fluentui/react-components'
 import type { WizardState } from '../wizardState'
 import { WizardPanel } from '../WizardPanel'
+import { usePortAvailability } from '../../../components/usePortAvailability'
 
 const useStyles = makeStyles({
   root: {
@@ -29,6 +39,24 @@ interface ResourcesStepProps {
 
 export function ResourcesStep({ state, onChange }: ResourcesStepProps): JSX.Element {
   const styles = useStyles()
+  const availability = usePortAvailability(state.port, state.nodeId)
+
+  // Three states, and the third matters: a node that cannot be reached has not
+  // said the port is free, only that it could not answer. Reporting that as
+  // available with no comment would be a promise nothing checked.
+  const portState = availability.checking
+    ? 'none'
+    : availability.unknown
+      ? 'warning'
+      : availability.available
+        ? 'success'
+        : 'error'
+  const portMessage = availability.checking ? undefined : (availability.reason ?? undefined)
+  const portHint =
+    availability.available && !availability.unknown && !availability.checking
+      ? 'This port is free on the machine that will run the server.'
+      : 'Default Minecraft port is 25565.'
+  const suggestion = availability.suggestion ?? null
 
   return (
     <div className={styles.root}>
@@ -61,13 +89,23 @@ export function ResourcesStep({ state, onChange }: ResourcesStepProps): JSX.Elem
           </div>
         </Field>
 
-        <Field label="Server port" hint="Default Minecraft port is 25565.">
+        <Field
+          label="Server port"
+          hint={portHint}
+          validationState={portState}
+          validationMessage={portMessage}
+        >
           <Input
             type="number"
             value={String(state.port)}
             onChange={(_, data) => onChange({ port: Number(data.value) || 25565 })}
           />
         </Field>
+        {suggestion !== null && (
+          <Button size="small" onClick={() => onChange({ port: suggestion })}>
+            Use {suggestion} instead
+          </Button>
+        )}
       </WizardPanel>
     </div>
   )

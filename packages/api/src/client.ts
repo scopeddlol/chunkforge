@@ -318,7 +318,13 @@ export class ChunkforgeClient {
 
   settings = {
     get: () => this.get<AppSettings>('/api/settings'),
-    update: (patch: Partial<AppSettings>) => this.patch<AppSettings>('/api/settings', patch)
+    update: (patch: Partial<AppSettings>) => this.patch<AppSettings>('/api/settings', patch),
+    /** Omit the key to test the saved one. */
+    testCurseForgeKey: (apiKey?: string) =>
+      this.post<{ configured: boolean; valid: boolean; message: string }>(
+        '/api/settings/curseforge/test',
+        { apiKey }
+      )
   }
 
   groups = {
@@ -341,6 +347,22 @@ export class ChunkforgeClient {
 
   // Nodes are paired at the Portal, not here — this Chunkforge only discovers
   // them and claims the ones it wants to manage.
+  ports = {
+    /** Asks the machine that would run the server, not necessarily this one. */
+    check: (port: number, nodeId?: string, instanceId?: string) => {
+      const query = new URLSearchParams({ port: String(port) })
+      if (nodeId) query.set('nodeId', nodeId)
+      if (instanceId) query.set('instanceId', instanceId)
+      return this.get<{
+        port: number
+        available: boolean
+        reason: string | null
+        suggestion?: number | null
+        unknown?: boolean
+      }>(`/api/ports/check?${query.toString()}`)
+    }
+  }
+
   nodes = {
     list: () => this.get<Node[]>('/api/nodes'),
     claim: (id: string) => this.post<Node>(`/api/nodes/${id}/claim`),

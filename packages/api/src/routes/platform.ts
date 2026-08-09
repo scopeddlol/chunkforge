@@ -9,8 +9,11 @@ import {
   listInstanceMetadata,
   loadInstanceMetadata,
   saveInstanceMetadata,
+  findFreePort,
+  portProblem,
   saveSettings,
   updateLocalNodeStats,
+  verifyCurseForgeKey,
   DEFAULT_PROJECT_ID,
   type AppSettings,
   type InstanceMetadata,
@@ -36,7 +39,7 @@ import {
   renameInstanceDomain
 } from '../portalLink'
 import { startLocalNodeHosting, stopLocalNodeHosting } from '../localNode'
-import { nodeForInstance } from '../remoteInstances'
+import { listRemoteRefs, nodeForInstance } from '../remoteInstances'
 
 export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
   // ---- stats ----
@@ -44,6 +47,43 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   app.get('/api/stats', { preHandler: requireRole('viewer') }, async () => collectDashboardStats())
 
   app.get('/api/java', { preHandler: requireRole('member') }, async () => detectInstalledJava())
+
+  // ---- ports ----
+  //
+  // Asked before a server is created or started, so a clash is a sentence in
+  // the wizard rather than a Java stack trace twenty seconds into a launch.
+  // A node answers for itself: whether 25565 is free is a question about a
+  // specific machine, and the panel is usually not that machine.
+
+  app.get<{ Querystring: { port?: string; preferred?: string; nodeId?: string; instanceId?: string } }>(
+    '/api/ports/check',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      const { nodeId, instanceId } = request.query
+      const wanted = Number(request.query.port ?? request.query.preferred ?? 0)
+      if (!Number.isInteger(wanted) || wanted <= 0) {
+        return reply.code(400).send({ error: 'A port number is required' })
+      }
+
+      if (nodeId && nodeId !== 'local') {
+        if (!(await guardNodeAccess(request, reply, nodeId))) return
+        try {
+          const query = new URLSearchParams({ port: String(wanted) })
+          if (instanceId) query.set('instanceId', instanceId)
+          const response = await callNodeAgent(nodeId, 'GET', `/api/ports/check?${query.toString()}`)
+          return await response.json()
+        } catch (err) {
+          // Not knowing is not the same as "taken": say so rather than
+          // blocking a creation on a momentary relay hiccup.
+          return { port: wanted, available: true, unknown: true, reason: (err as Error).message }
+        }
+      }
+
+      const problem = await portProblem(wanted, instanceId)
+      const suggestion = problem ? await findFreePort(wanted, { excludeInstanceId: instanceId }).catch(() => null) : null
+      return { port: wanted, available: problem === null, reason: problem, suggestion }
+    }
+  )
 
   // ---- settings ----
 
@@ -62,6 +102,24 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
       if (patch.curseForgeApiKey === '__SET__') delete patch.curseForgeApiKey
       const updated = await saveSettings(patch)
       return { ...updated, curseForgeApiKey: updated.curseForgeApiKey ? '__SET__' : '' }
+    }
+  )
+
+  /**
+   * Checks a CurseForge key against CurseForge itself.
+   *
+   * Storing a key proves nothing about whether it works, and the failure mode
+   * of a bad one is silent: searches come back empty and modpack installs die
+   * partway. Testing on demand turns that into an answer.
+   */
+  app.post<{ Body: { apiKey?: string } }>(
+    '/api/settings/curseforge/test',
+    { preHandler: requireRole('admin') },
+    async (request) => {
+      // The masked placeholder means "the saved one", not a literal key.
+      const candidate = request.body?.apiKey
+      const key = !candidate || candidate === '__SET__' ? undefined : candidate
+      return verifyCurseForgeKey(key)
     }
   )
 
@@ -338,28 +396,80 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
         // never removed even if a group shared its id.
         projects: settings.projects.filter((p) => p.id !== id || p.isDefault)
       })
-      // Re-home any server still referencing the deleted group.
+      // Re-home any server still referencing the deleted group — including the
+      // ones on nodes, which used to keep pointing at a group that no longer
+      // existed and so vanished from every group view without being in none.
       for (const instance of await listInstanceMetadata()) {
         if (instance.groupId === id) {
           await saveInstanceMetadata({ ...instance, groupId: null, projectId: DEFAULT_PROJECT_ID })
         }
       }
+      await Promise.allSettled(
+        listRemoteRefs().map((ref) =>
+          callNodeAgent(ref.nodeId, 'PATCH', `/api/servers/${encodeURIComponent(ref.instanceId)}`, {
+            groupId: null,
+            projectId: DEFAULT_PROJECT_ID
+          })
+        )
+      )
       return { ok: true }
     }
   )
 
+  /**
+   * Puts a server in a group, or takes it out with an id of `none`.
+   *
+   * A server on a node has no local metadata file — the node holds the real
+   * record — so reading one here threw for every remote server, and with no
+   * handler around it the call became a 500. From the dialog that looked like
+   * "adding a server does nothing and the modal never closes", because the
+   * throw escaped before it could close itself.
+   *
+   * So the write goes wherever the server actually lives, the same way domain
+   * bindings do.
+   */
   app.post<{ Params: { id: string }; Body: { instanceId: string } }>(
     '/api/groups/:id/assign',
     { preHandler: requireRole('member') },
-    async (request) => {
-      const metadata = await loadInstanceMetadata(request.body.instanceId)
+    async (request, reply) => {
+      const instanceId = request.body?.instanceId
+      if (!instanceId) return reply.code(400).send({ error: 'An instance id is required' })
+
       const groupId = request.params.id === 'none' ? null : request.params.id
-      await saveInstanceMetadata({
-        ...metadata,
-        groupId,
-        projectId: groupId ?? DEFAULT_PROJECT_ID
-      })
-      return { ok: true }
+      if (groupId && !getSettings().serverGroups.some((group) => group.id === groupId)) {
+        return reply.code(404).send({ error: 'No such group' })
+      }
+
+      const remoteNode = nodeForInstance(instanceId)
+      if (remoteNode) {
+        if (!(await guardNodeAccess(request, reply, remoteNode))) return
+        try {
+          const response = await callNodeAgent(
+            remoteNode,
+            'PATCH',
+            `/api/servers/${encodeURIComponent(instanceId)}`,
+            { groupId, projectId: groupId ?? DEFAULT_PROJECT_ID }
+          )
+          if (!response.ok) {
+            return reply.code(response.status).send({ error: 'That node would not record the group.' })
+          }
+          return { ok: true }
+        } catch (err) {
+          return reply.code(502).send({ error: (err as Error).message })
+        }
+      }
+
+      try {
+        const metadata = await loadInstanceMetadata(instanceId)
+        await saveInstanceMetadata({
+          ...metadata,
+          groupId,
+          projectId: groupId ?? DEFAULT_PROJECT_ID
+        })
+        return { ok: true }
+      } catch {
+        return reply.code(404).send({ error: 'No such server' })
+      }
     }
   )
 

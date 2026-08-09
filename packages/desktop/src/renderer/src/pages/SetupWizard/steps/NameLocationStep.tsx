@@ -12,7 +12,7 @@ import {
   mergeClasses
 } from '@fluentui/react-components'
 import { Checkmark16Filled, FolderOpen24Regular, ArrowResetRegular } from '@fluentui/react-icons'
-import type { Node } from '@shared/types'
+import type { Node, ServerGroup } from '@shared/types'
 import { accentSwatches, type WizardState } from '../wizardState'
 import { WizardPanel } from '../WizardPanel'
 import { native } from '../../../native'
@@ -87,10 +87,17 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
   const styles = useStyles()
   const [defaultRoot, setDefaultRoot] = useState('')
   const [nodes, setNodes] = useState<Node[]>([])
+  const [groups, setGroups] = useState<ServerGroup[]>([])
   const [zoneSuffix, setZoneSuffix] = useState('')
 
   useEffect(() => {
     native().getDefaultInstancesRoot().then(setDefaultRoot)
+  }, [])
+
+  useEffect(() => {
+    // Groups are optional, so a failure here leaves the picker out rather than
+    // blocking a server from being created.
+    void api().groups.list().then(setGroups).catch(() => setGroups([]))
   }, [])
 
   useEffect(() => {
@@ -158,6 +165,30 @@ export function NameLocationStep({ state, onChange }: NameLocationStepProps): JS
             })}
           </div>
         </Field>
+
+        {groups.length > 0 && (
+          <Field
+            label="Group"
+            hint="Groups let you start and stop related servers together. You can change this later."
+          >
+            <Dropdown
+              value={groups.find((g) => g.id === state.groupId)?.name ?? 'No group'}
+              selectedOptions={[state.groupId ?? 'none']}
+              onOptionSelect={(_, data) =>
+                onChange({ groupId: data.optionValue === 'none' ? null : (data.optionValue ?? null) })
+              }
+            >
+              <Option value="none" text="No group">
+                No group
+              </Option>
+              {groups.map((group) => (
+                <Option key={group.id} value={group.id} text={group.name}>
+                  {group.name}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+        )}
 
         {remoteNodes.length > 0 && (
           <Field

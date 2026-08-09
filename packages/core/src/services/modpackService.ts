@@ -116,7 +116,18 @@ export async function installModpack(
   source: PluginSource,
   downloadUrl: string,
   destDir: string,
-  onProgress: (progress: ModpackInstallProgress) => void
+  onProgress: (progress: ModpackInstallProgress) => void,
+  /**
+   * A CurseForge key supplied by the caller, used ahead of this host's own
+   * settings.
+   *
+   * Installation runs wherever the files land, which for a server on a node is
+   * the node — and a node has its own settings.json, which has never been
+   * given the key the operator typed into the panel. The panel therefore sends
+   * its key along with the request, so the credential stays configured in one
+   * place instead of having to be copied onto every machine.
+   */
+  curseForgeApiKey?: string
 ): Promise<void> {
   onProgress({ stage: 'downloading', message: 'Downloading modpack…', percent: 0 })
   const archivePath = await stageArchive(downloadUrl, 'install')
@@ -144,8 +155,12 @@ export async function installModpack(
       extractOverrides(archivePath, destDir, 'server-overrides')
     } else {
       const manifest = readCurseForgeManifest(archivePath)
-      const apiKey = getSettings().curseForgeApiKey?.trim()
-      if (!apiKey) throw new Error('A CurseForge API key is required to install CurseForge packs')
+      const apiKey = curseForgeApiKey?.trim() || getSettings().curseForgeApiKey?.trim()
+      if (!apiKey) {
+        throw new Error(
+          'A CurseForge API key is required to install CurseForge packs. Add one in Settings on the panel.'
+        )
+      }
 
       const modsDir = join(destDir, 'mods')
       await mkdir(modsDir, { recursive: true })
