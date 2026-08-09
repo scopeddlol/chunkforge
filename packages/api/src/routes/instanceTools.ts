@@ -1,8 +1,11 @@
+import { mkdir, open, stat } from 'fs/promises'
+import { basename, join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import {
   backupScheduler,
   createBackup,
   createDirectory,
+  defaultBackupContents,
   defaultBackupSchedule,
   deleteBackup,
   deleteEntry,
@@ -16,7 +19,9 @@ import {
   restoreBackup,
   saveInstanceMetadata,
   writeTextFile,
-  type BackupSchedule
+  type BackupContents,
+  type BackupSchedule,
+  type ServerLifecycle
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
 
@@ -31,6 +36,14 @@ async function guard<T>(reply: { code: (n: number) => { send: (b: unknown) => un
   } catch (err) {
     return reply.code(400).send({ error: (err as Error).message })
   }
+}
+
+/** How much of an archive moves per request. */
+const CHUNK_BYTES = 4 * 1024 * 1024
+
+/** Strips any path from a caller-supplied filename, so it stays in its folder. */
+function safeName(filename: string): string {
+  return basename(filename ?? '')
 }
 
 export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<void> {
@@ -138,10 +151,19 @@ export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<
     async (request, reply) => guard(reply, async () => listBackups(await instancePath(request.params.id)))
   )
 
-  app.post<{ Params: { id: string } }>(
+  app.post<{ Params: { id: string }; Body?: { contents?: BackupContents } }>(
     '/api/servers/:id/backups',
     { preHandler: requireRole('member') },
-    async (request, reply) => guard(reply, async () => createBackup(await instancePath(request.params.id)))
+    async (request, reply) =>
+      guard(reply, async () => {
+        // Falls back to the server's own schedule choice, then to worlds — so
+        // a one-off backup captures what that server normally captures rather
+        // than something narrower the caller never chose.
+        const metadata = await loadInstanceMetadata(request.params.id)
+        const contents =
+          request.body?.contents ?? metadata.backupSchedule?.contents ?? defaultBackupContents
+        return createBackup(metadata.path, contents)
+      })
   )
 
   app.post<{ Params: { id: string; filename: string } }>(
@@ -184,5 +206,124 @@ export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<
         backupScheduler.reset(request.params.id)
         return request.body
       })
+  )
+
+  /**
+   * The raw archive bytes.
+   *
+   * Exists so a backup can leave the machine that made it — migration reads a
+   * server's backup from its old node and writes it to the new one. Ranged so
+   * a large world moves in pieces: the agent channel carries one JSON frame
+   * per request, and a multi-gigabyte body in a single frame is a memory spike
+   * on both ends and a timeout in the middle.
+   */
+  app.get<{ Params: { id: string; filename: string }; Querystring: { offset?: string; length?: string } }>(
+    '/api/servers/:id/backups/:filename/download',
+    { preHandler: requireRole('member') },
+    async (request, reply) =>
+      guard(reply, async () => {
+        const path = await instancePath(request.params.id)
+        const file = join(path, 'chunkforge-backups', safeName(request.params.filename))
+        const total = (await stat(file)).size
+        const offset = Math.max(0, Number(request.query.offset ?? 0))
+        const length = Math.min(Number(request.query.length ?? CHUNK_BYTES), total - offset)
+        if (offset >= total) return { total, offset, bytes: 0, data: '' }
+        const handle = await open(file, 'r')
+        try {
+          const buffer = Buffer.alloc(Math.max(0, length))
+          const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset)
+          return {
+            total,
+            offset,
+            bytes: bytesRead,
+            data: buffer.subarray(0, bytesRead).toString('base64')
+          }
+        } finally {
+          await handle.close()
+        }
+      })
+  )
+
+  /** Writes one piece of an archive being moved onto this machine. */
+  app.post<{
+    Params: { id: string }
+    Body: { filename: string; offset: number; data: string; final?: boolean }
+  }>(
+    '/api/servers/:id/backups/upload',
+    { preHandler: requireRole('member') },
+    async (request, reply) =>
+      guard(reply, async () => {
+        const { filename, offset, data } = request.body ?? {}
+        const path = await instancePath(request.params.id)
+        const dir = join(path, 'chunkforge-backups')
+        await mkdir(dir, { recursive: true })
+        const file = join(dir, safeName(filename))
+        // Opened per chunk rather than held between requests: each chunk is its
+        // own request and may not even reach the same process on a restart.
+        const handle = await open(file, offset === 0 ? 'w' : 'r+')
+        try {
+          const buffer = Buffer.from(data, 'base64')
+          await handle.write(buffer, 0, buffer.length, offset)
+          return { written: buffer.length, offset }
+        } finally {
+          await handle.close()
+        }
+      })
+  )
+
+  // ---- lifecycle ----
+
+  app.get<{ Params: { id: string } }>(
+    '/api/servers/:id/lifecycle',
+    { preHandler: requireRole('viewer') },
+    async (request, reply) =>
+      guard(reply, async () => (await loadInstanceMetadata(request.params.id)).lifecycle ?? {})
+  )
+
+  /**
+   * Automatic restarts, scheduled hours, sleep and maintenance backups.
+   *
+   * Validated here rather than trusted, because a malformed time is not
+   * something the scheduler can notice later — it simply never matches, and
+   * the operator is left with a rule that silently does nothing.
+   */
+  app.put<{ Params: { id: string }; Body: ServerLifecycle }>(
+    '/api/servers/:id/lifecycle',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      const body = request.body ?? {}
+      for (const [field, value] of [
+        ['startAt', body.startAt],
+        ['stopAt', body.stopAt]
+      ] as const) {
+        if (value !== undefined && value !== '' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+          return reply.code(400).send({ error: `${field} must be a time like 09:00` })
+        }
+      }
+      if (body.restartEveryHours !== undefined && body.restartEveryHours < 0) {
+        return reply.code(400).send({ error: 'Restart interval cannot be negative' })
+      }
+      if (body.sleepAfterEmptyMinutes !== undefined && body.sleepAfterEmptyMinutes < 0) {
+        return reply.code(400).send({ error: 'Sleep delay cannot be negative' })
+      }
+      // A window that starts and stops at the same minute never opens, which
+      // reads as "scheduled" but behaves as "never".
+      if (body.startAt && body.stopAt && body.startAt === body.stopAt) {
+        return reply.code(400).send({ error: 'Start and stop times must differ' })
+      }
+
+      return guard(reply, async () => {
+        const metadata = await loadInstanceMetadata(request.params.id)
+        // Empty strings mean "unset" from a form; storing them would leave a
+        // rule that can never match.
+        const lifecycle: ServerLifecycle = {
+          ...body,
+          startAt: body.startAt || undefined,
+          stopAt: body.stopAt || undefined
+        }
+        await saveInstanceMetadata({ ...metadata, lifecycle })
+        return lifecycle
+      })
+    }
   )
 }

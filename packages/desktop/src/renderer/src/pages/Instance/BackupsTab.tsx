@@ -14,6 +14,7 @@ import {
   DialogContent,
   DialogActions,
   Switch,
+  Checkbox,
   SpinButton,
   Field
 } from '@fluentui/react-components'
@@ -24,7 +25,12 @@ import {
   DatabaseArrowUp20Regular,
   CloudArrowUp20Regular
 } from '@fluentui/react-icons'
-import type { BackupEntry, BackupSchedule } from '@shared/types'
+import {
+  defaultBackupContents,
+  type BackupContents,
+  type BackupEntry,
+  type BackupSchedule
+} from '@shared/types'
 import { api, onEvent } from '../../api'
 
 const useStyles = makeStyles({
@@ -34,6 +40,7 @@ const useStyles = makeStyles({
   schedulePanel: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '14px 16px', borderRadius: tokens.borderRadiusLarge, border: `1px solid ${tokens.colorNeutralStroke2}`, backgroundColor: tokens.colorNeutralBackground1 },
   scheduleHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
   scheduleFields: { display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' },
+  contentsRow: { display: 'flex', gap: '16px', flexWrap: 'wrap' },
   scheduleField: { minWidth: '130px' },
   list: { display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flexGrow: 1, minHeight: 0 },
   row: {
@@ -68,6 +75,29 @@ function formatSize(bytes: number): string {
 interface BackupsTabProps {
   instanceId: string
   serverRunning: boolean
+}
+
+/** The three things a backup can hold, in the order they matter. */
+const CONTENT_CHOICES: Array<{ key: keyof BackupContents; label: string; hint: string }> = [
+  { key: 'worlds', label: 'Worlds', hint: 'world, nether and end — the part nobody can regenerate' },
+  { key: 'addons', label: 'Plugins & mods', hint: 'plugins/ and mods/, including their own config folders' },
+  { key: 'configs', label: 'Configs', hint: 'server.properties, loader configs, ops and whitelist' }
+]
+
+/** Says what pressing the button will actually capture. */
+function backupButtonLabel(schedule: BackupSchedule | null): string {
+  if (!schedule) return 'Back Up'
+  const contents = contentsOf(schedule)
+  const parts: string[] = []
+  if (contents.worlds) parts.push('World')
+  if (contents.addons) parts.push('Add-Ons')
+  if (contents.configs) parts.push('Configs')
+  return `Back Up ${parts.join(' + ') || 'World'}`
+}
+
+/** Schedules written before this was configurable meant worlds only. */
+function contentsOf(schedule: BackupSchedule): BackupContents {
+  return schedule.contents ?? defaultBackupContents
 }
 
 export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.Element {
@@ -225,8 +255,33 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
                 checked={schedule.uploadToFileHub}
                 onChange={(_, d) => saveSchedule({ ...schedule, uploadToFileHub: d.checked })}
               />
+
             </div>
           )}
+
+          {/* Outside the enabled block on purpose: this governs the manual
+              backup button as well, so it has to be reachable for someone who
+              never turns the schedule on. */}
+          <Field label="What to include">
+            <div className={styles.contentsRow}>
+              {CONTENT_CHOICES.map(({ key, label, hint }) => (
+                <Checkbox
+                  key={key}
+                  label={label}
+                  title={hint}
+                  checked={contentsOf(schedule)[key]}
+                  onChange={(_, d) => {
+                    const next = { ...contentsOf(schedule), [key]: Boolean(d.checked) }
+                    // Every box cleared would back up nothing, and fail every
+                    // time. Worlds is what to fall back to: the part nobody
+                    // can regenerate.
+                    if (!next.worlds && !next.addons && !next.configs) next.worlds = true
+                    saveSchedule({ ...schedule, contents: next })
+                  }}
+                />
+              ))}
+            </div>
+          </Field>
         </div>
       )}
 
@@ -237,7 +292,7 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
             : `${backups.length} backup${backups.length === 1 ? '' : 's'} saved.`}
         </Text>
         <Button appearance="primary" icon={<ArrowDownload20Regular />} disabled={busy} onClick={create}>
-          {busy ? 'Working…' : 'Back Up World'}
+          {busy ? 'Working…' : backupButtonLabel(schedule)}
         </Button>
       </div>
 

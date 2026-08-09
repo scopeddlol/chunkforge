@@ -22,6 +22,13 @@ export interface ServerEventPayloads {
   players: PlayersChangedEvent
   'create-progress': CreateProgressEvent
   'modpack-progress': ModpackInstallProgress & { instanceId: string }
+  /** How a server's move between nodes is going. */
+  'migration-progress': {
+    instanceId: string
+    stage: string
+    message: string
+    percent: number | null
+  }
   'backup-created': { instanceId: string; filename: string }
   'backup-failed': { instanceId: string; message: string }
   'filehub-upload': BackupUploadProgress

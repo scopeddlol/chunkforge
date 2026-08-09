@@ -2,6 +2,7 @@ import type {
   AppSettings,
   BackupEntry,
   BackupSchedule,
+  ServerLifecycle,
   CreateInstanceConfig,
   FileEntry,
   InstalledPlugin,
@@ -277,6 +278,15 @@ export class ChunkforgeClient {
     create: (config: CreateInstanceConfig) => this.post<InstanceMetadata>('/api/servers', config),
     start: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/start`),
     stop: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/stop`),
+    restart: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/restart`),
+    /** Moves a server to another node, keeping its address. Admin-only. */
+    migrate: (id: string, nodeId: string) =>
+      this.post<InstanceMetadata>(`/api/servers/${id}/migrate`, { nodeId }),
+    lifecycle: (id: string) => this.get<ServerLifecycle>(`/api/servers/${id}/lifecycle`),
+    setLifecycle: (id: string, lifecycle: ServerLifecycle) =>
+      this.put<ServerLifecycle>(`/api/servers/${id}/lifecycle`, lifecycle),
+    /** Ends the process without saving. Admin-only. */
+    kill: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/kill`),
     logs: (id: string, limit?: number) =>
       this.get<LogLineEvent[]>(
         `/api/servers/${id}/logs${limit ? `?limit=${limit}` : ''}`

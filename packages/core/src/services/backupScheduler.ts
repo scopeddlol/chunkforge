@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { BackupSchedule } from '../types/index'
+import { defaultBackupContents, type BackupSchedule } from '../types/index'
 import { createBackup, deleteBackup, listBackups } from './backupsService'
 import { listInstanceMetadata, loadInstanceMetadata } from '../store/instancesStore'
 
@@ -59,7 +59,9 @@ class BackupScheduler extends EventEmitter {
     this.running.add(instanceId)
     try {
       const metadata = await loadInstanceMetadata(instanceId)
-      const created = await createBackup(metadata.path)
+      // The schedule carries what to include; absent means worlds, which is
+      // what every scheduled backup captured before this was configurable.
+      const created = await createBackup(metadata.path, schedule.contents ?? defaultBackupContents)
       this.emit('backup-created', { instanceId, filename: created.filename })
 
       if (schedule.keepCount > 0) {

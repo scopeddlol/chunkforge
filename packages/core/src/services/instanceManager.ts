@@ -343,6 +343,58 @@ class InstanceManager extends EventEmitter {
     })
   }
 
+  /**
+   * Stops a server and starts it again.
+   *
+   * Sequenced rather than fired in parallel: the port is only released once
+   * the old process has actually exited, and `startInstance` now refuses an
+   * occupied port — so starting before the stop completed would reliably fail
+   * on the very thing that makes a restart worth having.
+   *
+   * A server that is not running is simply started, which is what someone
+   * pressing "restart" on a stopped server means.
+   */
+  async restartInstance(input: InstanceMetadata, timeoutMs = 30_000): Promise<void> {
+    if (this.running.has(input.id)) {
+      await this.stopInstance(input.id, timeoutMs)
+      // The child's 'close' has fired by here, but the OS can hold the socket
+      // briefly after that. A short settle beats failing on our own timing.
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    await this.startInstance(input)
+  }
+
+  /**
+   * Ends the process immediately, without asking it to save.
+   *
+   * The blunt option, and it is deliberately separate from `stopInstance`
+   * rather than a flag on it: stopping asks Minecraft to flush its worlds and
+   * wait, and someone who wants that behaviour should not be one mistyped
+   * argument away from losing it. Reach for this when a server has stopped
+   * answering, and expect to lose whatever was not saved.
+   */
+  async killInstance(id: string): Promise<void> {
+    const entry = this.running.get(id)
+    if (!entry) return
+
+    entry.expectedStop = true
+    this.emitLog(id, 'system', 'Killing the server process — unsaved changes will be lost.\n')
+    this.emitStatus(id, 'stopping')
+
+    await new Promise<void>((resolve) => {
+      const settled = setTimeout(() => {
+        // SIGKILL if it ignored the polite signal. Nothing else is left to try.
+        entry.child.kill('SIGKILL')
+        resolve()
+      }, 5_000)
+      entry.child.once('close', () => {
+        clearTimeout(settled)
+        resolve()
+      })
+      entry.child.kill('SIGTERM')
+    })
+  }
+
   sendCommand(id: string, command: string): void {
     const entry = this.running.get(id)
     if (!entry) throw new Error('Server is not running')

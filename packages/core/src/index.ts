@@ -76,6 +76,7 @@ export {
 export { listPlayers } from './services/playersService'
 export { listBackups, createBackup, restoreBackup, deleteBackup } from './services/backupsService'
 export { backupScheduler } from './services/backupScheduler'
+export { lifecycleScheduler, inStartWindow, runLifecycleTick } from './services/lifecycleScheduler'
 export { collectDashboardStats } from './services/statsService'
 export { downloadFile } from './services/downloadFile'
 

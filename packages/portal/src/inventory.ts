@@ -108,3 +108,53 @@ export async function collectInventory(): Promise<PortalInventory> {
     unreachableCount: results.filter((client) => client.servers === undefined).length
   }
 }
+
+/**
+ * Domains that no longer point at a server anyone is running.
+ *
+ * Portal allocates a subdomain against an instance id and has, until now, had
+ * no way to learn that the instance is gone: a control plane that is
+ * uninstalled, a server deleted while its panel was offline, or a migration
+ * that half-finished all leave a record behind. Those records keep a public
+ * port bound and a DNS entry pointing at nothing.
+ *
+ * The inventory is what makes this answerable, and the rule is deliberately
+ * conservative: a domain is only stale when the control plane that owns it
+ * *answered* and did not list the instance. A panel that is offline, refused,
+ * or errored proves nothing, and its domains are left alone — the cost of
+ * keeping a dead record for another day is nothing, and the cost of deleting
+ * a live one is a server nobody can reach.
+ */
+export interface StaleDomain {
+  hostname: string
+  clientId: string
+  instanceId?: string
+  reason: string
+}
+
+export async function findStaleDomains(): Promise<StaleDomain[]> {
+  const inventory = await collectInventory()
+  const answered = new Map<string, Set<string>>()
+  for (const client of inventory.clients) {
+    if (!client.servers) continue
+    answered.set(client.clientId, new Set(client.servers.map((server) => server.instanceId)))
+  }
+
+  const stale: StaleDomain[] = []
+  for (const domain of portalStore.domains()) {
+    const known = answered.get(domain.clientId)
+    // No answer from that control plane — say nothing about its domains.
+    if (!known) continue
+    // A domain with no instance id predates instance tracking; it cannot be
+    // matched against an inventory, so it is never judged stale by this.
+    if (!domain.instanceId) continue
+    if (known.has(domain.instanceId)) continue
+    stale.push({
+      hostname: domain.hostname,
+      clientId: domain.clientId,
+      instanceId: domain.instanceId,
+      reason: 'Its control plane no longer lists that server.'
+    })
+  }
+  return stale
+}
