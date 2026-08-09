@@ -59,6 +59,69 @@ export class ApiError extends Error {
  * and mobile. Keeping it here rather than in the UI package means the client
  * and the routes it calls change together.
  */
+/** The signed-in account, with the capability flags the UI draws itself from. */
+export interface CurrentUser {
+  id: string
+  username: string
+  role: string
+  projectGrants: Record<string, string>
+  /** Node ids this account is limited to, or undefined for every node. */
+  nodeAccess?: string[]
+  canConfigurePersonalNode: boolean
+  isAdmin: boolean
+}
+
+/** A user as the admin panel sees them. `nodeAccess: null` means every node. */
+export interface ManagedUser {
+  id: string
+  username: string
+  role: string
+  disabled: boolean
+  nodeAccess: string[] | null
+  canConfigurePersonalNode: boolean
+  createdAt: string
+}
+
+export interface NewUserInput {
+  username: string
+  password: string
+  role?: string
+  nodeAccess?: string[]
+  canConfigurePersonalNode?: boolean
+}
+
+export interface UserPatchInput {
+  role?: string
+  disabled?: boolean
+  /** An array restricts, `null` clears the restriction, absent leaves it alone. */
+  nodeAccess?: string[] | null
+  canConfigurePersonalNode?: boolean
+}
+
+export interface InviteRecord {
+  id: string
+  hint: string
+  role: string
+  nodeAccess?: string[]
+  canConfigurePersonalNode?: boolean
+  note?: string
+  createdBy: string
+  createdAt: string
+  expiresAt?: string
+  remainingUses: number
+  usedBy: Array<{ userId: string; username: string; at: string }>
+  revokedAt?: string
+}
+
+export interface NewInviteInput {
+  role?: string
+  nodeAccess?: string[]
+  canConfigurePersonalNode?: boolean
+  note?: string
+  uses?: number
+  expiresInDays?: number
+}
+
 export class ChunkforgeClient {
   private readonly baseUrl: string
   private token?: string
@@ -127,8 +190,34 @@ export class ChunkforgeClient {
     login: (username: string, password: string) =>
       this.post<{ id: string; username: string; role: string }>('/api/auth/login', { username, password }),
     logout: () => this.post<{ ok: true }>('/api/auth/logout'),
-    me: () => this.get<{ id: string; username: string; role: string }>('/api/auth/me'),
+    me: () => this.get<CurrentUser>('/api/auth/me'),
     changePassword: (password: string) => this.post<{ ok: true }>('/api/auth/password', { password })
+  }
+
+  // ---- users ----
+  users = {
+    list: () => this.get<ManagedUser[]>('/api/users'),
+    create: (input: NewUserInput) => this.post<ManagedUser>('/api/users', input),
+    update: (id: string, patch: UserPatchInput) => this.patch<ManagedUser>(`/api/users/${id}`, patch),
+    remove: (id: string) => this.del<{ ok: true }>(`/api/users/${id}`),
+    resetPassword: (id: string, password: string) =>
+      this.post<{ ok: true }>(`/api/users/${id}/password`, { password })
+  }
+
+  // ---- invites ----
+  invites = {
+    list: () => this.get<InviteRecord[]>('/api/invites'),
+    create: (input: NewInviteInput) => this.post<{ code: string; invite: InviteRecord }>('/api/invites', input),
+    revoke: (id: string) => this.del<{ ok: true }>(`/api/invites/${id}`),
+    // Public, so the join page can work before anyone is signed in.
+    preview: (code: string) =>
+      this.get<{ role: string; note?: string }>(`/api/invites/${encodeURIComponent(code)}/preview`),
+    accept: (code: string, username: string, password: string) =>
+      this.post<{ id: string; username: string; role: string }>('/api/invites/accept', {
+        code,
+        username,
+        password
+      })
   }
 
   // ---- servers ----

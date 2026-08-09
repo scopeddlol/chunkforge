@@ -211,6 +211,39 @@ time, and results filter by Minecraft version and loader.
 onto an existing server, or start a brand-new server from a pack — Chunkforge
 reads the archive and sets the loader and Minecraft version to match.
 
+**Share the panel without sharing everything.** The first account you make is
+the owner; after that, accounts come in four levels.
+
+| Role | Can |
+| --- | --- |
+| **viewer** | Look at servers, consoles, and players. Change nothing. |
+| **member** | Create, start, stop, and configure servers. |
+| **admin** | All of the above, plus accounts, invites, and settings. |
+| **owner** | The first account. Only the owner grants admin. Cannot be demoted or deleted. |
+
+Two permissions sit outside that ladder, because they are about *reach* rather
+than power:
+
+- **Which nodes an account may use.** By default, all of them — including ones
+  you pair later. Restrict an account to a list and the machines outside it
+  disappear for them, along with every server on those machines. Admins are
+  never restricted.
+- **Whether an account may offer its own machine as a node.** Off by default:
+  a trusted member is not automatically someone you want attaching hardware you
+  did not provision and publishing routes into it.
+
+**Invite people instead of choosing their passwords.** Cut a code from the Admin
+page with a role and node access baked in, hand it over, and they pick their own
+username and password. Codes can be multi-use, can expire, and can be revoked;
+only a hash of one is ever stored, so a code is readable exactly once — at the
+moment it is created.
+
+**First run walks you through it.** Both the desktop app and the browser panel
+open a short wizard the first time an admin signs in: connect a Portal, decide
+whether servers run on this machine, pick where they live, and cut a first
+invite. Every step past the welcome is skippable, and all of it is reachable
+later from Settings and Admin.
+
 ## Supported servers
 
 | Type | Add-ons | Notes |

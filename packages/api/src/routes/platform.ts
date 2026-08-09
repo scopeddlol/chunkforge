@@ -18,6 +18,8 @@ import {
   type ServerGroup
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
+import { filterByNodeAccess, guardNodeAccess } from '../auth/nodeAccess'
+import { canConfigurePersonalNode } from '../auth/model'
 import { broadcast } from '../events'
 import {
   callNodeAgent,
@@ -73,12 +75,15 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
 
   // The local machine plus whatever the Portal knows about. Nodes are never
   // paired here — that happens once, at the Portal.
-  app.get('/api/nodes', { preHandler: requireRole('viewer') }, async () => listAllNodes())
+  app.get('/api/nodes', { preHandler: requireRole('viewer') }, async (request) =>
+    filterByNodeAccess(request, await listAllNodes(), (node) => node.id)
+  )
 
   app.post<{ Params: { id: string } }>(
     '/api/nodes/:id/claim',
     { preHandler: requireRole('member') },
     async (request, reply) => {
+      if (!(await guardNodeAccess(request, reply, request.params.id))) return
       try {
         await claimPortalNode(request.params.id)
         const nodes = await listAllNodes()
@@ -95,6 +100,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     '/api/nodes/:id/release',
     { preHandler: requireRole('member') },
     async (request, reply) => {
+      if (!(await guardNodeAccess(request, reply, request.params.id))) return
       try {
         await releasePortalNode(request.params.id)
         return { ok: true }
@@ -160,8 +166,16 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
    */
   app.post<{ Body: { enabled: boolean } }>(
     '/api/portal/host-locally',
-    { preHandler: requireRole('admin') },
+    { preHandler: requireRole('member') },
     async (request, reply) => {
+      // Offering your own machine is no longer admin-only: it is its own
+      // permission, so an operator can let a trusted member bring hardware
+      // without also handing them the settings page.
+      if (!canConfigurePersonalNode(request.user!)) {
+        return reply
+          .code(403)
+          .send({ error: 'You are not allowed to configure a personal node. Ask an admin to enable it.' })
+      }
       const enabled = Boolean(request.body?.enabled)
       const portal = getPortalStatus()
       try {

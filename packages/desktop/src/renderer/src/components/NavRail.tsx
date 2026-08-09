@@ -13,6 +13,8 @@ import {
   Layer24Filled,
   ServerLink24Regular,
   ServerLink24Filled,
+  PeopleTeam24Regular,
+  PeopleTeam24Filled,
   bundleIcon
 } from '@fluentui/react-icons'
 
@@ -21,9 +23,10 @@ const PluginsIcon = bundleIcon(AppsAddIn24Filled, AppsAddIn24Regular)
 const ModsIcon = bundleIcon(Box24Filled, Box24Regular)
 const ModpackIcon = bundleIcon(Layer24Filled, Layer24Regular)
 const NodesIcon = bundleIcon(ServerLink24Filled, ServerLink24Regular)
+const AdminIcon = bundleIcon(PeopleTeam24Filled, PeopleTeam24Regular)
 const SettingsIcon = bundleIcon(Settings24Filled, Settings24Regular)
 
-export type NavKey = 'dashboard' | 'plugins' | 'mods' | 'modpacks' | 'nodes' | 'settings'
+export type NavKey = 'dashboard' | 'plugins' | 'mods' | 'modpacks' | 'nodes' | 'admin' | 'settings'
 
 const useStyles = makeStyles({
   root: {
@@ -84,18 +87,21 @@ const useStyles = makeStyles({
   }
 })
 
-const items: { key: NavKey; label: string; Icon: typeof DashboardIcon }[] = [
+const items: { key: NavKey; label: string; Icon: typeof DashboardIcon; adminOnly?: boolean }[] = [
   { key: 'dashboard', label: 'Servers', Icon: DashboardIcon },
   { key: 'plugins', label: 'Plugins', Icon: PluginsIcon },
   { key: 'mods', label: 'Mods', Icon: ModsIcon },
   { key: 'modpacks', label: 'Modpacks', Icon: ModpackIcon },
   { key: 'nodes', label: 'Nodes', Icon: NodesIcon },
+  { key: 'admin', label: 'Admin', Icon: AdminIcon, adminOnly: true },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon }
 ]
 
 interface NavRailProps {
   active: NavKey
   onSelect: (key: NavKey) => void
+  /** Hides admin-only destinations. The API is what actually refuses them. */
+  isAdmin: boolean
 }
 
 /**
@@ -103,26 +109,28 @@ interface NavRailProps {
  * mounts a portal on every hover, and popup layers in this window trigger a
  * full-window repaint flash.
  */
-export function NavRail({ active, onSelect }: NavRailProps): JSX.Element {
+export function NavRail({ active, onSelect, isAdmin }: NavRailProps): JSX.Element {
   const styles = useStyles()
 
   return (
     <nav className={styles.root}>
-      {items.map(({ key, label, Icon }) => {
-        const isActive = active === key
-        return (
-          <button
-            key={key}
-            className={mergeClasses(styles.item, isActive && styles.itemActive)}
-            onClick={() => onSelect(key)}
-            aria-current={isActive}
-          >
-            {isActive && <span className={styles.indicator} />}
-            <Icon fontSize={22} />
-            <Text className={styles.label}>{label}</Text>
-          </button>
-        )
-      })}
+      {items
+        .filter((item) => isAdmin || !item.adminOnly)
+        .map(({ key, label, Icon }) => {
+          const isActive = active === key
+          return (
+            <button
+              key={key}
+              className={mergeClasses(styles.item, isActive && styles.itemActive)}
+              onClick={() => onSelect(key)}
+              aria-current={isActive}
+            >
+              {isActive && <span className={styles.indicator} />}
+              <Icon fontSize={22} />
+              <Text className={styles.label}>{label}</Text>
+            </button>
+          )
+        })}
     </nav>
   )
 }

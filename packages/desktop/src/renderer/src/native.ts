@@ -61,3 +61,15 @@ const browserNative: NativeApi = {
 export function native(): NativeApi {
   return window.native ?? browserNative
 }
+
+/**
+ * Whether this renderer is inside Electron rather than a browser tab.
+ *
+ * The two hosts share every screen, but a handful of them have to describe the
+ * machine differently — "this computer" against "this container" — and only
+ * the desktop build can open a folder picker. Asking the bridge is the honest
+ * test; user agents are not.
+ */
+export function isDesktopHost(): boolean {
+  return Boolean(window.native)
+}
