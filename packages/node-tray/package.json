@@ -1,6 +1,6 @@
 {
   "name": "@chunkforge/node-tray",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Chunkforge Node for Windows \u2014 the node service with a setup window and a tray icon",
   "main": "./out/main/index.js",
   "author": "Chunkforge",
