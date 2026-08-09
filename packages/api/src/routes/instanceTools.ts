@@ -18,7 +18,8 @@ import {
   saveInstanceMetadata,
   writeTextFile,
   type BackupContents,
-  type BackupSchedule
+  type BackupSchedule,
+  type ServerLifecycle
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
 
@@ -195,5 +196,61 @@ export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<
         backupScheduler.reset(request.params.id)
         return request.body
       })
+  )
+
+  // ---- lifecycle ----
+
+  app.get<{ Params: { id: string } }>(
+    '/api/servers/:id/lifecycle',
+    { preHandler: requireRole('viewer') },
+    async (request, reply) =>
+      guard(reply, async () => (await loadInstanceMetadata(request.params.id)).lifecycle ?? {})
+  )
+
+  /**
+   * Automatic restarts, scheduled hours, sleep and maintenance backups.
+   *
+   * Validated here rather than trusted, because a malformed time is not
+   * something the scheduler can notice later — it simply never matches, and
+   * the operator is left with a rule that silently does nothing.
+   */
+  app.put<{ Params: { id: string }; Body: ServerLifecycle }>(
+    '/api/servers/:id/lifecycle',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      const body = request.body ?? {}
+      for (const [field, value] of [
+        ['startAt', body.startAt],
+        ['stopAt', body.stopAt]
+      ] as const) {
+        if (value !== undefined && value !== '' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+          return reply.code(400).send({ error: `${field} must be a time like 09:00` })
+        }
+      }
+      if (body.restartEveryHours !== undefined && body.restartEveryHours < 0) {
+        return reply.code(400).send({ error: 'Restart interval cannot be negative' })
+      }
+      if (body.sleepAfterEmptyMinutes !== undefined && body.sleepAfterEmptyMinutes < 0) {
+        return reply.code(400).send({ error: 'Sleep delay cannot be negative' })
+      }
+      // A window that starts and stops at the same minute never opens, which
+      // reads as "scheduled" but behaves as "never".
+      if (body.startAt && body.stopAt && body.startAt === body.stopAt) {
+        return reply.code(400).send({ error: 'Start and stop times must differ' })
+      }
+
+      return guard(reply, async () => {
+        const metadata = await loadInstanceMetadata(request.params.id)
+        // Empty strings mean "unset" from a form; storing them would leave a
+        // rule that can never match.
+        const lifecycle: ServerLifecycle = {
+          ...body,
+          startAt: body.startAt || undefined,
+          stopAt: body.stopAt || undefined
+        }
+        await saveInstanceMetadata({ ...metadata, lifecycle })
+        return lifecycle
+      })
+    }
   )
 }

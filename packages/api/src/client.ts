@@ -2,6 +2,7 @@ import type {
   AppSettings,
   BackupEntry,
   BackupSchedule,
+  ServerLifecycle,
   CreateInstanceConfig,
   FileEntry,
   InstalledPlugin,
@@ -278,6 +279,9 @@ export class ChunkforgeClient {
     start: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/start`),
     stop: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/stop`),
     restart: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/restart`),
+    lifecycle: (id: string) => this.get<ServerLifecycle>(`/api/servers/${id}/lifecycle`),
+    setLifecycle: (id: string, lifecycle: ServerLifecycle) =>
+      this.put<ServerLifecycle>(`/api/servers/${id}/lifecycle`, lifecycle),
     /** Ends the process without saving. Admin-only. */
     kill: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/kill`),
     logs: (id: string, limit?: number) =>

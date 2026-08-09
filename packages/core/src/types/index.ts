@@ -71,6 +71,8 @@ export interface InstanceSummary {
   iconDataUrl?: string | null
   /** @deprecated Superseded by `projectId`; still written for older builds. */
   groupId?: string | null
+  /** Automatic restarts, scheduled hours, sleep and maintenance backups. */
+  lifecycle?: ServerLifecycle
   /** Owning project. Stamped by migration on records that predate projects. */
   projectId?: string
   /** Node this instance runs on. `local` unless it was deployed to a Portal node. */
@@ -332,6 +334,42 @@ export const defaultBackupContents: BackupContents = {
   addons: false,
   configs: false
 }
+
+/**
+ * When a server should run, and when it should look after itself.
+ *
+ * One record rather than four, because these rules interact and reading them
+ * apart would hide that. A server that is scheduled to stop at 03:00, restarts
+ * every six hours, and sleeps when empty needs a single place where the
+ * precedence between those is written down — see `lifecycleScheduler`.
+ *
+ * Times are `HH:MM` in the host's local timezone. A server operator thinks in
+ * "3am", not in UTC offsets, and the machine running the server is the one
+ * whose small hours actually matter.
+ */
+export interface ServerLifecycle {
+  /** Restart every N hours while running. 0 or absent disables it. */
+  restartEveryHours?: number
+  /** Local `HH:MM` to start at, every day. */
+  startAt?: string
+  /** Local `HH:MM` to stop at, every day. */
+  stopAt?: string
+  /**
+   * Stop the server once it has been empty this long. 0 or absent disables it.
+   *
+   * Only meaningful with a Portal address: a slept server is one nobody can
+   * wake by connecting, so this is for servers someone starts deliberately.
+   */
+  sleepAfterEmptyMinutes?: number
+  /**
+   * Take the server down, back it up, and bring it back, on the backup
+   * schedule's own interval. Off means backups run with the server live, which
+   * is faster but can capture a half-written chunk.
+   */
+  maintenanceBackups?: boolean
+}
+
+export const defaultServerLifecycle: ServerLifecycle = {}
 
 export interface BackupSchedule {
   enabled: boolean

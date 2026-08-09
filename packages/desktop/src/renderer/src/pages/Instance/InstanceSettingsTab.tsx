@@ -24,6 +24,7 @@ import type { InstanceMetadata, InstanceToggles, ServerGroup } from '@shared/typ
 import { usePortAvailability } from '../../components/usePortAvailability'
 import { useSessionStore } from '../../state/sessionStore'
 import { IconPanel } from './IconPanel'
+import { LifecyclePanel } from './LifecyclePanel'
 import { ServerAccessPanel } from './ServerAccessPanel'
 import { StartupPanel } from './StartupPanel'
 import { CopyableAddress } from '../../components/CopyableAddress'
@@ -333,6 +334,13 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
       <IconPanel metadata={metadata} onChanged={() => onSaved(metadata)} />
 
       <StartupPanel metadata={metadata} onSaved={onSaved} />
+
+      <div className={styles.panel}>
+        <Text weight="semibold" className={styles.sectionTitle}>
+          Schedule
+        </Text>
+        <LifecyclePanel instanceId={metadata.id} hasPortalAddress={Boolean(metadata.portalHostname)} />
+      </div>
 
       {canManageAccess && (
         <div className={styles.panel}>

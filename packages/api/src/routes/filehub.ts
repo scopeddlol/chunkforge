@@ -4,6 +4,7 @@ import {
   FileHubClient,
   FileHubError,
   backupScheduler,
+  lifecycleScheduler,
   getSettings,
   loadInstanceMetadata,
   saveInstanceMetadata,
@@ -76,6 +77,28 @@ function attachBackupScheduler(): void {
   backupScheduler.on('backup-created', (payload) => broadcast({ type: 'backup-created', payload }))
   backupScheduler.on('backup-failed', (payload) => broadcast({ type: 'backup-failed', payload }))
   backupScheduler.start()
+
+  // Lifecycle rules run alongside backups. Reported on the same event stream
+  // as everything else, so a server that restarted itself at 4am says so in
+  // its console rather than looking like it crashed and recovered.
+  lifecycleScheduler.on('action', ({ instanceId, reason }: { instanceId: string; reason: string }) => {
+    broadcast({
+      type: 'log',
+      payload: { instanceId, stream: 'system', line: `${reason}…\n`, timestamp: Date.now() }
+    })
+  })
+  lifecycleScheduler.on('action-failed', ({ instanceId, message }: { instanceId: string; message: string }) => {
+    broadcast({
+      type: 'log',
+      payload: {
+        instanceId,
+        stream: 'system',
+        line: `Scheduled action failed: ${message}\n`,
+        timestamp: Date.now()
+      }
+    })
+  })
+  lifecycleScheduler.start()
 }
 
 export async function registerFileHubRoutes(app: FastifyInstance): Promise<void> {
