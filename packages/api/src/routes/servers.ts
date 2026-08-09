@@ -21,7 +21,11 @@ import {
 import { requireRole } from '../auth/plugin'
 import { authStore } from '../auth/store'
 import { guardNodeAccess } from '../auth/nodeAccess'
+import { resolveTargetNode } from '../nodeAllocation'
+import { migrateInstance } from '../migration'
+import { getLocalCoreApi } from '../localNode'
 import { visibleServers } from '../auth/serverAccess'
+import { broadcast } from '../events'
 import { forgetLogLines, recentLogLines } from '../logBuffer'
 import {
   callNodeAgent,
@@ -98,6 +102,19 @@ async function withPortalAddresses(summaries: InstanceSummary[]): Promise<Instan
   })
 }
 
+/**
+ * How migration reaches this machine's own API when one end is local.
+ *
+ * The session token only exists on the desktop shell; a Docker panel has none,
+ * and a migration with a local end there simply cannot authenticate to itself.
+ * Returning what is available lets the caller fail with a clear message rather
+ * than a confusing 401 halfway through a move.
+ */
+function localCoreApiTarget(): { baseUrl: string; token?: string } | undefined {
+  const running = getLocalCoreApi()
+  return running ? { baseUrl: running.url, token: running.sessionToken } : undefined
+}
+
 export async function registerServerRoutes(app: FastifyInstance): Promise<void> {
   // One list, wherever the servers actually run. Remote ones are fetched from
   // their nodes through Portal and appear beside the local ones.
@@ -161,11 +178,23 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
     '/api/servers',
     { preHandler: requireRole('member') },
     async (request, reply) => {
-      const targetNode = request.body?.nodeId
+      /**
+       * Where this server is built.
+       *
+       * A panel that has turned off local hosting has no local place to put a
+       * server, so an unspecified target is resolved to a node rather than
+       * silently defaulting to a machine that cannot run it.
+       */
+      let targetNode: string | null
+      try {
+        targetNode = await resolveTargetNode(request.body?.nodeId)
+      } catch (err) {
+        return reply.code(409).send({ error: (err as Error).message })
+      }
       if (!(await guardNodeAccess(request, reply, targetNode))) return
       try {
         if (targetNode && targetNode !== 'local') {
-          const created = await createRemoteInstance(targetNode, request.body)
+          const created = await createRemoteInstance(targetNode, { ...request.body, nodeId: targetNode })
           const metadata = {
             ...(created as unknown as InstanceMetadata),
             id: created.id,
@@ -269,6 +298,42 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
         await instanceManager.killInstance(request.params.id)
         return { ok: true }
       } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /**
+   * Moves a server to another node, keeping its address.
+   *
+   * Long-running by nature, so progress goes out on the shared event stream
+   * rather than being held open on this request — the same shape modpack
+   * installs use, and for the same reason: a browser tab that closes should
+   * not abandon a half-finished migration.
+   */
+  app.post<{ Params: { id: string }; Body: { nodeId: string } }>(
+    '/api/servers/:id/migrate',
+    { preHandler: requireRole('admin') },
+    async (request, reply) => {
+      const target = request.body?.nodeId
+      if (!target) return reply.code(400).send({ error: 'A destination node is required' })
+      if (!(await guardNodeAccess(request, reply, target))) return
+
+      const instanceId = request.params.id
+      try {
+        const moved = await migrateInstance({
+          instanceId,
+          targetNodeId: target,
+          local: localCoreApiTarget(),
+          onProgress: (progress) =>
+            broadcast({ type: 'migration-progress', payload: { instanceId, ...progress } })
+        })
+        return moved
+      } catch (err) {
+        broadcast({
+          type: 'migration-progress',
+          payload: { instanceId, stage: 'done', message: (err as Error).message, percent: null }
+        })
         return reply.code(400).send({ error: (err as Error).message })
       }
     }

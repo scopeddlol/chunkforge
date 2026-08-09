@@ -10,7 +10,7 @@ import {
   revokeSession,
   verifyPassword
 } from '../auth'
-import { normalizeZone } from '../domains'
+import { normalizeZone, releaseDomain } from '../domains'
 import {
   connectCloudflare,
   disconnectCloudflare,
@@ -21,7 +21,7 @@ import {
 import { isCloudflareManaged, isPublicBaseUrlManaged } from '../environment'
 import { broadcastPortal, subscribePortalEvents } from '../events'
 import { portalRelay } from '../relay'
-import { collectInventory } from '../inventory'
+import { collectInventory, findStaleDomains } from '../inventory'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
 import type { PortalConfig, PortalConfigView, PairingKind } from '../types'
@@ -113,6 +113,31 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
    * dropped, so this never quietly under-reports.
    */
   app.get('/api/inventory', { preHandler: requireOperator }, async () => collectInventory())
+
+  /** Subdomains whose server no longer exists, according to its own panel. */
+  app.get('/api/domains/stale', { preHandler: requireOperator }, async () => findStaleDomains())
+
+  /**
+   * Releases the stale ones, freeing their public ports and removing their DNS.
+   *
+   * Deliberately an action rather than a background sweep. Deleting a public
+   * address is not reversible from the player's side — they have the old one
+   * written down — so an operator gets to see the list first.
+   */
+  app.post('/api/domains/stale/prune', { preHandler: requireOperator }, async () => {
+    const stale = await findStaleDomains()
+    const removed: string[] = []
+    const failed: Array<{ hostname: string; error: string }> = []
+    for (const domain of stale) {
+      try {
+        await releaseDomain(domain.hostname, domain.clientId)
+        removed.push(domain.hostname)
+      } catch (err) {
+        failed.push({ hostname: domain.hostname, error: (err as Error).message })
+      }
+    }
+    return { removed, failed }
+  })
 
   app.get('/api/config', { preHandler: requireOperator }, async () => toConfigView(portalStore.config()))
 

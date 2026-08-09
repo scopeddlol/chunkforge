@@ -1,3 +1,5 @@
+import { mkdir, open, stat } from 'fs/promises'
+import { basename, join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import {
   backupScheduler,
@@ -34,6 +36,14 @@ async function guard<T>(reply: { code: (n: number) => { send: (b: unknown) => un
   } catch (err) {
     return reply.code(400).send({ error: (err as Error).message })
   }
+}
+
+/** How much of an archive moves per request. */
+const CHUNK_BYTES = 4 * 1024 * 1024
+
+/** Strips any path from a caller-supplied filename, so it stays in its folder. */
+function safeName(filename: string): string {
+  return basename(filename ?? '')
 }
 
 export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<void> {
@@ -195,6 +205,69 @@ export async function registerInstanceToolRoutes(app: FastifyInstance): Promise<
         await saveInstanceMetadata({ ...metadata, backupSchedule: request.body })
         backupScheduler.reset(request.params.id)
         return request.body
+      })
+  )
+
+  /**
+   * The raw archive bytes.
+   *
+   * Exists so a backup can leave the machine that made it — migration reads a
+   * server's backup from its old node and writes it to the new one. Ranged so
+   * a large world moves in pieces: the agent channel carries one JSON frame
+   * per request, and a multi-gigabyte body in a single frame is a memory spike
+   * on both ends and a timeout in the middle.
+   */
+  app.get<{ Params: { id: string; filename: string }; Querystring: { offset?: string; length?: string } }>(
+    '/api/servers/:id/backups/:filename/download',
+    { preHandler: requireRole('member') },
+    async (request, reply) =>
+      guard(reply, async () => {
+        const path = await instancePath(request.params.id)
+        const file = join(path, 'chunkforge-backups', safeName(request.params.filename))
+        const total = (await stat(file)).size
+        const offset = Math.max(0, Number(request.query.offset ?? 0))
+        const length = Math.min(Number(request.query.length ?? CHUNK_BYTES), total - offset)
+        if (offset >= total) return { total, offset, bytes: 0, data: '' }
+        const handle = await open(file, 'r')
+        try {
+          const buffer = Buffer.alloc(Math.max(0, length))
+          const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset)
+          return {
+            total,
+            offset,
+            bytes: bytesRead,
+            data: buffer.subarray(0, bytesRead).toString('base64')
+          }
+        } finally {
+          await handle.close()
+        }
+      })
+  )
+
+  /** Writes one piece of an archive being moved onto this machine. */
+  app.post<{
+    Params: { id: string }
+    Body: { filename: string; offset: number; data: string; final?: boolean }
+  }>(
+    '/api/servers/:id/backups/upload',
+    { preHandler: requireRole('member') },
+    async (request, reply) =>
+      guard(reply, async () => {
+        const { filename, offset, data } = request.body ?? {}
+        const path = await instancePath(request.params.id)
+        const dir = join(path, 'chunkforge-backups')
+        await mkdir(dir, { recursive: true })
+        const file = join(dir, safeName(filename))
+        // Opened per chunk rather than held between requests: each chunk is its
+        // own request and may not even reach the same process on a restart.
+        const handle = await open(file, offset === 0 ? 'w' : 'r+')
+        try {
+          const buffer = Buffer.from(data, 'base64')
+          await handle.write(buffer, 0, buffer.length, offset)
+          return { written: buffer.length, offset }
+        } finally {
+          await handle.close()
+        }
       })
   )
 
