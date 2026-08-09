@@ -12,6 +12,7 @@ import {
 } from '@fluentui/react-components'
 import type { AppSettings } from '@shared/types'
 import { api, onEvent } from '../../api'
+import { useSessionStore } from '../../state/sessionStore'
 
 const useStyles = makeStyles({
   panel: {
@@ -85,6 +86,12 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
       setBusy(false)
     }
   }
+
+  // Disabled rather than hidden: someone who cannot do this should be able to
+  // see that the capability exists and that it is a permission, not a missing
+  // feature — otherwise the only way to learn is to ask why their machine is
+  // not an option anywhere.
+  const mayHostLocally = useSessionStore((s) => s.user?.canConfigurePersonalNode ?? false)
 
   async function setHostLocally(enabled: boolean): Promise<void> {
     setHostBusy(true)
@@ -197,14 +204,14 @@ export function PortalPanel({ settings, onPatch }: PortalPanelProps): JSX.Elemen
 
       <Switch
         label="Host servers on this machine"
-        disabled={!linked || hostBusy}
+        disabled={!linked || hostBusy || !mayHostLocally}
         checked={Boolean(portal.hostServersLocally)}
         onChange={(_, data) => void setHostLocally(data.checked)}
       />
       <Text size={200} className={styles.muted}>
-        Offers this computer to your Portal as a node, so servers you run here get a subdomain like
-        any other. Portal reaches them through the same outbound connection a remote node uses — no
-        port forwarding, and nothing listening on your router.
+        {mayHostLocally
+          ? 'Offers this computer to your Portal as a node, so servers you run here get a subdomain like any other. Portal reaches them through the same outbound connection a remote node uses — no port forwarding, and nothing listening on your router.'
+          : 'An admin has not allowed this account to offer its own machine as a node. Ask them to enable it if you need to run servers here.'}
       </Text>
       {hostError && <Text className={styles.error}>{hostError}</Text>}
     </div>

@@ -16,6 +16,7 @@ import {
 import {
   Checkmark20Filled,
   Copy20Regular,
+  FolderOpen20Regular,
   Globe24Regular,
   PersonAdd24Regular,
   Server24Regular,
@@ -24,7 +25,7 @@ import {
 import { BrandLockup } from '../../components/BrandLockup'
 import { useSessionStore } from '../../state/sessionStore'
 import { api } from '../../api'
-import { isDesktopHost } from '../../native'
+import { isDesktopHost, native } from '../../native'
 
 const useStyles = makeStyles({
   root: {
@@ -91,7 +92,9 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground3
   },
   codeText: { fontFamily: tokens.fontFamilyMonospace, wordBreak: 'break-all', flexGrow: 1 },
-  ok: { display: 'flex', alignItems: 'center', gap: '6px', color: tokens.colorPaletteGreenForeground1 }
+  ok: { display: 'flex', alignItems: 'center', gap: '6px', color: tokens.colorPaletteGreenForeground1 },
+  pathRow: { display: 'flex', gap: '8px', alignItems: 'center' },
+  grow: { flexGrow: 1 }
 })
 
 type StepKey = 'welcome' | 'portal' | 'hosting' | 'defaults' | 'invite' | 'done'
@@ -353,11 +356,30 @@ export function OnboardingWizard({ onFinished }: OnboardingWizardProps): JSX.Ele
                 label="Default location for new servers"
                 hint={desktop ? 'Leave blank to use the Chunkforge data folder.' : 'Leave blank for /data.'}
               >
-                <Input
-                  value={installLocation}
-                  placeholder={desktop ? 'Chunkforge data folder' : '/data'}
-                  onChange={(_, data) => setInstallLocation(data.value)}
-                />
+                <div className={styles.pathRow}>
+                  <Input
+                    className={styles.grow}
+                    value={installLocation}
+                    placeholder={desktop ? 'Chunkforge data folder' : '/data'}
+                    onChange={(_, data) => setInstallLocation(data.value)}
+                  />
+                  {/* Only the desktop build can open a picker, and typing a
+                      Windows path by hand is exactly where this step goes
+                      wrong. In a browser there is no host filesystem to
+                      browse, so the field stands alone. */}
+                  {desktop && (
+                    <Button
+                      icon={<FolderOpen20Regular />}
+                      onClick={() => {
+                        void native()
+                          .pickFolder('Where new servers should be created')
+                          .then((picked) => picked && setInstallLocation(picked))
+                      }}
+                    >
+                      Browse
+                    </Button>
+                  )}
+                </div>
               </Field>
             </>
           )}

@@ -96,13 +96,18 @@ export function App(): JSX.Element {
   // Keyed on the signed-in user rather than on mount: every settings route
   // needs a session, so asking before AuthGate has one only ever answers 401,
   // and the wizard would never appear on the run it exists for.
+  //
+  // Admins only. Everything the wizard configures is admin-gated on the server,
+  // so showing it to a member would be a tour of controls that all refuse —
+  // and recording that it finished is itself an admin write, so it would come
+  // back on every load.
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !isAdmin) return
     api()
       .settings.get()
       .then((settings) => setOnboarding(!settings.onboardingCompletedAt))
       .catch(() => setOnboarding(false))
-  }, [userId])
+  }, [userId, isAdmin])
 
   function handleSelectNav(key: NavKey): void {
     setOverlay(null)
