@@ -28,6 +28,7 @@ import {
   type ThemePreference
 } from '@shared/types'
 import { ChunkforgeMark } from '../../components/ChunkforgeMark'
+import { AccountPanel } from './AccountPanel'
 import { FileHubPanel } from './FileHubPanel'
 import { PortalPanel } from './PortalPanel'
 import { ThemePicker } from './ThemePicker'
@@ -152,6 +153,13 @@ export function SettingsPage(): JSX.Element {
         </div>
 
         <div className={styles.panels}>
+          <div className={styles.panel}>
+            <Text weight="semibold" className={styles.panelTitle}>
+              Account
+            </Text>
+            <AccountPanel />
+          </div>
+
           <div className={styles.panel}>
             <Text weight="semibold" className={styles.panelTitle}>
               Theme

@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import {
   Badge,
   Button,
@@ -50,7 +50,8 @@ const useStyles = makeStyles({
     border: `1px solid ${tokens.colorBrandStroke2}`,
     backgroundColor: tokens.colorNeutralBackground3
   },
-  codeText: { fontFamily: tokens.fontFamilyMonospace, wordBreak: 'break-all', flexGrow: 1 }
+  codeText: { fontFamily: tokens.fontFamilyMonospace, wordBreak: 'break-all', flexGrow: 1 },
+  error: { color: tokens.colorPaletteRedForeground1, fontSize: '12px' }
 })
 
 interface InvitePanelProps {
@@ -82,20 +83,23 @@ export function InvitePanel({ invites, nodes, viewerIsOwner, onChanged }: Invite
           New invite
         </Button>
       </div>
-      {creating && (
-        <CreateInviteDialog
-          nodes={nodes}
-          viewerIsOwner={viewerIsOwner}
-          onClose={() => setCreating(false)}
-          onCreated={onChanged}
-        />
-      )}
+      {/* Mounted always and driven by `open`: unmounting an open Fluent Dialog
+          skips its close, and the app behind it stays aria-hidden. */}
+      <CreateInviteDialog
+        open={creating}
+        nodes={nodes}
+        viewerIsOwner={viewerIsOwner}
+        onClose={() => setCreating(false)}
+        onCreated={onChanged}
+      />
     </>
   )
 }
 
 function InviteRow({ invite, onChanged }: { invite: InviteRecord; onChanged: () => void }): JSX.Element {
   const styles = useStyles()
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const expired = Boolean(invite.expiresAt && Date.parse(invite.expiresAt) < Date.now())
   const dead = Boolean(invite.revokedAt) || invite.remainingUses <= 0 || expired
 
@@ -120,26 +124,42 @@ function InviteRow({ invite, onChanged }: { invite: InviteRecord; onChanged: () 
           {invite.usedBy.length > 0 && ` · joined: ${invite.usedBy.map((u) => u.username).join(', ')}`}
         </Text>
       </div>
+      {error && <Text className={styles.error}>{error}</Text>}
       {!dead && (
         <Button
           appearance="subtle"
           icon={<Delete20Regular />}
           title="Revoke this invite"
-          onClick={() => void api().invites.revoke(invite.id).then(onChanged)}
+          disabled={busy}
+          onClick={() => void revoke()}
         />
       )}
     </div>
   )
+
+  async function revoke(): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      await api().invites.revoke(invite.id)
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke that invite.')
+    } finally {
+      setBusy(false)
+    }
+  }
 }
 
 interface CreateInviteDialogProps {
+  open: boolean
   nodes: Node[]
   viewerIsOwner: boolean
   onClose: () => void
   onCreated: () => void
 }
 
-function CreateInviteDialog({ nodes, viewerIsOwner, onClose, onCreated }: CreateInviteDialogProps): JSX.Element {
+function CreateInviteDialog({ open, nodes, viewerIsOwner, onClose, onCreated }: CreateInviteDialogProps): JSX.Element {
   const styles = useStyles()
   const [role, setRole] = useState('member')
   const [note, setNote] = useState('')
@@ -151,6 +171,21 @@ function CreateInviteDialog({ nodes, viewerIsOwner, onClose, onCreated }: Create
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Reset per open. The code especially: leaving the last one on screen would
+  // show a stale, already-spent code as if it were the new one.
+  useEffect(() => {
+    if (!open) return
+    setRole('member')
+    setNote('')
+    setUses('1')
+    setExpiresInDays('7')
+    setNodeAccess(null)
+    setPersonalNode(false)
+    setCode(null)
+    setCopied(false)
+    setError(null)
+  }, [open])
 
   const roleIgnoresNodeLimits = role === 'admin'
 
@@ -178,7 +213,7 @@ function CreateInviteDialog({ nodes, viewerIsOwner, onClose, onCreated }: Create
   }
 
   return (
-    <Dialog open onOpenChange={(_, data) => !data.open && onClose()}>
+    <Dialog open={open} onOpenChange={(_, data) => !data.open && onClose()}>
       <DialogSurface>
         <DialogBody>
           <DialogTitle>{code ? 'Invite created' : 'New invite'}</DialogTitle>

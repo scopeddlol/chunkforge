@@ -124,11 +124,13 @@ class AuthStore {
     }
     // `nodeAccess: null` is how a caller says "back to every node" — undefined
     // cannot travel through JSON, and Object.assign would treat it as absent.
-    if (patch.nodeAccess === null) {
-      delete user.nodeAccess
-      delete patch.nodeAccess
-    }
-    Object.assign(user, patch)
+    // Copied rather than edited in place: routes hand this straight from
+    // `request.body`, and quietly rewriting a caller's object is the kind of
+    // thing that goes wrong once something else reads it afterwards.
+    const { nodeAccess, ...rest } = patch
+    if (nodeAccess === null) delete user.nodeAccess
+    else if (nodeAccess !== undefined) user.nodeAccess = nodeAccess
+    Object.assign(user, rest)
     await this.persist()
     return user
   }
@@ -234,11 +236,18 @@ class AuthStore {
     return this.data.invites.find((i) => i.codeHash === hash)
   }
 
-  /** What an invite offers, without revealing anything if it is not usable. */
-  describeInvite(code: string): { role: Role; note?: string } | null {
+  /**
+   * What an invite offers, for the public join page.
+   *
+   * The role only. The note is the admin's own reminder of who a code was cut
+   * for — the UI promises "only you see this" — so it must not travel out on an
+   * unauthenticated route. Anything unusable describes as nothing at all,
+   * rather than explaining which of expired, revoked, or spent it is.
+   */
+  describeInvite(code: string): { role: Role } | null {
     const invite = this.findInvite(code)
     if (inviteProblem(invite)) return null
-    return { role: invite!.role, note: invite!.note }
+    return { role: invite!.role }
   }
 
   /**

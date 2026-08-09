@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import {
   Button,
   Dialog,
@@ -40,7 +40,8 @@ const ROLE_BLURB: Record<string, string> = {
 }
 
 interface UserEditorProps {
-  user: ManagedUser
+  /** The account being edited, or null when the dialog is closed. */
+  user: ManagedUser | null
   nodes: Node[]
   /** Only an owner may hand out admin, so the button is hidden otherwise. */
   viewerIsOwner: boolean
@@ -49,6 +50,15 @@ interface UserEditorProps {
   onSaved: () => void
 }
 
+/**
+ * Stays mounted and is driven by `user` being non-null, rather than being
+ * mounted only while open.
+ *
+ * Fluent's Dialog marks the rest of the app `aria-hidden` while it is up and
+ * clears that on close. Unmounting an open Dialog skips the close entirely, so
+ * the flag is never cleared and every control behind it stays hidden from
+ * assistive tech — visible on screen, invisible to a screen reader.
+ */
 export function UserEditor({
   user,
   nodes,
@@ -58,28 +68,44 @@ export function UserEditor({
   onSaved
 }: UserEditorProps): JSX.Element {
   const styles = useStyles()
-  const [role, setRole] = useState(user.role)
-  const [disabled, setDisabled] = useState(user.disabled)
-  const [nodeAccess, setNodeAccess] = useState<string[] | null>(user.nodeAccess)
-  const [personalNode, setPersonalNode] = useState(user.canConfigurePersonalNode)
+  const [role, setRole] = useState('member')
+  const [disabled, setDisabled] = useState(false)
+  const [nodeAccess, setNodeAccess] = useState<string[] | null>(null)
+  const [personalNode, setPersonalNode] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const isOwnerRow = user.role === 'owner'
+  // Seeded per account, since the dialog outlives any one of them now.
+  useEffect(() => {
+    if (!user) return
+    setRole(user.role)
+    setDisabled(user.disabled)
+    setNodeAccess(user.nodeAccess)
+    setPersonalNode(user.canConfigurePersonalNode)
+    setNewPassword('')
+    setError(null)
+  }, [user])
+
+  const isOwnerRow = user?.role === 'owner'
   // An admin already ignores node restrictions on the server, so offering the
   // picker for one would be a control that silently does nothing.
   const roleIgnoresNodeLimits = role === 'admin' || role === 'owner'
 
   async function save(): Promise<void> {
+    if (!user) return
     setBusy(true)
     setError(null)
     try {
       await api().users.update(user.id, {
         role: isOwnerRow || isSelf ? undefined : role,
         disabled: isOwnerRow || isSelf ? undefined : disabled,
-        nodeAccess,
-        canConfigurePersonalNode: personalNode
+        // Promoting someone to admin clears any node restriction rather than
+        // leaving it on the record. An admin ignores it either way, so keeping
+        // it would be invisible — right up until they were demoted and a
+        // restriction nobody set today silently came back.
+        nodeAccess: roleIgnoresNodeLimits ? null : nodeAccess,
+        canConfigurePersonalNode: roleIgnoresNodeLimits ? true : personalNode
       })
       if (newPassword) await api().users.resetPassword(user.id, newPassword)
       onSaved()
@@ -92,10 +118,10 @@ export function UserEditor({
   }
 
   return (
-    <Dialog open onOpenChange={(_, data) => !data.open && onClose()}>
+    <Dialog open={user !== null} onOpenChange={(_, data) => !data.open && onClose()}>
       <DialogSurface>
         <DialogBody>
-          <DialogTitle>{user.username}</DialogTitle>
+          <DialogTitle>{user?.username ?? ''}</DialogTitle>
           <DialogContent className={styles.body}>
             {error && (
               <MessageBar intent="error">

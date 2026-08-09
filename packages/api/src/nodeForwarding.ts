@@ -31,6 +31,14 @@ export async function registerNodeForwarding(app: FastifyInstance): Promise<void
     // The same single point that decides *where* a request goes is the right
     // place to decide whether the caller may go there. Forty routes forwarding
     // through here means forty routes that cannot forget this check.
+    //
+    // This hook runs *before* each route's own `requireRole`, so it has to
+    // answer the signed-out case itself — otherwise a request with no session
+    // would be forwarded to the node before anything had asked who was making
+    // it. Nobody signed in is 401, not 403: what they need is to sign in.
+    if (!request.user && !request.nodeId) {
+      return reply.code(401).send({ error: 'Sign in required' })
+    }
     if (!(await guardNodeAccess(request, reply, nodeId))) return
 
     const suffix = request.url.slice(request.url.indexOf('/api/servers'))

@@ -32,11 +32,3 @@ export const useSessionStore = create<SessionState>((set) => ({
   },
   clear: () => set({ user: null, loaded: true })
 }))
-
-/** True when the signed-in user may reach a given node. */
-export function useCanUseNode(nodeId: string): boolean {
-  const user = useSessionStore((s) => s.user)
-  if (!user) return false
-  if (user.isAdmin || !user.nodeAccess) return true
-  return user.nodeAccess.includes(nodeId)
-}

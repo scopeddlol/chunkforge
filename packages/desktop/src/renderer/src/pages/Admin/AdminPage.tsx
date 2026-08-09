@@ -76,6 +76,7 @@ export function AdminPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<ManagedUser | null>(null)
   const [adding, setAdding] = useState(false)
+  const [deleting, setDeleting] = useState<ManagedUser | null>(null)
 
   const refresh = useCallback(async () => {
     setError(null)
@@ -162,7 +163,7 @@ export function AdminPage(): JSX.Element {
                       appearance="subtle"
                       icon={<Delete20Regular />}
                       title="Delete this account"
-                      onClick={() => void api().users.remove(user.id).then(refresh)}
+                      onClick={() => setDeleting(user)}
                     />
                   )}
                 </div>
@@ -189,24 +190,26 @@ export function AdminPage(): JSX.Element {
         </div>
       </div>
 
-      {editing && (
-        <UserEditor
-          user={editing}
-          nodes={nodes}
-          viewerIsOwner={me?.role === 'owner'}
-          isSelf={editing.id === me?.id}
-          onClose={() => setEditing(null)}
-          onSaved={() => void refresh()}
-        />
-      )}
-      {adding && (
-        <AddUserDialog
-          nodes={nodes}
-          viewerIsOwner={me?.role === 'owner'}
-          onClose={() => setAdding(false)}
-          onCreated={() => void refresh()}
-        />
-      )}
+      <UserEditor
+        user={editing}
+        nodes={nodes}
+        viewerIsOwner={me?.role === 'owner'}
+        isSelf={editing?.id === me?.id}
+        onClose={() => setEditing(null)}
+        onSaved={() => void refresh()}
+      />
+      <AddUserDialog
+        open={adding}
+        nodes={nodes}
+        viewerIsOwner={me?.role === 'owner'}
+        onClose={() => setAdding(false)}
+        onCreated={() => void refresh()}
+      />
+      <ConfirmDeleteDialog
+        user={deleting}
+        onClose={() => setDeleting(null)}
+        onDeleted={() => void refresh()}
+      />
     </div>
   )
 }
@@ -225,20 +228,102 @@ function describeAccess(user: ManagedUser, nodes: Node[]): string {
   return `${scope}${user.canConfigurePersonalNode ? ' · may add their own' : ''}`
 }
 
+/**
+ * Deleting an account cannot be undone, and the button sits one row away from
+ * "edit" — close enough that a mis-click on the wrong row is a real way to lose
+ * someone's access. Typing nothing is enough confirmation; naming who is going
+ * is what makes the wrong row obvious.
+ */
+function ConfirmDeleteDialog({
+  user,
+  onClose,
+  onDeleted
+}: {
+  user: ManagedUser | null
+  onClose: () => void
+  onDeleted: () => void
+}): JSX.Element {
+  const styles = useStyles()
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (user) setError(null)
+  }, [user])
+
+  async function remove(): Promise<void> {
+    if (!user) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api().users.remove(user.id)
+      onDeleted()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete that account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={user !== null} onOpenChange={(_, data) => !data.open && onClose()}>
+      <DialogSurface>
+        <DialogBody>
+          <DialogTitle>Delete {user?.username ?? ''}?</DialogTitle>
+          <DialogContent className={styles.dialogBody}>
+            {error && (
+              <MessageBar intent="error">
+                <MessageBarBody>{error}</MessageBarBody>
+              </MessageBar>
+            )}
+            <Text>
+              They lose access immediately, and their API tokens stop working. Servers they created
+              are not touched — those belong to the panel, not to an account.
+            </Text>
+            <Text className={styles.muted}>
+              To keep them out without removing the record, edit the account and switch sign-in off
+              instead.
+            </Text>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button appearance="primary" disabled={busy} onClick={() => void remove()}>
+              {busy ? 'Deleting…' : 'Delete account'}
+            </Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  )
+}
+
 interface AddUserDialogProps {
+  open: boolean
   nodes: Node[]
   viewerIsOwner: boolean
   onClose: () => void
   onCreated: () => void
 }
 
-function AddUserDialog({ nodes, viewerIsOwner, onClose, onCreated }: AddUserDialogProps): JSX.Element {
+function AddUserDialog({ open, nodes, viewerIsOwner, onClose, onCreated }: AddUserDialogProps): JSX.Element {
   const styles = useStyles()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [nodeAccess, setNodeAccess] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Cleared on each open, since the dialog is no longer remounted per use.
+  useEffect(() => {
+    if (!open) return
+    setUsername('')
+    setPassword('')
+    setNodeAccess(null)
+    setError(null)
+  }, [open])
 
   async function create(): Promise<void> {
     setBusy(true)
@@ -260,7 +345,7 @@ function AddUserDialog({ nodes, viewerIsOwner, onClose, onCreated }: AddUserDial
   }
 
   return (
-    <Dialog open onOpenChange={(_, data) => !data.open && onClose()}>
+    <Dialog open={open} onOpenChange={(_, data) => !data.open && onClose()}>
       <DialogSurface>
         <DialogBody>
           <DialogTitle>Add an account</DialogTitle>
