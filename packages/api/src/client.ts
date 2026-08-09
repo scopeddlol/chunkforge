@@ -279,6 +279,9 @@ export class ChunkforgeClient {
     start: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/start`),
     stop: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/stop`),
     restart: (id: string) => this.post<{ ok: true }>(`/api/servers/${id}/restart`),
+    /** Moves a server to another node, keeping its address. Admin-only. */
+    migrate: (id: string, nodeId: string) =>
+      this.post<InstanceMetadata>(`/api/servers/${id}/migrate`, { nodeId }),
     lifecycle: (id: string) => this.get<ServerLifecycle>(`/api/servers/${id}/lifecycle`),
     setLifecycle: (id: string, lifecycle: ServerLifecycle) =>
       this.put<ServerLifecycle>(`/api/servers/${id}/lifecycle`, lifecycle),

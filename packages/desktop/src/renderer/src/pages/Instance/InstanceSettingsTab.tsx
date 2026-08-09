@@ -25,6 +25,7 @@ import { usePortAvailability } from '../../components/usePortAvailability'
 import { useSessionStore } from '../../state/sessionStore'
 import { IconPanel } from './IconPanel'
 import { LifecyclePanel } from './LifecyclePanel'
+import { MigratePanel } from './MigratePanel'
 import { ServerAccessPanel } from './ServerAccessPanel'
 import { StartupPanel } from './StartupPanel'
 import { CopyableAddress } from '../../components/CopyableAddress'
@@ -334,6 +335,15 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
       <IconPanel metadata={metadata} onChanged={() => onSaved(metadata)} />
 
       <StartupPanel metadata={metadata} onSaved={onSaved} />
+
+      {canManageAccess && (
+        <div className={styles.panel}>
+          <Text weight="semibold" className={styles.sectionTitle}>
+            Move to another node
+          </Text>
+          <MigratePanel metadata={metadata} onMoved={onSaved} />
+        </div>
+      )}
 
       <div className={styles.panel}>
         <Text weight="semibold" className={styles.sectionTitle}>

@@ -84,6 +84,17 @@ const CONTENT_CHOICES: Array<{ key: keyof BackupContents; label: string; hint: s
   { key: 'configs', label: 'Configs', hint: 'server.properties, loader configs, ops and whitelist' }
 ]
 
+/** Says what pressing the button will actually capture. */
+function backupButtonLabel(schedule: BackupSchedule | null): string {
+  if (!schedule) return 'Back Up'
+  const contents = contentsOf(schedule)
+  const parts: string[] = []
+  if (contents.worlds) parts.push('World')
+  if (contents.addons) parts.push('Add-Ons')
+  if (contents.configs) parts.push('Configs')
+  return `Back Up ${parts.join(' + ') || 'World'}`
+}
+
 /** Schedules written before this was configurable meant worlds only. */
 function contentsOf(schedule: BackupSchedule): BackupContents {
   return schedule.contents ?? defaultBackupContents
@@ -245,28 +256,32 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
                 onChange={(_, d) => saveSchedule({ ...schedule, uploadToFileHub: d.checked })}
               />
 
-              <Field label="What to include">
-                <div className={styles.contentsRow}>
-                  {CONTENT_CHOICES.map(({ key, label, hint }) => (
-                    <Checkbox
-                      key={key}
-                      label={label}
-                      title={hint}
-                      checked={contentsOf(schedule)[key]}
-                      onChange={(_, d) => {
-                        const next = { ...contentsOf(schedule), [key]: Boolean(d.checked) }
-                        // Every box cleared would schedule a backup of nothing,
-                        // which fails every time it runs. Worlds is the one to
-                        // fall back to: it is the part nobody can regenerate.
-                        if (!next.worlds && !next.addons && !next.configs) next.worlds = true
-                        saveSchedule({ ...schedule, contents: next })
-                      }}
-                    />
-                  ))}
-                </div>
-              </Field>
             </div>
           )}
+
+          {/* Outside the enabled block on purpose: this governs the manual
+              backup button as well, so it has to be reachable for someone who
+              never turns the schedule on. */}
+          <Field label="What to include">
+            <div className={styles.contentsRow}>
+              {CONTENT_CHOICES.map(({ key, label, hint }) => (
+                <Checkbox
+                  key={key}
+                  label={label}
+                  title={hint}
+                  checked={contentsOf(schedule)[key]}
+                  onChange={(_, d) => {
+                    const next = { ...contentsOf(schedule), [key]: Boolean(d.checked) }
+                    // Every box cleared would back up nothing, and fail every
+                    // time. Worlds is what to fall back to: the part nobody
+                    // can regenerate.
+                    if (!next.worlds && !next.addons && !next.configs) next.worlds = true
+                    saveSchedule({ ...schedule, contents: next })
+                  }}
+                />
+              ))}
+            </div>
+          </Field>
         </div>
       )}
 
@@ -277,7 +292,7 @@ export function BackupsTab({ instanceId, serverRunning }: BackupsTabProps): JSX.
             : `${backups.length} backup${backups.length === 1 ? '' : 's'} saved.`}
         </Text>
         <Button appearance="primary" icon={<ArrowDownload20Regular />} disabled={busy} onClick={create}>
-          {busy ? 'Working…' : 'Back Up World'}
+          {busy ? 'Working…' : backupButtonLabel(schedule)}
         </Button>
       </div>
 
