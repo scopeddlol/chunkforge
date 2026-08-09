@@ -567,6 +567,12 @@ export interface AppSettings {
   /** Pointers to servers that live on Portal nodes rather than this machine. */
   remoteInstances: RemoteInstanceRef[]
   dashboardView: DashboardView
+  /**
+   * When the first-run wizard was finished, ISO-8601. Absent means it has not
+   * run — which is also true of every install that predates it, so the wizard
+   * offers itself once on upgrade rather than assuming a fresh setup.
+   */
+  onboardingCompletedAt?: string
 }
 
 export const defaultAppSettings: AppSettings = {

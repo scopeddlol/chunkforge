@@ -8,10 +8,13 @@ import { DashboardPage } from './pages/Dashboard/DashboardPage'
 import { PluginBrowserPage } from './pages/PluginBrowser/PluginBrowserPage'
 import { ModpackPage } from './pages/PluginBrowser/ModpackPage'
 import { NodesPage } from './pages/Nodes/NodesPage'
+import { AdminPage } from './pages/Admin/AdminPage'
 import { SettingsPage } from './pages/Settings/SettingsPage'
 import { SetupWizard } from './pages/SetupWizard/SetupWizard'
+import { OnboardingWizard } from './pages/Onboarding/OnboardingWizard'
 import { InstancePage } from './pages/Instance/InstancePage'
 import { useInstancesStore } from './state/instancesStore'
+import { useSessionStore } from './state/sessionStore'
 import { api } from './api'
 import { AuthGate } from './pages/Auth/AuthGate'
 import { native } from './native'
@@ -49,6 +52,10 @@ function useResolvedTheme(): ChunkforgeTheme {
     api()
       .settings.get()
       .then((settings) => setPreference(settings.themePreference))
+      // Settings need a session, and this runs before there is one on every
+      // signed-out load. Without a catch that is an unhandled rejection in the
+      // console on the login screen, every time.
+      .catch(() => undefined)
   }, [])
 
   useEffect(loadPreference, [loadPreference])
@@ -82,6 +89,20 @@ export function App(): JSX.Element {
   const [overlay, setOverlay] = useState<Overlay>(null)
   const [pluginScopeId, setPluginScopeId] = useState<string | null>(null)
   const refreshInstances = useInstancesStore((s) => s.refresh)
+  const isAdmin = useSessionStore((s) => s.user?.isAdmin ?? false)
+  const userId = useSessionStore((s) => s.user?.id ?? null)
+  const [onboarding, setOnboarding] = useState(false)
+
+  // Keyed on the signed-in user rather than on mount: every settings route
+  // needs a session, so asking before AuthGate has one only ever answers 401,
+  // and the wizard would never appear on the run it exists for.
+  useEffect(() => {
+    if (!userId) return
+    api()
+      .settings.get()
+      .then((settings) => setOnboarding(!settings.onboardingCompletedAt))
+      .catch(() => setOnboarding(false))
+  }, [userId])
 
   function handleSelectNav(key: NavKey): void {
     setOverlay(null)
@@ -106,9 +127,10 @@ export function App(): JSX.Element {
     <FluentProvider theme={resolvedTheme.theme} className={styles.shell}>
       <AuthGate>
         <div className={styles.shell}>
+          {onboarding && <OnboardingWizard onFinished={() => setOnboarding(false)} />}
           <TitleBar />
           <div className={styles.body}>
-            <NavRail active={activeNav} onSelect={handleSelectNav} />
+            <NavRail active={activeNav} onSelect={handleSelectNav} isAdmin={isAdmin} />
 
             {overlay?.kind === 'wizard' && (
               <SetupWizard onClose={() => setOverlay(null)} onCreated={handleInstanceCreated} />
@@ -135,6 +157,7 @@ export function App(): JSX.Element {
             )}
             {!overlay && activeNav === 'modpacks' && <ModpackPage />}
             {!overlay && activeNav === 'nodes' && <NodesPage />}
+            {!overlay && activeNav === 'admin' && isAdmin && <AdminPage />}
             {!overlay && activeNav === 'settings' && <SettingsPage />}
           </div>
         </div>

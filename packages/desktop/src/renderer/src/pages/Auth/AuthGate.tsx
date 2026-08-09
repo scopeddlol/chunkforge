@@ -14,6 +14,7 @@ import {
 } from '@fluentui/react-components'
 import { api } from '../../api'
 import { BrandLockup } from '../../components/BrandLockup'
+import { useSessionStore } from '../../state/sessionStore'
 
 const useStyles = makeStyles({
   root: {
@@ -68,7 +69,8 @@ const useStyles = makeStyles({
   },
   heading: { display: 'flex', flexDirection: 'column', gap: '4px' },
   muted: { color: tokens.colorNeutralForeground3 },
-  actions: { display: 'flex', gap: '10px', justifyContent: 'flex-end' },
+  actions: { display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' },
+  switcher: { display: 'flex', justifyContent: 'center' },
   footnote: {
     color: tokens.colorNeutralForeground4,
     fontSize: '11px',
@@ -78,23 +80,48 @@ const useStyles = makeStyles({
   }
 })
 
-type Mode = 'loading' | 'setup' | 'login' | 'ready'
+type Mode = 'loading' | 'setup' | 'login' | 'join' | 'ready'
+
+const COPY: Record<Exclude<Mode, 'loading' | 'ready'>, { title: string; blurb: string; submit: string; busy: string }> = {
+  setup: {
+    title: 'Create your account',
+    blurb: 'Create the first owner account for this self-hosted panel.',
+    submit: 'Create Owner',
+    busy: 'Creating…'
+  },
+  login: {
+    title: 'Welcome back',
+    blurb: 'Use your Chunkforge account to access this panel.',
+    submit: 'Sign In',
+    busy: 'Signing in…'
+  },
+  join: {
+    title: 'Join with an invite',
+    blurb: 'Paste the code you were sent, then pick a username and password.',
+    submit: 'Join',
+    busy: 'Joining…'
+  }
+}
 
 export function AuthGate({ children }: { children: JSX.Element }): JSX.Element {
   const styles = useStyles()
   const [mode, setMode] = useState<Mode>('loading')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
+  const [invitedRole, setInvitedRole] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const loadSession = useSessionStore((s) => s.refresh)
 
   async function refresh(): Promise<void> {
-    try {
-      await api().auth.me()
+    // The session store is the single source for "who am I": loading it here
+    // means the app never renders a frame in which the user is signed in but
+    // their permissions are still unknown, which is what would briefly show
+    // then hide admin-only navigation.
+    if (await loadSession()) {
       setMode('ready')
       return
-    } catch {
-      // Fall through to status check.
     }
     const status = await api().auth.status()
     setMode(status.needsSetup ? 'setup' : 'login')
@@ -102,14 +129,41 @@ export function AuthGate({ children }: { children: JSX.Element }): JSX.Element {
 
   useEffect(() => {
     void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /**
+   * Checks a pasted invite as soon as it looks complete, so someone with a
+   * revoked or expired code learns that before they have chosen a password.
+   */
+  useEffect(() => {
+    if (mode !== 'join') return
+    const code = inviteCode.trim()
+    if (code.length < 8) {
+      setInvitedRole(null)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      api()
+        .invites.preview(code)
+        .then((preview) => !cancelled && setInvitedRole(preview.role))
+        .catch(() => !cancelled && setInvitedRole(null))
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [inviteCode, mode])
 
   async function submit(): Promise<void> {
     setBusy(true)
     setMessage(null)
     try {
       if (mode === 'setup') await api().auth.setup(username, password)
+      else if (mode === 'join') await api().invites.accept(inviteCode.trim(), username, password)
       else await api().auth.login(username, password)
+      await loadSession()
       setMode('ready')
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Sign-in failed.')
@@ -117,6 +171,11 @@ export function AuthGate({ children }: { children: JSX.Element }): JSX.Element {
       setBusy(false)
     }
   }
+
+  const canSubmit =
+    username.trim().length > 0 &&
+    password.length >= 8 &&
+    (mode !== 'join' || inviteCode.trim().length > 0)
 
   if (mode === 'ready') return children
 
@@ -141,11 +200,9 @@ export function AuthGate({ children }: { children: JSX.Element }): JSX.Element {
         <BrandLockup product="Control Panel" />
         <Card className={styles.card}>
           <div className={styles.heading}>
-            <Title2>{mode === 'setup' ? 'Create your account' : 'Welcome back'}</Title2>
+            <Title2>{COPY[mode].title}</Title2>
             <Text block className={styles.muted}>
-              {mode === 'setup'
-                ? 'Create the first owner account for this self-hosted panel.'
-                : 'Use your Chunkforge account to access this panel.'}
+              {COPY[mode].blurb}
             </Text>
           </div>
 
@@ -155,29 +212,57 @@ export function AuthGate({ children }: { children: JSX.Element }): JSX.Element {
             </MessageBar>
           )}
 
+          {mode === 'join' && (
+            <Field
+              label="Invite code"
+              validationState={invitedRole ? 'success' : 'none'}
+              validationMessage={invitedRole ? `This invite creates a ${invitedRole} account.` : undefined}
+            >
+              <Input
+                value={inviteCode}
+                placeholder="cf_…"
+                onChange={(_, data) => setInviteCode(data.value)}
+              />
+            </Field>
+          )}
+
           <Field label="Username">
             <Input value={username} onChange={(_, data) => setUsername(data.value)} />
           </Field>
-          <Field label="Password">
+          <Field
+            label="Password"
+            hint={mode === 'login' ? undefined : 'At least 8 characters.'}
+          >
             <Input
               type="password"
               value={password}
               onChange={(_, data) => setPassword(data.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && username.trim() && password) void submit()
+                if (event.key === 'Enter' && canSubmit) void submit()
               }}
             />
           </Field>
 
           <div className={styles.actions}>
-            <Button
-              appearance="primary"
-              disabled={!username.trim() || password.length < 8 || busy}
-              onClick={() => void submit()}
-            >
-              {busy ? (mode === 'setup' ? 'Creating…' : 'Signing in…') : mode === 'setup' ? 'Create Owner' : 'Sign In'}
+            <Button appearance="primary" disabled={!canSubmit || busy} onClick={() => void submit()}>
+              {busy ? COPY[mode].busy : COPY[mode].submit}
             </Button>
           </div>
+
+          {mode !== 'setup' && (
+            <div className={styles.switcher}>
+              <Button
+                appearance="transparent"
+                size="small"
+                onClick={() => {
+                  setMessage(null)
+                  setMode(mode === 'join' ? 'login' : 'join')
+                }}
+              >
+                {mode === 'join' ? 'I already have an account' : 'I have an invite code'}
+              </Button>
+            </div>
+          )}
         </Card>
         <Text className={styles.footnote}>
           This account manages your servers. A Chunkforge Portal keeps its own separate operator login.
