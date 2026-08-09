@@ -1,5 +1,6 @@
 import { normalizeZone } from './domains'
 import { portalStore } from './store'
+import type { EndpointMapping } from './endpoints'
 import type { PortalDomain } from './types'
 
 export interface DnsRecord {
@@ -39,6 +40,31 @@ export function dnsRecordsFor(domain: PortalDomain, portalAddress: string): DnsR
     })
   }
   return records
+}
+
+/**
+ * The DNS an endpoint mapping needs.
+ *
+ * Only HTTP endpoints have any: they are reached by hostname on Portal's
+ * ordinary web port, so a name has to resolve to Portal. TCP and UDP endpoints
+ * are reached at the server's existing address on a public port, and inventing
+ * a second name for them would be a name nobody types.
+ *
+ * The wildcard usually covers this already — it is emitted anyway so that a
+ * zone without one still works, and so the admin UI can show the operator
+ * exactly which names Portal is serving.
+ */
+export function dnsRecordsForEndpoint(
+  mapping: EndpointMapping,
+  portalAddress: string
+): DnsRecord[] {
+  if (mapping.protocol !== 'http' || !mapping.hostname) return []
+  return [
+    {
+      ...addressRecord(mapping.hostname, portalAddress),
+      note: `Serves ${mapping.label} over HTTP. Covered already if you published the wildcard record.`
+    }
+  ]
 }
 
 /** The one record that makes every future allocation work without more DNS. */

@@ -1,7 +1,13 @@
 import type { FastifyInstance } from 'fastify'
 import {
+  addEndpoint,
   availableSources,
+  endpointsFor,
+  endpointsForAddon,
   getSettings,
+  profileFor,
+  saveInstanceMetadata,
+  type ServerEndpoint,
   listGameVersions,
   installModpack,
   installPlugin,
@@ -73,7 +79,10 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
     }
   )
 
-  app.post<{ Params: { id: string }; Body: { version: PluginVersion; name: string } }>(
+  app.post<{
+    Params: { id: string }
+    Body: { version: PluginVersion; name: string; projectId?: string }
+  }>(
     '/api/servers/:id/addons',
     { preHandler: requireRole('member') },
     async (request, reply) => {
@@ -85,7 +94,48 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
           request.body.version,
           request.body.name
         )
-        return { path }
+
+        /**
+         * Some add-ons need a port of their own.
+         *
+         * Installing Simple Voice Chat and finding nobody can hear anything is
+         * a bad afternoon: the mod wants UDP and nothing says so until you read
+         * a wiki. So a known add-on gets its endpoint created here, at the
+         * moment it is installed, rather than being something to remember.
+         *
+         * Best-effort on purpose. A plugin that installed correctly must not
+         * report failure because its networking could not be arranged — the
+         * endpoint can be added by hand afterwards, and saying "install failed"
+         * about a file that is sitting on disk would be worse than a missing
+         * port.
+         */
+        const profile =
+          profileFor(request.body.projectId) ?? profileFor(request.body.name)
+        let endpoint: ServerEndpoint | null = null
+        if (profile && !endpointsFor(metadata).some((e) => e.addonId === profile.slugs[0])) {
+          try {
+            endpoint = await addEndpoint(metadata, {
+              label: profile.label,
+              protocol: profile.protocol,
+              localPort: undefined,
+              source: 'addon',
+              addonId: profile.slugs[0]
+            })
+            await saveInstanceMetadata({
+              ...metadata,
+              endpoints: [...(metadata.endpoints ?? []), endpoint]
+            })
+          } catch {
+            endpoint = null
+          }
+        }
+
+        return {
+          path,
+          // Returned so the UI can say which port to put in the add-on's own
+          // config — the number is allocated, not the one its docs mention.
+          endpoint: endpoint ? { ...endpoint, configHint: profile?.configHint } : null
+        }
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }
@@ -117,12 +167,29 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       try {
         const metadata = await loadInstanceMetadata(request.params.id)
-        await uninstallPlugin(
-          metadata.path,
-          metadata.serverType,
-          decodeURIComponent(request.params.filename)
-        )
-        return { ok: true }
+        const filename = decodeURIComponent(request.params.filename)
+        await uninstallPlugin(metadata.path, metadata.serverType, filename)
+
+        /**
+         * Take the add-on's networking with it.
+         *
+         * Otherwise a Portal keeps a public port bound for a voice server that
+         * no longer exists, and the next person to read the endpoint list has
+         * no way to tell which entries are dead. Matched on the jar's own name
+         * because that is all an uninstall is given — the profile slugs are
+         * compared letter-by-letter, so `simple-voice-chat-2.5.jar` still
+         * finds its profile.
+         */
+        const profile = profileFor(filename)
+        const orphaned = profile ? endpointsForAddon(metadata, profile.slugs[0]) : []
+        if (orphaned.length > 0) {
+          const dropped = new Set(orphaned.map((endpoint) => endpoint.id))
+          await saveInstanceMetadata({
+            ...metadata,
+            endpoints: (metadata.endpoints ?? []).filter((endpoint) => !dropped.has(endpoint.id))
+          })
+        }
+        return { ok: true, removedEndpoints: orphaned.map((endpoint) => endpoint.id) }
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

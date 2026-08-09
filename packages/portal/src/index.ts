@@ -9,6 +9,7 @@ import { registerPortalAuth } from './auth'
 import { applyEnvironmentConfig } from './environment'
 import { portalRelay } from './relay'
 import { portalStore } from './store'
+import { registerHttpProxy } from './httpProxy'
 import { registerAdminRoutes } from './routes/admin'
 import { registerClientRoutes } from './routes/clients'
 import { registerNodeRoutes } from './routes/nodes'
@@ -83,6 +84,9 @@ export async function createPortal(options: PortalOptions): Promise<FastifyInsta
   }
 
   await registerPortalAuth(app)
+  // Ahead of the routes: an unknown hostname belonging to an HTTP endpoint is
+  // proxied, and everything else falls through to Portal's own surfaces.
+  await registerHttpProxy(app)
   await registerAdminRoutes(app)
   await registerNodeRoutes(app)
   await registerClientRoutes(app)

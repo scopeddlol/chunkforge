@@ -33,6 +33,22 @@ export { renderEula, renderServerProperties } from './services/serverProperties'
 // Java
 export { detectInstalledJava, ensureJavaRuntime } from './services/javaManager'
 
+// Endpoints
+export {
+  ENDPOINT_PROFILES,
+  profileFor,
+  type EndpointProfile
+} from './services/endpointProfiles'
+export {
+  endpointsFor,
+  extraEndpoints,
+  addEndpoint,
+  endpointsForAddon,
+  newEndpointId,
+  GAME_ENDPOINT_ID,
+  type AddEndpointRequest
+} from './services/endpoints'
+
 // Ports
 export {
   isPortFree,

@@ -1,5 +1,6 @@
 import os from 'os'
 import WebSocket from 'ws'
+import { endpointsFor, listInstanceMetadata } from '@chunkforge/core'
 import net from 'net'
 import dgram from 'dgram'
 import { statfs } from 'fs/promises'
@@ -98,11 +99,28 @@ export interface NodeLinkOptions {
  * subdomain like any other. Only the socket belongs to this function — the
  * Core API is closed by whoever created it.
  */
-export function attachNodeLink(options: NodeLinkOptions): { nodeId: string; close: () => Promise<void> } {
+export function attachNodeLink(options: NodeLinkOptions): {
+  nodeId: string
+  redeclareEndpoints: () => Promise<void>
+  close: () => Promise<void>
+} {
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000
   const portal = new PortalClient({ baseUrl: options.portalUrl, token: options.nodeToken })
 
-  const link = new PortalLink(portal, options.nodeToken, options.coreApi)
+  // Declared ahead of the link so the event hook below can reach it. The hook
+  // only ever fires once the socket is open, by which point it is assigned.
+  let declareEndpoints: () => Promise<void>
+
+  const link = new PortalLink(portal, options.nodeToken, options.coreApi, (event) => {
+    // A server's ports just changed on this machine. Re-declaring now rather
+    // than on the next heartbeat is what makes "add an endpoint, then publish
+    // it" work — up to fifteen seconds of Portal not knowing the port exists
+    // would otherwise read to the user as the publish being broken.
+    if (event?.type !== 'endpoints-changed') return
+    void declareEndpoints().catch((err: Error) =>
+      console.error(`Could not re-declare endpoints: ${err.message}`)
+    )
+  })
   link.connect()
 
   // Announce nothing up front. Routes are created by Portal when Chunkforge
@@ -113,10 +131,43 @@ export function attachNodeLink(options: NodeLinkOptions): { nodeId: string; clos
     console.error(`Could not announce tunnels: ${err.message}`)
   })
 
+  /**
+   * Tells Portal which of this machine's ports may be published.
+   *
+   * Sent on the heartbeat rather than only when something changes, because
+   * this list is what Portal enforces against — a node that drifted out of
+   * step would either lose routes it should have or keep offering ports for
+   * servers that no longer exist. Re-declaring the whole set every few seconds
+   * is cheap and self-correcting; the alternative is a delta protocol that has
+   * to be right forever.
+   *
+   * Derived from the servers this node actually has, so a deleted server stops
+   * being exposable without anything having to remember to withdraw it.
+   */
+  declareEndpoints = async (): Promise<void> => {
+    const instances = await listInstanceMetadata().catch(() => [])
+    const endpoints = instances.flatMap((instance) =>
+      endpointsFor(instance).map((endpoint) => ({
+        id: `${instance.id}:${endpoint.id}`,
+        instanceId: instance.id,
+        label: endpoint.label,
+        protocol: endpoint.protocol,
+        localPort: endpoint.localPort
+      }))
+    )
+    await portal.node.declareEndpoints(endpoints)
+  }
+
   const beat = async (): Promise<void> => {
     const startedAt = Date.now()
     const stats = await sampleStats(options.dataRoot)
     await portal.node.heartbeat({ ...stats, latencyMs: Date.now() - startedAt }, true)
+    // After the heartbeat: a node that cannot be reached at all has bigger
+    // problems than a stale endpoint list, and this must never be what stops
+    // the heartbeat landing.
+    await declareEndpoints().catch((err: Error) =>
+      console.error(`Could not declare endpoints: ${err.message}`)
+    )
   }
   void beat().catch((err: Error) => console.error(`First heartbeat failed: ${err.message}`))
   const timer = setInterval(() => {
@@ -126,6 +177,16 @@ export function attachNodeLink(options: NodeLinkOptions): { nodeId: string; clos
 
   return {
     nodeId: options.nodeId,
+    /**
+     * Re-declares this machine's ports at once.
+     *
+     * The event hook above covers a node running its own Core API, where the
+     * agent has an owner session to listen with. A control plane hosting on
+     * its own machine may have no such token — a Docker panel does not — so
+     * the process that changed the metadata calls this directly rather than
+     * relying on an events socket that may never have opened.
+     */
+    redeclareEndpoints: () => declareEndpoints(),
     close: async () => {
       clearInterval(timer)
       link.close()
@@ -210,7 +271,9 @@ class PortalLink {
   constructor(
     private readonly portal: PortalClient,
     private readonly token: string,
-    private readonly coreApi: RunningCoreApi
+    private readonly coreApi: RunningCoreApi,
+    /** Called for every event the local Core API emits, before forwarding. */
+    private readonly onLocalEvent?: (event: { type?: string }) => void
   ) {}
 
   connect(): void {
@@ -287,6 +350,7 @@ class PortalLink {
       } catch {
         return
       }
+      this.onLocalEvent?.(parsed as { type?: string })
       this.send({ type: 'event-push', event: parsed })
     })
     socket.on('close', () => {

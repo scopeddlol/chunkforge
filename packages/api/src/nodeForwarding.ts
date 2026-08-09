@@ -36,6 +36,10 @@ export async function registerNodeForwarding(app: FastifyInstance): Promise<void
     // CurseForge key — added to the body before it travels. Its handler
     // forwards by hand for that reason.
     if (request.method === 'POST' && isModpackPath(request.url)) return
+    // Endpoints are allocated on two machines at once — a local port by the
+    // node, a public one by Portal — so `routes/endpoints.ts` splits the call
+    // itself and forwards only the half the node owns.
+    if (isEndpointPath(request.url)) return
 
     const nodeId = nodeForInstance(instanceId)
     if (!nodeId) return
@@ -97,6 +101,11 @@ function isAccessPath(url: string): boolean {
 /** True when a PATCH body actually sets a port. */
 function changesPort(body: unknown): boolean {
   return Boolean(body && typeof body === 'object' && 'port' in (body as Record<string, unknown>))
+}
+
+/** True for `/api/servers/<id>/endpoints` and anything under it. */
+function isEndpointPath(url: string): boolean {
+  return /^\/api\/servers\/[^/]+\/endpoints(\/|$)/.test(url.split('?')[0])
 }
 
 /** True for `/api/servers/<id>/modpack`. */

@@ -19,6 +19,7 @@ import { registerAuth } from './auth/plugin'
 import { registerAuthRoutes } from './routes/auth'
 import { registerServerRoutes } from './routes/servers'
 import { registerAddonRoutes } from './routes/addons'
+import { registerEndpointRoutes } from './routes/endpoints'
 import { registerInstanceToolRoutes } from './routes/instanceTools'
 import { registerPlatformRoutes } from './routes/platform'
 import { registerFileHubRoutes } from './routes/filehub'
@@ -135,6 +136,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
   await registerNodeForwarding(app)
   await registerServerRoutes(app)
   await registerAddonRoutes(app)
+  await registerEndpointRoutes(app)
   await registerInstanceToolRoutes(app)
   await registerPlatformRoutes(app)
   await registerFileHubRoutes(app)
@@ -153,7 +155,7 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
     void refreshPortalStatus().catch(() => undefined)
   }
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.9.0' }))
+  app.get('/api/health', async () => ({ ok: true, version: '0.10.0' }))
 
   if (serveWebUi) {
     app.get('/', async (_request, reply) => reply.sendFile('index.html'))

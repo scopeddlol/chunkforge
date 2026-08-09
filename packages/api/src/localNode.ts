@@ -25,7 +25,11 @@ import type { RunningCoreApi } from './index'
  * should not be quietly publishing a route into the user's own desktop.
  */
 
-let running: { nodeId: string; close: () => Promise<void> } | null = null
+let running: {
+  nodeId: string
+  redeclareEndpoints: () => Promise<void>
+  close: () => Promise<void>
+} | null = null
 // Held so the settings route can turn hosting on later without every caller
 // having to carry the running API around to reach this one function.
 let localCoreApi: RunningCoreApi | null = null
@@ -45,6 +49,18 @@ export function localNodeId(): string | null {
 
 export function isLocalNodeHosting(): boolean {
   return Boolean(running)
+}
+
+/**
+ * Tells Portal about this machine's ports right now.
+ *
+ * Called after a local server's endpoints change, because Portal will not
+ * publish a port it has not been told the node runs something on — and waiting
+ * for the next heartbeat would make "add an endpoint, then publish it" fail
+ * for up to fifteen seconds. A no-op when this machine is not hosting.
+ */
+export async function redeclareLocalEndpoints(): Promise<void> {
+  await running?.redeclareEndpoints().catch(() => undefined)
 }
 
 /**

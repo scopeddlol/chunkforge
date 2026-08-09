@@ -24,6 +24,7 @@ import type { InstanceMetadata, InstanceToggles, ServerGroup } from '@shared/typ
 import { usePortAvailability } from '../../components/usePortAvailability'
 import { useSessionStore } from '../../state/sessionStore'
 import { IconPanel } from './IconPanel'
+import { EndpointsPanel } from './EndpointsPanel'
 import { LifecyclePanel } from './LifecyclePanel'
 import { MigratePanel } from './MigratePanel'
 import { ServerAccessPanel } from './ServerAccessPanel'
@@ -344,6 +345,13 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
           <MigratePanel metadata={metadata} onMoved={onSaved} />
         </div>
       )}
+
+      <div className={styles.panel}>
+        <Text weight="semibold" className={styles.sectionTitle}>
+          Network endpoints
+        </Text>
+        <EndpointsPanel instanceId={metadata.id} />
+      </div>
 
       <div className={styles.panel}>
         <Text weight="semibold" className={styles.sectionTitle}>

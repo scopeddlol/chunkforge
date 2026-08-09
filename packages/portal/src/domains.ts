@@ -59,6 +59,28 @@ export async function allocateDomain(request: AllocateDomainRequest): Promise<Po
     throw new Error('Adopt this node before allocating addresses on it.')
   }
 
+  /**
+   * The requested target port must be one this node has offered.
+   *
+   * Without this a control plane could ask Portal to publish any port on a
+   * node it had claimed — `targetPort` arrives in the request body and used to
+   * be taken at face value, so the call that publishes a Minecraft server
+   * would equally have published a database or an SSH daemon on the same host.
+   *
+   * A node that has registered nothing is exempt, because every node that
+   * predates endpoint registration is in that state and refusing them all
+   * would break every existing server on the next allocation. Once a node
+   * declares anything, it is held to its own list.
+   */
+  if (node.endpoints && node.endpoints.length > 0) {
+    const offered = node.endpoints.some((endpoint) => endpoint.localPort === request.targetPort)
+    if (!offered) {
+      throw new Error(
+        `That node has not offered port ${request.targetPort}. Only ports Chunkforge runs a service on can be published.`
+      )
+    }
+  }
+
   const protocol: TunnelProtocol = request.protocol ?? 'tcp'
   const base =
     toDnsLabel(request.label ?? request.name ?? '') || `server-${request.nodeId.slice(0, 6)}`

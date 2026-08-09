@@ -6,7 +6,7 @@ import { portalRelay } from '../relay'
 import { nodeClaimants } from '../nodeClaims'
 import { portalStore } from '../store'
 import { buildOverview, toNodeView } from '../views'
-import type { PortalNode, PortalNodeStats, PortalTunnel } from '../types'
+import type { NodeEndpoint, PortalNode, PortalNodeStats, PortalTunnel } from '../types'
 
 /**
  * The node-facing surface. A Chunkforge Node redeems a pin here, then keeps one
@@ -65,6 +65,65 @@ export async function registerNodeRoutes(app: FastifyInstance): Promise<void> {
    * which may differ, because a domain allocated while the node was away adds
    * routes the node never asked for.
    */
+  /**
+   * The node declaring which of its ports may be exposed, and for what.
+   *
+   * Authenticated as the *node*, which is the entire point: a control plane
+   * cannot reach this route, so it cannot add to the set of ports Portal is
+   * willing to forward to. It may only pick from what the node has offered.
+   *
+   * The list replaces whatever was registered before rather than merging, so a
+   * server that is deleted, or an add-on that is uninstalled, stops being
+   * exposable on the node's next announcement without anything having to
+   * remember to release it.
+   */
+  app.put<{ Body: { endpoints: NodeEndpoint[] } }>(
+    '/api/node/endpoints',
+    { preHandler: requireNode },
+    async (request, reply) => {
+      const node = portalStore.findNode(request.portalNodeId!)
+      if (!node) return reply.code(404).send({ error: 'Unknown node' })
+
+      const declared = Array.isArray(request.body?.endpoints) ? request.body.endpoints : []
+      const clean = declared
+        .filter(
+          (endpoint) =>
+            typeof endpoint?.id === 'string' &&
+            typeof endpoint?.instanceId === 'string' &&
+            Number.isInteger(endpoint?.localPort) &&
+            endpoint.localPort > 0 &&
+            endpoint.localPort < 65536
+        )
+        .map((endpoint) => ({
+          id: endpoint.id,
+          instanceId: endpoint.instanceId,
+          label: String(endpoint.label ?? '').slice(0, 80),
+          protocol: endpoint.protocol === 'udp' ? 'udp' : endpoint.protocol === 'http' ? 'http' : 'tcp',
+          localPort: endpoint.localPort
+        })) as NodeEndpoint[]
+
+      node.endpoints = clean
+      await portalStore.upsertNode(node)
+
+      // Anything Portal had bound for a port this node no longer offers is
+      // closed here, so withdrawing an endpoint actually takes the public
+      // route down rather than leaving it pointing at a dead process.
+      const offered = new Set(clean.map((endpoint) => endpoint.localPort))
+      const stillValid = node.tunnels.filter(
+        (tunnel) => !tunnel.id.startsWith('endpoint:') || offered.has(tunnel.targetPort)
+      )
+      if (stillValid.length !== node.tunnels.length) {
+        node.tunnels = stillValid
+        await portalStore.upsertNode(node)
+        if (portalRelay.isNodeConnected(node.id)) {
+          await portalRelay.syncNodeTunnels(node.id, node.tunnels)
+        }
+      }
+
+      return { endpoints: clean }
+    }
+  )
+
   app.post<{ Body: { tunnels: PortalTunnel[] } }>(
     '/api/node/tunnels',
     { preHandler: requireNode },

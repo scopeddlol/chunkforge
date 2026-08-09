@@ -31,7 +31,8 @@ import {
   callNodeAgent,
   listPortalDomains,
   provisionInstanceDomain,
-  releaseInstanceDomain
+  releaseInstanceDomain,
+  releaseInstanceEndpoints
 } from '../portalLink'
 import {
   createRemoteInstance,
@@ -455,6 +456,10 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           `/api/servers/${encodeURIComponent(id)}?deleteFiles=${request.query.deleteFiles === 'true'}`
         ).catch(() => undefined)
         await releaseInstanceDomain({ id, nodeId: remoteNode })
+        // Extra endpoints are mapped per service rather than per server, so
+        // releasing the subdomain does not take them with it. Left behind,
+        // they would keep public ports bound for a server that no longer runs.
+        await releaseInstanceEndpoints(id)
         await forgetRemoteInstance(id)
         forgetLogLines(id)
         // Grants outlive the server unless something clears them, and instance
@@ -467,6 +472,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
       await instanceManager.stopInstance(id).catch(() => undefined)
       const metadata = await loadInstanceMetadata(id)
       await releaseInstanceDomain(metadata)
+      await releaseInstanceEndpoints(id)
       if (request.query.deleteFiles === 'true') {
         await rm(metadata.path, { recursive: true, force: true })
       }
