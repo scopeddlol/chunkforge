@@ -9,6 +9,12 @@ declare module 'fastify' {
     user?: User
     /** Set when the caller authenticated with a node token rather than a session. */
     nodeId?: string
+    /**
+     * The role the caller holds over the server this request is about, once
+     * grants are taken into account. Set by the server-permission hook for
+     * `/api/servers/:id/...` and absent everywhere else.
+     */
+    serverRole?: Role
   }
 }
 
@@ -65,7 +71,13 @@ export function requireRole(required: Role) {
       await reply.code(403).send({ error: 'Node tokens cannot call this endpoint' })
       return
     }
-    if (!roleAtLeast(request.user.role, required)) {
+    // A per-server grant is what makes "put this person on this server"
+    // possible, so on a server route the effective role is the one that counts.
+    // Checking the base role here as well would mean a grant could raise
+    // someone's permissions and then be overruled by the account they were
+    // granted *from*, which is the whole point of a grant.
+    const effective = request.serverRole ?? request.user.role
+    if (!roleAtLeast(effective, required)) {
       await reply.code(403).send({ error: `Requires ${required} or higher` })
       return
     }

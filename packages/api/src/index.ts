@@ -25,6 +25,7 @@ import { registerFileHubRoutes } from './routes/filehub'
 import { attachCoreEvents, registerEventSocket } from './events'
 import { registerCors } from './cors'
 import { registerNodeForwarding } from './nodeForwarding'
+import { registerServerPermissions } from './auth/serverAccess'
 import { startPortalEventRelay, stopPortalEventRelay } from './portalEvents'
 import { refreshPortalStatus } from './portalLink'
 import { setLocalCoreApi, startLocalNodeHosting, stopLocalNodeHosting } from './localNode'
@@ -125,6 +126,10 @@ export async function createCoreApi(options: CoreApiOptions): Promise<FastifyIns
 
   await registerAuth(app)
   await registerAuthRoutes(app)
+  // Must precede forwarding: a remote request leaves this process at that hook,
+  // so a permission check registered after it would never run for the servers
+  // it most needs to cover.
+  await registerServerPermissions(app)
   // Must precede the server routes: a request for a server that lives on a node
   // is answered by that node, and never reaches the handlers below.
   await registerNodeForwarding(app)

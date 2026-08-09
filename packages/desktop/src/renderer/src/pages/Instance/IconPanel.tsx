@@ -3,7 +3,7 @@ import { makeStyles, tokens, Text, Button } from '@fluentui/react-components'
 import { Image20Regular, Delete20Regular } from '@fluentui/react-icons'
 import type { InstanceMetadata } from '@shared/types'
 import { ServerThumbnail } from '../../components/ServerThumbnail'
-import { native } from '../../native'
+import { isDesktopHost, native } from '../../native'
 
 const useStyles = makeStyles({
   panel: {
@@ -27,13 +27,25 @@ interface IconPanelProps {
   onChanged: () => void
 }
 
-export function IconPanel({ metadata, onChanged }: IconPanelProps): JSX.Element {
+export function IconPanel({ metadata, onChanged }: IconPanelProps): JSX.Element | null {
   const styles = useStyles()
   const [icon, setIcon] = useState<string | null>(null)
+  // Choosing an icon needs a file dialog, which only the desktop shell has.
+  // In a browser the whole panel is absent rather than present and throwing:
+  // its three actions are all native, so there is nothing here that would work.
+  const desktop = isDesktopHost()
 
   useEffect(() => {
-    native().getIcon(metadata.id).then(setIcon)
-  }, [metadata.id])
+    if (!desktop) return
+    // A read that cannot happen yields nothing; it must not reject, or it
+    // becomes an unhandled error every time a server is opened.
+    native()
+      .getIcon(metadata.id)
+      .then(setIcon)
+      .catch(() => setIcon(null))
+  }, [metadata.id, desktop])
+
+  if (!desktop) return null
 
   async function choose(): Promise<void> {
     const next = await native().pickIcon(metadata.id)

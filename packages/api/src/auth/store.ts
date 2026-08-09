@@ -26,7 +26,9 @@ interface AuthFile {
 /** The parts of a user an admin may set when creating an account. */
 export type UserGrants = Partial<Pick<User, 'nodeAccess' | 'canConfigurePersonalNode'>>
 
-export type UserPatch = Partial<Pick<User, 'role' | 'disabled' | 'projectGrants' | 'canConfigurePersonalNode'>> & {
+export type UserPatch = Partial<
+  Pick<User, 'role' | 'disabled' | 'projectGrants' | 'serverGrants' | 'canConfigurePersonalNode'>
+> & {
   /** An array restricts, `null` clears the restriction, absent leaves it alone. */
   nodeAccess?: string[] | null
 }
@@ -184,6 +186,52 @@ class AuthStore {
 
   revokeSession(token: string): void {
     this.sessions.delete(token)
+  }
+
+  // ---- grants ----
+
+  /**
+   * Puts a user on one server at a given role, or takes them off it.
+   *
+   * Stored on the user rather than on the server because a server's record may
+   * live on a node, and permissions must be answerable without a round trip to
+   * a machine that might be offline. Removing a grant deletes the key rather
+   * than storing a null, so an account carries no record of servers it has no
+   * relationship with.
+   */
+  async setServerGrant(userId: string, instanceId: string, role: Role | null): Promise<User> {
+    const user = this.findUser(userId)
+    if (!user) throw new Error('No such user')
+    const grants = { ...(user.serverGrants ?? {}) }
+    if (role) grants[instanceId] = role
+    else delete grants[instanceId]
+    user.serverGrants = Object.keys(grants).length > 0 ? grants : undefined
+    await this.persist()
+    return user
+  }
+
+  /** Everyone holding an explicit grant on one server. */
+  grantsForServer(instanceId: string): Array<{ user: User; role: Role }> {
+    this.assertLoaded()
+    return this.data.users
+      .filter((user) => user.serverGrants?.[instanceId])
+      .map((user) => ({ user, role: user.serverGrants![instanceId] }))
+  }
+
+  /**
+   * Drops every grant referencing a server. Called when one is deleted, so a
+   * later server that happens to reuse the id does not inherit access nobody
+   * granted it.
+   */
+  async forgetServerGrants(instanceId: string): Promise<void> {
+    let changed = false
+    for (const user of this.data.users) {
+      if (!user.serverGrants?.[instanceId]) continue
+      delete user.serverGrants[instanceId]
+      if (Object.keys(user.serverGrants).length === 0) user.serverGrants = undefined
+      changed = true
+    }
+    if (changed) await this.persist()
   }
 
   // ---- invites ----

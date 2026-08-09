@@ -67,8 +67,19 @@ export interface CurrentUser {
   projectGrants: Record<string, string>
   /** Node ids this account is limited to, or undefined for every node. */
   nodeAccess?: string[]
+  /** Per-server role overrides, keyed by instance id. Grants only ever raise. */
+  serverGrants: Record<string, string>
   canConfigurePersonalNode: boolean
   isAdmin: boolean
+}
+
+/** One account's access to a particular server. */
+export interface ServerAccessEntry {
+  userId: string
+  username: string
+  role: string
+  /** True when they would reach the server anyway, grant or not. */
+  implicit: boolean
 }
 
 /** A user as the admin panel sees them. `nodeAccess: null` means every node. */
@@ -78,6 +89,7 @@ export interface ManagedUser {
   role: string
   disabled: boolean
   nodeAccess: string[] | null
+  serverGrants: Record<string, string>
   canConfigurePersonalNode: boolean
   createdAt: string
 }
@@ -202,6 +214,17 @@ export class ChunkforgeClient {
     remove: (id: string) => this.del<{ ok: true }>(`/api/users/${id}`),
     resetPassword: (id: string, password: string) =>
       this.post<{ ok: true }>(`/api/users/${id}/password`, { password })
+  }
+
+  /** Who is on a given server, and at what role. Admin-only. */
+  serverAccess = {
+    list: (instanceId: string) => this.get<ServerAccessEntry[]>(`/api/servers/${instanceId}/access`),
+    /** Pass a null role to take someone off the server. */
+    set: (instanceId: string, userId: string, role: string | null) =>
+      this.put<{ userId: string; username: string; role: string | null }>(
+        `/api/servers/${instanceId}/access`,
+        { userId, role }
+      )
   }
 
   // ---- invites ----

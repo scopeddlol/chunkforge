@@ -22,7 +22,9 @@ import {
 import { FolderOpen20Regular, Save20Regular, Delete20Regular } from '@fluentui/react-icons'
 import type { InstanceMetadata, InstanceToggles, ServerGroup } from '@shared/types'
 import { usePortAvailability } from '../../components/usePortAvailability'
+import { useSessionStore } from '../../state/sessionStore'
 import { IconPanel } from './IconPanel'
+import { ServerAccessPanel } from './ServerAccessPanel'
 import { StartupPanel } from './StartupPanel'
 import { CopyableAddress } from '../../components/CopyableAddress'
 import { resolveServerAddress } from '../../components/serverAddress'
@@ -78,6 +80,9 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
   const [groupSaving, setGroupSaving] = useState(false)
   // Excludes this server, so its own port never reads as a conflict.
   const portCheck = usePortAvailability(draft.port, metadata.nodeId, metadata.id)
+  // The panel itself renders nothing for a non-admin, but the heading around
+  // it would still appear — an empty "People" section with no explanation.
+  const canManageAccess = useSessionStore((state) => state.user?.isAdmin ?? false)
   const [saving, setSaving] = useState(false)
   const [hostError, setHostError] = useState<string | null>(null)
   const [subdomainLabel, setSubdomainLabel] = useState(labelFromHostname(metadata.portalHostname))
@@ -328,6 +333,15 @@ export function InstanceSettingsTab({ metadata, onSaved, onDeleted }: InstanceSe
       <IconPanel metadata={metadata} onChanged={() => onSaved(metadata)} />
 
       <StartupPanel metadata={metadata} onSaved={onSaved} />
+
+      {canManageAccess && (
+        <div className={styles.panel}>
+          <Text weight="semibold" className={styles.sectionTitle}>
+            People
+          </Text>
+          <ServerAccessPanel instanceId={metadata.id} />
+        </div>
+      )}
 
       <div className={styles.panel}>
         <Text weight="semibold" className={styles.sectionTitle}>

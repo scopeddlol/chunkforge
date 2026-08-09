@@ -24,6 +24,10 @@ export async function registerNodeForwarding(app: FastifyInstance): Promise<void
     // node destroys the files, and this control plane has to release the
     // subdomain and drop its pointer. Its handler forwards deliberately.
     if (request.method === 'DELETE' && isBareInstancePath(request.url)) return
+    // Who may use a server is a question about *accounts*, and accounts live
+    // here. A node has no such route and no idea who anyone is, so this must
+    // never travel.
+    if (isAccessPath(request.url)) return
     // A port change has work on both sides: the node rewrites
     // server.properties, and this control plane has to re-point the Portal
     // route and its DNS at the new port. Its handler forwards deliberately.
@@ -83,6 +87,11 @@ function instanceIdFromPath(url: string): string | null {
 /** True for `/api/servers/<id>` with nothing after it. */
 function isBareInstancePath(url: string): boolean {
   return /^\/api\/servers\/[^/]+$/.test(url.split('?')[0])
+}
+
+/** True for `/api/servers/<id>/access`. */
+function isAccessPath(url: string): boolean {
+  return /^\/api\/servers\/[^/]+\/access$/.test(url.split('?')[0])
 }
 
 /** True when a PATCH body actually sets a port. */

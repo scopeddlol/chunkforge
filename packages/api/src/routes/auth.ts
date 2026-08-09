@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { authStore } from '../auth/store'
 import {
+  ROLES,
   canConfigurePersonalNode,
   roleAtLeast,
   verifyPassword,
@@ -29,6 +30,7 @@ function publicUser(user: User) {
     role: user.role,
     disabled: user.disabled ?? false,
     nodeAccess: user.nodeAccess ?? null,
+    serverGrants: user.serverGrants ?? {},
     canConfigurePersonalNode: user.canConfigurePersonalNode ?? false,
     createdAt: user.createdAt
   }
@@ -80,7 +82,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/auth/me', async (request, reply) => {
     if (!request.user) return reply.code(401).send({ error: 'Sign in required' })
-    const { id, username, role, projectGrants, nodeAccess } = request.user
+    const { id, username, role, projectGrants, serverGrants, nodeAccess } = request.user
     // The two capability flags are derived, not stored: the UI should not have
     // to re-implement "admins are never restricted" to decide what to render.
     return {
@@ -88,6 +90,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       username,
       role,
       projectGrants,
+      serverGrants: serverGrants ?? {},
       nodeAccess: roleAtLeast(role, 'admin') ? undefined : nodeAccess,
       canConfigurePersonalNode: canConfigurePersonalNode(request.user),
       isAdmin: roleAtLeast(role, 'admin')
@@ -195,6 +198,48 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     await authStore.setPassword(request.user.id, password)
     return { ok: true }
   })
+
+  // ---- server access ----
+  //
+  // Who is on a server, and at what role. Kept beside the other account
+  // routes rather than under `/api/servers/:id` on purpose: this is a
+  // statement about *accounts*, it is answered entirely from this panel's own
+  // records, and routing it through the server path would hand it to the node
+  // that runs the server, which knows nothing about who may use it.
+
+  app.get<{ Params: { id: string } }>(
+    '/api/servers/:id/access',
+    { preHandler: requireRole('admin') },
+    async (request) =>
+      authStore.grantsForServer(request.params.id).map(({ user, role }) => ({
+        userId: user.id,
+        username: user.username,
+        role,
+        /** True when they would reach this server anyway, grant or not. */
+        implicit: roleAtLeast(user.role, 'admin')
+      }))
+  )
+
+  app.put<{ Params: { id: string }; Body: { userId: string; role: Role | null } }>(
+    '/api/servers/:id/access',
+    { preHandler: requireRole('admin') },
+    async (request, reply) => {
+      const { userId, role } = request.body ?? {}
+      if (!userId) return reply.code(400).send({ error: 'A user is required' })
+      if (role && !ROLES.includes(role)) return reply.code(400).send({ error: 'That is not a role' })
+      // Granting owner on one server would be a way to mint a second owner.
+      if (role === 'owner') return reply.code(400).send({ error: 'There can only be one owner' })
+      if (role === 'admin' && request.user?.role !== 'owner') {
+        return reply.code(403).send({ error: 'Only the owner can grant admin' })
+      }
+      try {
+        const user = await authStore.setServerGrant(userId, request.params.id, role ?? null)
+        return { userId: user.id, username: user.username, role: user.serverGrants?.[request.params.id] ?? null }
+      } catch (err) {
+        return reply.code(404).send({ error: (err as Error).message })
+      }
+    }
+  )
 
   // ---- invites ----
   //

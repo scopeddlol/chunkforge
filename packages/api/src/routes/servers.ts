@@ -19,7 +19,9 @@ import {
   type ServerType
 } from '@chunkforge/core'
 import { requireRole } from '../auth/plugin'
-import { filterByNodeAccess, guardNodeAccess } from '../auth/nodeAccess'
+import { authStore } from '../auth/store'
+import { guardNodeAccess } from '../auth/nodeAccess'
+import { visibleServers } from '../auth/serverAccess'
 import { forgetLogLines, recentLogLines } from '../logBuffer'
 import {
   callNodeAgent,
@@ -101,12 +103,14 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
   // their nodes through Portal and appear beside the local ones.
   app.get('/api/servers', { preHandler: requireRole('viewer') }, async (request) => {
     const [local, remote] = await Promise.all([listLocalSummaries(), listRemoteInstances()])
-    // A user restricted to some nodes should not see the servers on the rest;
-    // node access is about machines, but what a machine *holds* is the part
-    // that is actually visible in the UI.
-    const visible = filterByNodeAccess(request, [...local, ...remote], (summary) =>
-      nodeForInstance(summary.id)
-    )
+    // Node access decides which machines someone works on; a grant on one
+    // particular server overrides that for that server alone, which is what
+    // makes "put this person on this server" work for a locked-down account.
+    const visible = visibleServers(request.user, [...local, ...remote], (summary) => ({
+      id: summary.id,
+      nodeId: nodeForInstance(summary.id),
+      projectId: summary.projectId ?? summary.groupId ?? null
+    }))
     return withPortalAddresses(visible)
   })
 
@@ -340,6 +344,10 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
         await releaseInstanceDomain({ id, nodeId: remoteNode })
         await forgetRemoteInstance(id)
         forgetLogLines(id)
+        // Grants outlive the server unless something clears them, and instance
+        // ids are slugified names — so a later server called the same thing
+        // would inherit access nobody granted it.
+        await authStore.forgetServerGrants(id)
         return { ok: true }
       }
 
@@ -351,6 +359,7 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
       }
       await removeInstanceFromIndex(id)
       forgetLogLines(id)
+      await authStore.forgetServerGrants(id)
       return { ok: true }
     }
   )
