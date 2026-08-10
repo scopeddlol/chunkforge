@@ -8,6 +8,7 @@ import {
   DialogActions,
   Button,
   Spinner,
+  Switch,
   Text,
   Dropdown,
   Option,
@@ -70,6 +71,8 @@ export function InstallDialog({
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [endpoint, setEndpoint] = useState<AddonEndpoint | null>(null)
+  const [noMatchReason, setNoMatchReason] = useState<string | null>(null)
+  const [showAllBuilds, setShowAllBuilds] = useState(false)
 
   // Every place this plugin can be fetched from, primary first.
   const sourceChoices = plugin
@@ -88,26 +91,39 @@ export function InstallDialog({
     setError(null)
     setDone(false)
     setEndpoint(null)
+    setNoMatchReason(null)
+    setShowAllBuilds(false)
     setInstanceId(preselectedInstanceId ?? instances[0]?.id ?? null)
     setChosenSource(plugin.source)
   }, [plugin, preselectedInstanceId, instances])
 
-  // Versions are per-source, so they reload whenever the source changes.
+  /**
+   * Ask the server which build fits, rather than working it out here.
+   *
+   * The answer depends on the target server, and the same question is asked
+   * again by the installer before it writes anything. Two implementations of
+   * that rule would eventually disagree, and the losing side is a user staring
+   * at a greyed-out button for a plugin that would have worked fine.
+   */
   useEffect(() => {
-    if (!plugin || !chosenSource) return
+    if (!plugin || !chosenSource || !instanceId) return
     const choice = sourceChoices.find((c) => c.source === chosenSource)
     if (!choice) return
 
     let cancelled = false
     setVersions(null)
     setSelectedVersionId(null)
+    setNoMatchReason(null)
 
     api()
-      .addons.versions(choice.source, choice.id)
-      .then((result) => {
+      .addons.resolve(instanceId, { source: choice.source, projectId: choice.id, kind: plugin.kind })
+      .then((resolved) => {
         if (cancelled) return
-        setVersions(result)
-        setSelectedVersionId(result[0]?.id ?? null)
+        setVersions(resolved.alternatives)
+        // Already ordered best-match-first by the server, so the recommended
+        // build is simply the one it picked.
+        setSelectedVersionId(resolved.version?.id ?? null)
+        setNoMatchReason(resolved.version ? null : (resolved.reason ?? 'No compatible build found.'))
       })
       .catch((err: Error) => !cancelled && setError(err.message))
 
@@ -115,16 +131,16 @@ export function InstallDialog({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plugin, chosenSource])
+  }, [plugin, chosenSource, instanceId])
 
   const selectedInstance = instances.find((i) => i.id === instanceId)
   const selectedVersion = versions?.find((v) => v.id === selectedVersionId) ?? null
-
-  // Surface compatibility rather than silently installing a mismatched build.
-  const compatible =
-    selectedVersion && selectedInstance && selectedVersion.gameVersions.length > 0
-      ? selectedVersion.gameVersions.includes(selectedInstance.minecraftVersion)
-      : null
+  const verdict = selectedVersion?.compatibility ?? null
+  /** A build the source has ruled out; installing it needs a deliberate override. */
+  const knownWrong = verdict?.compatible === false && verdict.certain === true
+  const usable = versions?.filter((v) => v.compatibility?.compatible !== false) ?? []
+  const rejected = versions?.filter((v) => v.compatibility?.compatible === false) ?? []
+  const shownVersions = showAllBuilds ? (versions ?? []) : usable
 
   async function handleInstall(): Promise<void> {
     if (!plugin || !selectedVersion || !instanceId) return
@@ -136,7 +152,11 @@ export function InstallDialog({
         instanceId,
         selectedVersion,
         plugin.name,
-        choice?.id
+        choice?.id,
+        // Only ever sent for a build the user picked *after* being told it is
+        // wrong — the install refuses otherwise, which is what stops a bug up
+        // here from putting a Fabric mod on a Paper server.
+        knownWrong
       )
       /**
        * The add-on's port is open on the machine that runs the server; making
@@ -234,29 +254,52 @@ export function InstallDialog({
               <Text className={styles.hint}>No downloadable versions were published for this plugin.</Text>
             )}
 
+            {/*
+              Nothing fits. Say what the project does offer instead — usually
+              "this is a Fabric mod and yours is a Paper server", which answers
+              the question on the spot rather than sending someone to a wiki.
+            */}
+            {noMatchReason && (
+              <MessageBar intent="warning">
+                <MessageBarBody>{noMatchReason}</MessageBarBody>
+              </MessageBar>
+            )}
+
             {versions && versions.length > 0 && (
-              <Field label="Version">
+              <Field
+                label="Version"
+                hint={
+                  selectedInstance
+                    ? `Chosen for ${selectedInstance.serverType} ${selectedInstance.minecraftVersion}`
+                    : undefined
+                }
+              >
                 <Dropdown
-                  value={selectedVersion?.name ?? ''}
+                  value={selectedVersion?.name ?? 'None that fit'}
                   selectedOptions={selectedVersionId ? [selectedVersionId] : []}
                   onOptionSelect={(_, data) => setSelectedVersionId(data.optionValue ?? null)}
                 >
-                  {versions.map((version) => (
-                    <Option key={version.id} value={version.id}>
-                      {version.name}
+                  {shownVersions.map((version) => (
+                    <Option key={version.id} value={version.id} text={version.name}>
+                      {`${version.name}${version.compatibility?.compatible === false ? ` — ${version.compatibility.reason}` : ''}`}
                     </Option>
                   ))}
                 </Dropdown>
                 {selectedVersion && (
                   <div className={styles.versionMeta}>
-                    {compatible === true && (
+                    {verdict?.compatible === true && verdict.certain && (
                       <Badge appearance="tint" color="success">
-                        Compatible with {selectedInstance?.minecraftVersion}
+                        Built for {selectedInstance?.serverType} {selectedInstance?.minecraftVersion}
                       </Badge>
                     )}
-                    {compatible === false && (
+                    {verdict?.compatible === true && !verdict.certain && (
                       <Badge appearance="tint" color="warning">
-                        Not listed for {selectedInstance?.minecraftVersion}
+                        {verdict.reason ?? 'Not confirmed for this server'}
+                      </Badge>
+                    )}
+                    {verdict?.compatible === false && (
+                      <Badge appearance="tint" color="danger">
+                        {verdict.reason ?? 'Not compatible'}
                       </Badge>
                     )}
                     {selectedVersion.gameVersions.slice(0, 3).map((gv) => (
@@ -267,6 +310,32 @@ export function InstallDialog({
                   </div>
                 )}
               </Field>
+            )}
+
+            {/*
+              The builds that were ruled out stay reachable, because the
+              metadata is occasionally wrong and someone who knows that should
+              not be stuck. Choosing one is a deliberate act with its own
+              warning, not the default.
+            */}
+            {rejected.length > 0 && (
+              <Switch
+                label={
+                  showAllBuilds
+                    ? `Showing ${rejected.length} build${rejected.length === 1 ? '' : 's'} for other servers`
+                    : `Show ${rejected.length} build${rejected.length === 1 ? '' : 's'} for other servers`
+                }
+                checked={showAllBuilds}
+                onChange={(_, d) => setShowAllBuilds(d.checked)}
+              />
+            )}
+
+            {knownWrong && (
+              <MessageBar intent="error">
+                <MessageBarBody>
+                  {`This build is for ${selectedVersion?.loaders.join(', ') || 'another platform'}. Installing it on ${selectedInstance?.serverType} will not work unless you know something the listing does not.`}
+                </MessageBarBody>
+              </MessageBar>
             )}
 
             {selectedVersion && !selectedVersion.downloadUrl && selectedVersion.externalUrl && (
@@ -290,11 +359,11 @@ export function InstallDialog({
               {done ? 'Close' : 'Cancel'}
             </Button>
             <Button
-              appearance="primary"
+              appearance={knownWrong ? 'outline' : 'primary'}
               disabled={!selectedVersion?.downloadUrl || !instanceId || installing || done}
               onClick={handleInstall}
             >
-              {installing ? 'Installing…' : 'Install'}
+              {installing ? 'Installing…' : knownWrong ? 'Install anyway' : 'Install'}
             </Button>
           </DialogActions>
         </DialogBody>

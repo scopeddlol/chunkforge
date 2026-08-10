@@ -209,6 +209,39 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
   )
 
   /**
+   * Which build would be installed, and why not when there is none.
+   *
+   * One call rather than three, and — more importantly — one implementation of
+   * the rules. The browser could in principle judge builds itself, but then
+   * the dialog's idea of compatible and the installer's could drift apart, and
+   * the one that loses that argument is the user staring at a greyed-out
+   * button for a plugin that would have worked.
+   */
+  app.get<{
+    Params: { id: string }
+    Querystring: { source: PluginSource; projectId: string; kind?: ContentKind }
+  }>(
+    '/api/servers/:id/addons/resolve',
+    { preHandler: requireRole('viewer') },
+    async (request, reply) => {
+      try {
+        const metadata = await loadInstanceMetadata(request.params.id)
+        return await resolveBestVersion(
+          request.query.source,
+          request.query.projectId,
+          {
+            serverType: metadata.serverType,
+            minecraftVersion: metadata.minecraftVersion
+          },
+          request.query.kind
+        )
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /**
    * One-click install.
    *
    * The caller names a *project* and Chunkforge picks the build — which is the

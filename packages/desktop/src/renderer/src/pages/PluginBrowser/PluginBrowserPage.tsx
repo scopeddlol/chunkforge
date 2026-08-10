@@ -477,7 +477,14 @@ export function PluginBrowserPage({
       <InstallDialog
         plugin={installTarget}
         instances={instances}
-        preselectedInstanceId={scopedInstanceId}
+        /*
+         * The server being browsed for, not the one this page was opened
+         * from. These are the same thing until someone changes the attached
+         * server, at which point the dialog was still resolving builds
+         * against the old one — offering "no 1.21.1 build" for a project that
+         * had exactly the right build for the 1.21.10 server on screen.
+         */
+        preselectedInstanceId={attachedId ?? scopedInstanceId}
         onClose={() => setInstallTarget(null)}
         onInstalled={() => undefined}
       />

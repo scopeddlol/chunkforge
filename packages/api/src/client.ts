@@ -41,6 +41,16 @@ export type { ServerEvent, ServerEventType, ServerEventPayloads } from './eventT
  * because the port is whatever was free rather than the one the add-on's own
  * documentation names.
  */
+/**
+ * The build Chunkforge would install, the reason when there is none, and every
+ * build it considered — judged and ordered best first.
+ */
+export interface ResolvedVersion {
+  version: PluginVersion | null
+  reason?: string
+  alternatives: PluginVersion[]
+}
+
 /** A server endpoint as the panel sees it: the node's half and Portal's half. */
 export interface EndpointView extends ServerEndpoint {
   mappingId?: string
@@ -356,6 +366,18 @@ export class ChunkforgeClient {
       return this.get<PluginVersion[]>(`/api/addons/versions?${query.toString()}`)
     },
     /**
+     * Which build would be installed on a given server, and the reason when
+     * none of them fit. What a one-click button shows before it is pressed.
+     */
+    resolve: (
+      id: string,
+      input: { source: PluginSource; projectId: string; kind?: ContentKind }
+    ) => {
+      const query = new URLSearchParams({ source: input.source, projectId: input.projectId })
+      if (input.kind) query.set('kind', input.kind)
+      return this.get<ResolvedVersion>(`/api/servers/${id}/addons/resolve?${query.toString()}`)
+    },
+    /**
      * Install a project and let Chunkforge choose the build. This is the call
      * a one-click button makes; picking a specific file is the exception.
      */
@@ -372,8 +394,13 @@ export class ChunkforgeClient {
      * matched on. Passing it is optional so an older caller keeps working, but
      * without it the match falls back to the display name.
      */
-    install: (id: string, version: PluginVersion, name: string, projectId?: string) =>
-      this.post<AddonInstallResult>(`/api/servers/${id}/addons`, { version, name, projectId }),
+    /**
+     * Install one specific build. `force` is required for a build the server
+     * has ruled out, and exists only for the case where the metadata is wrong
+     * and the person clicking knows it.
+     */
+    install: (id: string, version: PluginVersion, name: string, projectId?: string, force?: boolean) =>
+      this.post<AddonInstallResult>(`/api/servers/${id}/addons`, { version, name, projectId, force }),
     setEnabled: (id: string, filename: string, enabled: boolean) =>
       this.patch<{ ok: true }>(`/api/servers/${id}/addons/${encodeURIComponent(filename)}`, { enabled }),
     uninstall: (id: string, filename: string) =>
