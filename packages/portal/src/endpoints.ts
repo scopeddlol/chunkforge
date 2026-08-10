@@ -138,6 +138,19 @@ export async function allocateEndpoint(request: AllocateEndpointRequest): Promis
     createdAt: existing?.createdAt ?? new Date().toISOString()
   }
 
+  /**
+   * A mapping that has moved node leaves a tunnel behind.
+   *
+   * Re-allocating the same endpoint against a different node — which is what a
+   * server migration does — updates the record and binds the new node, but the
+   * old node kept its half of the route. The public port then relays to a
+   * machine that no longer runs the service, which looks exactly like the
+   * service being broken.
+   */
+  if (existing && existing.nodeId !== request.nodeId) {
+    await unbindEndpointTunnel(existing.nodeId, existing.id)
+  }
+
   await portalStore.upsertEndpointMapping(mapping)
   await bindEndpointTunnel(mapping)
   // Best-effort, exactly as for domains: the mapping and its route are already
@@ -175,6 +188,17 @@ async function bindEndpointTunnel(mapping: EndpointMapping): Promise<void> {
   }
 }
 
+/** Takes a node's half of a route away, wherever that route went next. */
+async function unbindEndpointTunnel(nodeId: string, mappingId: string): Promise<void> {
+  const node = portalStore.findNode(nodeId)
+  if (!node) return
+  node.tunnels = node.tunnels.filter((tunnel) => tunnel.id !== endpointTunnelId(mappingId))
+  await portalStore.upsertNode(node)
+  if (portalRelay.isNodeConnected(node.id)) {
+    await portalRelay.syncNodeTunnels(node.id, node.tunnels)
+  }
+}
+
 export async function releaseEndpoint(mappingId: string, clientId: string): Promise<void> {
   const mapping = portalStore.endpointMappings().find((entry) => entry.id === mappingId)
   if (!mapping) return
@@ -184,14 +208,7 @@ export async function releaseEndpoint(mappingId: string, clientId: string): Prom
     console.error(`Could not remove DNS for ${mapping.hostname ?? mapping.label}: ${err.message}`)
   })
   await portalStore.removeEndpointMapping(mappingId)
-
-  const node = portalStore.findNode(mapping.nodeId)
-  if (!node) return
-  node.tunnels = node.tunnels.filter((tunnel) => tunnel.id !== endpointTunnelId(mappingId))
-  await portalStore.upsertNode(node)
-  if (portalRelay.isNodeConnected(node.id)) {
-    await portalRelay.syncNodeTunnels(node.id, node.tunnels)
-  }
+  await unbindEndpointTunnel(mapping.nodeId, mappingId)
 }
 
 /** Releases every mapping for a server, for when the server itself goes away. */

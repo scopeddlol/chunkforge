@@ -260,6 +260,35 @@ export async function publishEndpoint(input: {
   })
 }
 
+/**
+ * Publishes, waiting for the node to catch up.
+ *
+ * Portal refuses to publish a port its node has not registered — the check
+ * that makes endpoints safe. A port that has just been created, or has just
+ * arrived on a new node, is in exactly that state until the node re-declares.
+ * So a refusal naming an unregistered endpoint is retried briefly rather than
+ * reported; anything else is a real error and travels.
+ */
+export async function publishEndpointWithRetry(input: {
+  instanceId: string
+  nodeId: string
+  endpoint: ServerEndpoint
+  attempts?: number
+}): Promise<AllocatedEndpoint | null> {
+  const attempts = input.attempts ?? 4
+  let last: unknown
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await publishEndpoint(input)
+    } catch (err) {
+      last = err
+      if (!/has not registered/.test((err as Error).message)) throw err
+      await new Promise((resolve) => setTimeout(resolve, 600))
+    }
+  }
+  throw last as Error
+}
+
 /** Every public mapping this control plane owns. Empty without a Portal. */
 export async function listEndpointMappings(): Promise<AllocatedEndpoint[]> {
   if (!isPortalLinked()) return []

@@ -1,9 +1,10 @@
 import {
+  extraEndpoints,
   loadInstanceMetadata,
   type CreateInstanceConfig,
   type InstanceMetadata
 } from '@chunkforge/core'
-import { callNodeAgent, provisionInstanceDomain } from './portalLink'
+import { callNodeAgent, provisionInstanceDomain, publishEndpointWithRetry } from './portalLink'
 import { createRemoteInstance, forgetRemoteInstance, nodeForInstance, rememberRemoteInstance } from './remoteInstances'
 
 /**
@@ -169,6 +170,34 @@ export async function migrateInstance(options: MigrateOptions): Promise<Instance
     { ...metadata, id: created.id, nodeId: targetNodeId, port: created.port, portalHostname: undefined },
     { force: true, label: metadata.portalHostname?.split('.')[0] }
   ).catch(() => null)
+
+  /**
+   * The extra endpoints move with the server.
+   *
+   * They are part of what a server *is* — a voice port, a map port — and a
+   * migrated server that arrived without them was a quietly broken server:
+   * the services were gone, and Portal was still relaying their public ports
+   * to a node that no longer ran anything. The metadata travels first so the
+   * new node declares the ports, then each mapping is re-pointed, which is
+   * what closes the old node's half of the route.
+   */
+  const movingEndpoints = extraEndpoints(metadata)
+  if (movingEndpoints.length > 0) {
+    report({ stage: 'switching', message: 'Moving service ports…', percent: 88 })
+    await callNodeAgent(targetNodeId, 'PATCH', `/api/servers/${encodeURIComponent(created.id)}`, {
+      endpoints: movingEndpoints
+    }).catch(() => undefined)
+
+    for (const endpoint of movingEndpoints) {
+      // Best-effort per endpoint: a voice port that could not be re-published
+      // must not undo a migration that has otherwise completed.
+      await publishEndpointWithRetry({
+        instanceId: created.id,
+        nodeId: targetNodeId,
+        endpoint
+      }).catch(() => null)
+    }
+  }
 
   report({ stage: 'cleaning', message: 'Removing the old copy…', percent: 92 })
   await call(

@@ -17,7 +17,7 @@ import { localNodeId, redeclareLocalEndpoints } from '../localNode'
 import {
   callNodeAgent,
   listEndpointMappings,
-  publishEndpoint,
+  publishEndpointWithRetry,
   unpublishEndpoint
 } from '../portalLink'
 import { nodeForInstance } from '../remoteInstances'
@@ -184,7 +184,11 @@ export async function registerEndpointRoutes(app: FastifyInstance): Promise<void
             error: 'This server is not on a node Portal can reach, so its ports cannot be published.'
           })
         }
-        const mapping = await publishWithRetry(request.params.id, nodeId, endpoint)
+        const mapping = await publishEndpointWithRetry({
+          instanceId: request.params.id,
+          nodeId,
+          endpoint
+        })
         if (!mapping) return reply.code(400).send({ error: 'Connect this Chunkforge to a Portal first.' })
         return { ...endpoint, ...describeMapping(mapping), published: true }
       } catch (err) {
@@ -308,34 +312,6 @@ async function agentJson<T>(
   return payload
 }
 
-/**
- * Publishes, waiting for the node to catch up.
- *
- * Portal refuses to publish a port its node has not registered — the check
- * that makes endpoints safe. A port created a moment ago is in exactly that
- * state until the node re-declares, which it does as soon as it sees the
- * change but not instantaneously. So a refusal that names an unregistered
- * endpoint is retried briefly rather than reported: the alternative is a
- * "Publish" button that fails for a second after every "Add".
- */
-async function publishWithRetry(
-  instanceId: string,
-  nodeId: string,
-  endpoint: ServerEndpoint
-): Promise<Awaited<ReturnType<typeof publishEndpoint>>> {
-  let last: unknown
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      return await publishEndpoint({ instanceId, nodeId, endpoint })
-    } catch (err) {
-      last = err
-      if (!/has not registered/.test((err as Error).message)) throw err
-      await new Promise((resolve) => setTimeout(resolve, 600))
-    }
-  }
-  throw last as Error
-}
-
 /** Publishes without letting a Portal problem fail the caller's request. */
 async function tryPublish(
   instanceId: string,
@@ -344,7 +320,7 @@ async function tryPublish(
   const nodeId = nodeForEndpoint(instanceId)
   if (!nodeId) return null
   try {
-    const mapping = await publishWithRetry(instanceId, nodeId, endpoint)
+    const mapping = await publishEndpointWithRetry({ instanceId, nodeId, endpoint })
     return mapping ? describeMapping(mapping) : null
   } catch {
     return null

@@ -419,6 +419,11 @@ export async function registerServerRoutes(app: FastifyInstance): Promise<void> 
           // out of this whitelist meant those writes were accepted and then
           // silently dropped.
           groupId: 'groupId' in patch ? (patch.groupId ?? null) : metadata.groupId,
+          // Carried when a server moves node: the endpoints are part of what
+          // the server *is*, and leaving them out meant a migrated server
+          // arrived without its voice chat or map port and the old node kept
+          // relaying for services that were no longer there.
+          endpoints: 'endpoints' in patch ? (patch.endpoints ?? []) : metadata.endpoints,
           projectId: patch.projectId ?? metadata.projectId
         }
         await saveInstanceMetadata(next)
