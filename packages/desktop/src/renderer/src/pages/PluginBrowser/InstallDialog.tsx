@@ -43,6 +43,7 @@ const useStyles = makeStyles({
   },
   surface: { maxWidth: 'min(560px, calc(100vw - 48px))' },
   title: { overflowWrap: 'anywhere' },
+  replaceBlock: { display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' },
   versionMeta: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' },
   hint: { color: tokens.colorNeutralForeground3 }
 })
@@ -73,6 +74,8 @@ export function InstallDialog({
   const [endpoint, setEndpoint] = useState<AddonEndpoint | null>(null)
   const [noMatchReason, setNoMatchReason] = useState<string | null>(null)
   const [showAllBuilds, setShowAllBuilds] = useState(false)
+  const [confirmReplace, setConfirmReplace] = useState(false)
+  const [replacedPath, setReplacedPath] = useState<string | null>(null)
 
   // Every place this plugin can be fetched from, primary first.
   const sourceChoices = plugin
@@ -93,6 +96,8 @@ export function InstallDialog({
     setEndpoint(null)
     setNoMatchReason(null)
     setShowAllBuilds(false)
+    setConfirmReplace(false)
+    setReplacedPath(null)
     setInstanceId(preselectedInstanceId ?? instances[0]?.id ?? null)
     setChosenSource(plugin.source)
   }, [plugin, preselectedInstanceId, instances])
@@ -142,12 +147,38 @@ export function InstallDialog({
   const rejected = versions?.filter((v) => v.compatibility?.compatible === false) ?? []
   const shownVersions = showAllBuilds ? (versions ?? []) : usable
 
+  /** Worlds, datapacks and resource packs are not loaded by the server jar. */
+  const isServerContent =
+    plugin?.kind === 'world' || plugin?.kind === 'datapack' || plugin?.kind === 'resourcepack'
+  const replacesWorld = plugin?.kind === 'world'
+
   async function handleInstall(): Promise<void> {
     if (!plugin || !selectedVersion || !instanceId) return
     setInstalling(true)
     setError(null)
     try {
       const choice = sourceChoices.find((c) => c.source === chosenSource)
+
+      /**
+       * A world does not go through the add-on path at all — it replaces the
+       * save rather than adding a file beside it, and sharing a code path
+       * with "drop a jar in a folder" is how that becomes a click nobody
+       * expected to be destructive.
+       */
+      if (isServerContent) {
+        const outcome = await api().content.install(instanceId, {
+          source: choice?.source ?? plugin.source,
+          projectId: choice?.id ?? plugin.id,
+          name: plugin.name,
+          kind: plugin.kind as 'world' | 'datapack' | 'resourcepack',
+          replaceExistingWorld: replacesWorld ? confirmReplace : undefined
+        })
+        setReplacedPath(outcome.replacedBackupPath ?? null)
+        setDone(true)
+        onInstalled()
+        return
+      }
+
       const result = await api().addons.install(
         instanceId,
         selectedVersion,
@@ -330,6 +361,35 @@ export function InstallDialog({
               />
             )}
 
+            {/*
+              The one install that destroys something. Said plainly, and
+              gated on a switch rather than a second click in the same place
+              the harmless installs use.
+            */}
+            {replacesWorld && !done && (
+              <MessageBar intent="warning">
+                <MessageBarBody>
+                  <div className={styles.replaceBlock}>
+                    <Text>
+                      Installing a world replaces the one this server is running. The current
+                      world is moved aside rather than deleted, so it can be put back.
+                    </Text>
+                    <Switch
+                      label="Replace the current world"
+                      checked={confirmReplace}
+                      onChange={(_, d) => setConfirmReplace(d.checked)}
+                    />
+                  </div>
+                </MessageBarBody>
+              </MessageBar>
+            )}
+
+            {replacedPath && (
+              <MessageBar intent="info">
+                <MessageBarBody>{`The previous world was kept at ${replacedPath}.`}</MessageBarBody>
+              </MessageBar>
+            )}
+
             {knownWrong && (
               <MessageBar intent="error">
                 <MessageBarBody>
@@ -360,7 +420,13 @@ export function InstallDialog({
             </Button>
             <Button
               appearance={knownWrong ? 'outline' : 'primary'}
-              disabled={!selectedVersion?.downloadUrl || !instanceId || installing || done}
+              disabled={
+                !selectedVersion?.downloadUrl ||
+                !instanceId ||
+                installing ||
+                done ||
+                (replacesWorld && !confirmReplace)
+              }
               onClick={handleInstall}
             >
               {installing ? 'Installing…' : knownWrong ? 'Install anyway' : 'Install'}

@@ -51,6 +51,11 @@ export {
 
 export { auditInstalledAddons, removeAddons } from './services/plugins/audit'
 export {
+  installContent,
+  type ContentInstallOptions,
+  type ContentInstallResult
+} from './services/plugins/contentInstaller'
+export {
   planInstall,
   isClientOnly,
   clientOnlyInstalled,

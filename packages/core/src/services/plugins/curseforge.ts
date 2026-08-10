@@ -15,12 +15,18 @@ const MINECRAFT_GAME_ID = 432
 const BUKKIT_PLUGINS_CLASS_ID = 5
 const MODS_CLASS_ID = 6
 const MODPACKS_CLASS_ID = 4471
+const WORLDS_CLASS_ID = 17
+const RESOURCE_PACKS_CLASS_ID = 12
+const DATA_PACKS_CLASS_ID = 6945
 
 /** CurseForge separates its catalogue by class id rather than a type field. */
 const CLASS_ID_BY_KIND: Record<ContentKind, number> = {
   plugin: BUKKIT_PLUGINS_CLASS_ID,
   mod: MODS_CLASS_ID,
-  modpack: MODPACKS_CLASS_ID
+  modpack: MODPACKS_CLASS_ID,
+  world: WORLDS_CLASS_ID,
+  resourcepack: RESOURCE_PACKS_CLASS_ID,
+  datapack: DATA_PACKS_CLASS_ID
 }
 
 /**

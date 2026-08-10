@@ -15,6 +15,8 @@ import {
   ServerLink24Filled,
   PeopleTeam24Regular,
   PeopleTeam24Filled,
+  Globe24Regular,
+  Globe24Filled,
   bundleIcon
 } from '@fluentui/react-icons'
 
@@ -22,11 +24,20 @@ const DashboardIcon = bundleIcon(Grid24Filled, Grid24Regular)
 const PluginsIcon = bundleIcon(AppsAddIn24Filled, AppsAddIn24Regular)
 const ModsIcon = bundleIcon(Box24Filled, Box24Regular)
 const ModpackIcon = bundleIcon(Layer24Filled, Layer24Regular)
+const WorldsIcon = bundleIcon(Globe24Filled, Globe24Regular)
 const NodesIcon = bundleIcon(ServerLink24Filled, ServerLink24Regular)
 const AdminIcon = bundleIcon(PeopleTeam24Filled, PeopleTeam24Regular)
 const SettingsIcon = bundleIcon(Settings24Filled, Settings24Regular)
 
-export type NavKey = 'dashboard' | 'plugins' | 'mods' | 'modpacks' | 'nodes' | 'admin' | 'settings'
+export type NavKey =
+  | 'dashboard'
+  | 'plugins'
+  | 'mods'
+  | 'modpacks'
+  | 'content'
+  | 'nodes'
+  | 'admin'
+  | 'settings'
 
 const useStyles = makeStyles({
   root: {
@@ -92,6 +103,7 @@ const items: { key: NavKey; label: string; Icon: typeof DashboardIcon; adminOnly
   { key: 'plugins', label: 'Plugins', Icon: PluginsIcon },
   { key: 'mods', label: 'Mods', Icon: ModsIcon },
   { key: 'modpacks', label: 'Modpacks', Icon: ModpackIcon },
+  { key: 'content', label: 'Worlds', Icon: WorldsIcon },
   { key: 'nodes', label: 'Nodes', Icon: NodesIcon },
   { key: 'admin', label: 'Admin', Icon: AdminIcon, adminOnly: true },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon }

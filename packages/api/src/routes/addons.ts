@@ -1,3 +1,5 @@
+import { readFile } from 'fs/promises'
+import { join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import {
   addEndpoint,
@@ -22,6 +24,7 @@ import {
   uninstallPlugin,
   auditInstalledAddons,
   getProvider,
+  installContent,
   planInstall,
   removeAddons,
   resolveBestVersion,
@@ -106,6 +109,24 @@ async function provisionAddonEndpoint(
     return { ...endpoint, configHint: profile.configHint }
   } catch {
     return null
+  }
+}
+
+/**
+ * The server's world folder name.
+ *
+ * Read from `server.properties` rather than assumed, because datapacks live
+ * inside the world and a server with `level-name=survival` would otherwise
+ * have them installed into a folder Minecraft never reads. Falls back to the
+ * default when the file cannot be read, which is what a fresh server has.
+ */
+async function levelNameFor(instancePath: string): Promise<string> {
+  try {
+    const text = await readFile(join(instancePath, 'server.properties'), 'utf-8')
+    const match = text.match(/^level-name=(.+)$/m)
+    return match?.[1]?.trim() || 'world'
+  } catch {
+    return 'world'
   }
 }
 
@@ -395,6 +416,73 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
           Array.isArray(request.body?.filenames) ? request.body.filenames : []
         )
         return { removed }
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /**
+   * Installs a world, datapack or resource pack.
+   *
+   * Separate from the add-on route because these are not code the server
+   * loads, and one of them replaces the save. Sharing a path with "drop a jar
+   * in a folder" is how a click that looked like every other install would
+   * quietly delete a world.
+   */
+  app.post<{
+    Params: { id: string }
+    Body: {
+      source: PluginSource
+      projectId: string
+      name: string
+      kind: ContentKind
+      /** Required for a world: it replaces the one players are standing in. */
+      replaceExistingWorld?: boolean
+    }
+  }>(
+    '/api/servers/:id/content/install',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      const kind = request.body?.kind
+      if (kind !== 'world' && kind !== 'datapack' && kind !== 'resourcepack') {
+        return reply
+          .code(400)
+          .send({ error: 'Mods and plugins install through the add-ons route.' })
+      }
+
+      let metadata
+      try {
+        metadata = await loadInstanceMetadata(request.params.id)
+      } catch (err) {
+        return reply.code(404).send({ error: (err as Error).message })
+      }
+
+      try {
+        const resolved = await resolveBestVersion(
+          request.body.source,
+          request.body.projectId,
+          {
+            serverType: metadata.serverType,
+            minecraftVersion: metadata.minecraftVersion
+          },
+          kind
+        )
+        if (!resolved.version) {
+          return reply.code(409).send({ error: resolved.reason ?? 'No compatible download found.' })
+        }
+
+        const result = await installContent(
+          metadata.path,
+          kind,
+          resolved.version,
+          request.body.name,
+          {
+            levelName: await levelNameFor(metadata.path),
+            replaceExistingWorld: request.body.replaceExistingWorld === true
+          }
+        )
+        return { ...result, version: resolved.version }
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

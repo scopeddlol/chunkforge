@@ -110,9 +110,23 @@ export function judgeCompatibility(
 ): CompatibilityVerdict {
   const accepted = platformsForServer(target.serverType)
 
+  /**
+   * Worlds, datapacks and resource packs are not loaded by a server jar, so
+   * the loader question does not apply to them — a datapack works the same on
+   * Paper as on vanilla. Judging them on platform would rule out the entire
+   * catalogue for every server, which is a worse answer than none at all.
+   */
+  const loadsIntoServer = result.kind === undefined || result.kind === 'mod' || result.kind === 'plugin'
+  if (!loadsIntoServer) {
+    if (result.gameVersions?.length && !anyVersionMatches(result.gameVersions, target.minecraftVersion)) {
+      return { compatible: false, certain: true, reason: `No build for ${target.minecraftVersion}` }
+    }
+    return { compatible: true, certain: Boolean(result.gameVersions?.length) }
+  }
+
   // A vanilla server runs no plugins or mods at all. Saying so plainly beats
   // an empty result list the user has to interpret.
-  if (accepted.length === 0 && result.kind !== 'modpack') {
+  if (accepted.length === 0) {
     return { compatible: false, certain: true, reason: 'Vanilla servers cannot load plugins or mods' }
   }
 

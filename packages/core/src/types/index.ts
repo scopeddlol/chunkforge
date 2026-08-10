@@ -429,7 +429,45 @@ export interface PluginAlternative {
  * CurseForge uses class ids, Hangar only has plugins — so every provider
  * normalises to this before anything downstream sees it.
  */
-export type ContentKind = 'plugin' | 'mod' | 'modpack'
+/**
+ * What a piece of content is, which decides where it lands.
+ *
+ * A world is not a plugin with a different folder — it replaces the server's
+ * save, so it is the one kind whose install destroys something. Keeping them
+ * in one enum anyway is what lets a single browser, a single search and a
+ * single install path serve all of them.
+ */
+export type ContentKind =
+  | 'plugin'
+  | 'mod'
+  | 'modpack'
+  | 'datapack'
+  | 'resourcepack'
+  | 'world'
+
+/** Kinds that install as files rather than replacing the world. */
+export const ADDON_KINDS: ContentKind[] = ['plugin', 'mod']
+
+/**
+ * Where each kind is installed, relative to the instance folder.
+ *
+ * Datapacks live inside the world because that is where Minecraft looks for
+ * them — they are per-save, not per-server. Resource packs have no standard
+ * server folder at all, since a server normally points players at a URL; the
+ * folder exists so the file is somewhere predictable to serve from.
+ */
+export function contentFolder(kind: ContentKind, levelName = 'world'): string | null {
+  switch (kind) {
+    case 'datapack':
+      return `${levelName}/datapacks`
+    case 'resourcepack':
+      return 'resourcepacks'
+    case 'world':
+      return levelName
+    default:
+      return null
+  }
+}
 
 /**
  * The platform a piece of content runs on.

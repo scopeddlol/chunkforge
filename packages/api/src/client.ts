@@ -436,6 +436,27 @@ export class ChunkforgeClient {
       this.del<{ ok: true }>(`/api/servers/${id}/endpoints/${encodeURIComponent(endpointId)}`)
   }
 
+  /**
+   * Worlds, datapacks and resource packs. Separate from add-ons because these
+   * are not code the server loads, and a world install replaces the save.
+   */
+  content = {
+    install: (
+      id: string,
+      input: {
+        source: PluginSource
+        projectId: string
+        name: string
+        kind: ContentKind
+        replaceExistingWorld?: boolean
+      }
+    ) =>
+      this.post<{ path: string; replacedBackupPath?: string; version: PluginVersion }>(
+        `/api/servers/${id}/content/install`,
+        input
+      )
+  }
+
   // ---- modpacks ----
   modpacks = {
     search: (query: string, limit = 20) =>

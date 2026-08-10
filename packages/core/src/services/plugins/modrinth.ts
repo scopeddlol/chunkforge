@@ -8,12 +8,24 @@ import type {
 } from '../../types/index'
 import { toPlatform } from './compatibility'
 
-/** Modrinth's project_type maps onto our kinds directly, bar the naming. */
+/**
+ * Modrinth's project_type maps onto our kinds directly, bar the naming.
+ *
+ * Modrinth has no world type — worlds are a CurseForge category — so a search
+ * for one simply returns nothing here rather than being mistranslated into
+ * something else.
+ */
 function toKind(projectType: string | undefined): ContentKind | null {
-  if (projectType === 'plugin' || projectType === 'mod' || projectType === 'modpack') {
-    return projectType
+  switch (projectType) {
+    case 'plugin':
+    case 'mod':
+    case 'modpack':
+    case 'datapack':
+    case 'resourcepack':
+      return projectType
+    default:
+      return null
   }
-  return null
 }
 import { fetchJson, type PluginProvider, type VersionQuery } from './provider'
 
@@ -97,6 +109,17 @@ export const modrinthProvider: PluginProvider = {
      */
     const projectTypes: ContentKind[] = kind ? [kind] : ['mod', 'plugin']
     const facets: string[][] = [projectTypes.map((t) => `project_type:${t}`)]
+
+    /**
+     * Only code loaded by the server is filtered by side and loader.
+     *
+     * A resource pack is `server_side: unsupported` by its nature — that is
+     * what a resource pack *is* — so the client-only filter would return an
+     * empty catalogue. Datapacks are tagged with the `datapack` loader rather
+     * than the server's, so asking for `categories:purpur` would do the same.
+     * Both filters exist to keep mods honest and neither applies here.
+     */
+    const loadsIntoServer = projectTypes.every((t) => t === 'mod' || t === 'plugin' || t === 'modpack')
     /**
      * Exclude client-only projects, and nothing else.
      *
@@ -106,9 +129,11 @@ export const modrinthProvider: PluginProvider = {
      * working plugins to avoid showing a few useless ones — the wrong trade in
      * a browser whose job is to find things.
      */
-    facets.push(['server_side:required', 'server_side:optional', 'server_side:unknown'])
+    if (loadsIntoServer) {
+      facets.push(['server_side:required', 'server_side:optional', 'server_side:unknown'])
+    }
     if (gameVersion) facets.push([`versions:${gameVersion}`])
-    if (loader) facets.push([`categories:${loader}`])
+    if (loader && loadsIntoServer) facets.push([`categories:${loader}`])
 
     const params = new URLSearchParams({
       query,

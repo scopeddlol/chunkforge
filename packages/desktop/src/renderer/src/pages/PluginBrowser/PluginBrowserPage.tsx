@@ -21,6 +21,7 @@ import {
   pluginSourceLabels,
   type PluginSearchResult,
   type PluginSource,
+  type ContentKind,
   type InstanceSummary,
   type ServerType
 } from '@shared/types'
@@ -100,8 +101,12 @@ const useStyles = makeStyles({
 })
 
 interface PluginBrowserPageProps {
-  /** Plugin mode searches Bukkit-style plugins; mod mode searches loader mods. */
-  mode?: 'plugins' | 'mods'
+  /**
+   * Plugin mode searches Bukkit-style plugins, mod mode searches loader mods,
+   * and content mode covers everything a server holds but does not load —
+   * worlds, datapacks and resource packs.
+   */
+  mode?: 'plugins' | 'mods' | 'content'
   scopedInstanceId?: string | null
 }
 
@@ -113,6 +118,16 @@ interface PluginBrowserPageProps {
  * Paper, Spigot and Bukkit content, because sources tag a project with every
  * platform it supports rather than only the newest.
  */
+/** The three kinds a server holds but does not load. */
+const CONTENT_LABELS: Record<ContentKind, string> = {
+  world: 'Worlds',
+  datapack: 'Datapacks',
+  resourcepack: 'Resource packs',
+  plugin: 'Plugins',
+  mod: 'Mods',
+  modpack: 'Modpacks'
+}
+
 function primaryPlatform(serverType: ServerType): string | undefined {
   return platformsForServer(serverType)[0]
 }
@@ -138,6 +153,8 @@ export function PluginBrowserPage({
   // keeping two sources of truth is how they end up disagreeing.
   const [attachedId, setAttachedId] = useState<string | null>(scopedInstanceId)
   const [hideIncompatible, setHideIncompatible] = useState(true)
+  /** Which of the three content kinds is being browsed, in content mode. */
+  const [contentKind, setContentKind] = useState<ContentKind>('world')
   const [hasMore, setHasMore] = useState(false)
   const [nextOffset, setNextOffset] = useState(0)
   const [filteredOut, setFilteredOut] = useState(0)
@@ -173,7 +190,13 @@ export function PluginBrowserPage({
       sources: PluginSource[],
       version: string,
       loader: string,
-      options?: { offset?: number; attached?: InstanceSummary | null; hide?: boolean }
+      options?: {
+        offset?: number
+        attached?: InstanceSummary | null
+        hide?: boolean
+        /** Set when the picker changed and state has not caught up yet. */
+        kind?: ContentKind
+      }
     ) => {
       const offset = options?.offset ?? 0
       const attached = options?.attached
@@ -203,7 +226,20 @@ export function PluginBrowserPage({
            * Paper server wants everything that runs on Paper, and several of
            * those are typed as mods by their source.
            */
-          kind: attached ? undefined : mode === 'mods' ? 'mod' : 'plugin',
+          /**
+           * Content kinds are always explicit — a world and a plugin have
+           * nothing in common and merging them into one result list would be
+           * a grid nobody could use. Only mods and plugins are searched
+           * together, and only when a server decides what fits.
+           */
+          kind:
+            mode === 'content'
+              ? (options?.kind ?? contentKind)
+              : attached
+                ? undefined
+                : mode === 'mods'
+                  ? 'mod'
+                  : 'plugin',
           offset,
           limit: 20
         })
@@ -219,7 +255,7 @@ export function PluginBrowserPage({
         setLoadingMore(false)
       }
     },
-    [hideIncompatible, mode]
+    [hideIncompatible, mode, contentKind]
   )
 
   // Start from the sources enabled in Settings, then show popular plugins so
@@ -267,7 +303,7 @@ export function PluginBrowserPage({
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <Title2>{mode === 'mods' ? 'Mods' : 'Plugins'}</Title2>
+        <Title2>{mode === 'content' ? CONTENT_LABELS[contentKind] : mode === 'mods' ? 'Mods' : 'Plugins'}</Title2>
         <Text className={styles.subtitle} block>
           {scopedInstance
             ? `Browsing for ${scopedInstance.name}`
@@ -398,6 +434,29 @@ export function PluginBrowserPage({
             ))}
           </Dropdown>
         </Field>
+        {mode === 'content' && (
+          <Field label="Kind" className={styles.filterField}>
+            <Dropdown
+              value={CONTENT_LABELS[contentKind]}
+              selectedOptions={[contentKind]}
+              onOptionSelect={(_, d) => {
+                const next = (d.optionValue as ContentKind) ?? 'world'
+                setContentKind(next)
+                void runSearch(term, activeSources, versionFilter, loaderFilter, {
+                  attached: attached ?? null,
+                  kind: next
+                })
+              }}
+            >
+              {(Object.keys(CONTENT_LABELS) as ContentKind[]).map((kind) => (
+                <Option key={kind} value={kind}>
+                  {CONTENT_LABELS[kind]}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+        )}
+
         {(versionFilter || loaderFilter) && (
           <Button
             size="small"

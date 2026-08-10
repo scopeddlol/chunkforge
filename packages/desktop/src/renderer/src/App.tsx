@@ -111,7 +111,7 @@ export function App(): JSX.Element {
 
   function handleSelectNav(key: NavKey): void {
     setOverlay(null)
-    if (key !== 'plugins' && key !== 'mods') setPluginScopeId(null)
+    if (key !== 'plugins' && key !== 'mods' && key !== 'content') setPluginScopeId(null)
     setActiveNav(key)
   }
 
@@ -161,6 +161,9 @@ export function App(): JSX.Element {
               <PluginBrowserPage mode="mods" scopedInstanceId={pluginScopeId} />
             )}
             {!overlay && activeNav === 'modpacks' && <ModpackPage />}
+            {!overlay && activeNav === 'content' && (
+              <PluginBrowserPage mode="content" scopedInstanceId={pluginScopeId} />
+            )}
             {!overlay && activeNav === 'nodes' && <NodesPage />}
             {!overlay && activeNav === 'admin' && isAdmin && <AdminPage />}
             {!overlay && activeNav === 'settings' && <SettingsPage />}
