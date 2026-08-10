@@ -77,6 +77,7 @@ export const spigetProvider: PluginProvider = {
         versionNumber: 'latest',
         gameVersions: resource.testedVersions ?? [],
         loaders: ['spigot', 'bukkit', 'paper'],
+        platforms: ['spigot', 'bukkit', 'paper'],
         downloadUrl: canAutoDownload ? `${BASE}/resources/${projectId}/download` : null,
         externalUrl: canAutoDownload ? null : resourceUrl,
         filename: null,

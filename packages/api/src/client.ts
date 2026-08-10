@@ -20,6 +20,7 @@ import type {
   PluginSearchResult,
   PluginSource,
   PluginVersion,
+  ContentKind,
   EndpointProtocol,
   ServerEndpoint,
   ServerGroup,
@@ -338,10 +339,33 @@ export class ChunkforgeClient {
     search: (query: PluginSearchQuery) => this.post<PluginSearchResponse>('/api/addons/search', query),
     sources: () => this.get<PluginSource[]>('/api/addons/sources'),
     gameVersions: () => this.get<GameVersionOption[]>('/api/addons/game-versions'),
-    versions: (source: PluginSource, projectId: string) =>
-      this.get<PluginVersion[]>(
-        `/api/addons/versions?source=${source}&projectId=${encodeURIComponent(projectId)}`
-      ),
+    /**
+     * A project's builds. Naming the server it is for changes the order: the
+     * first entry becomes the one to install rather than the newest.
+     */
+    versions: (
+      source: PluginSource,
+      projectId: string,
+      target?: { instanceId?: string; serverType?: ServerType; minecraftVersion?: string; kind?: ContentKind }
+    ) => {
+      const query = new URLSearchParams({ source, projectId })
+      if (target?.instanceId) query.set('instanceId', target.instanceId)
+      if (target?.serverType) query.set('serverType', target.serverType)
+      if (target?.minecraftVersion) query.set('minecraftVersion', target.minecraftVersion)
+      if (target?.kind) query.set('kind', target.kind)
+      return this.get<PluginVersion[]>(`/api/addons/versions?${query.toString()}`)
+    },
+    /**
+     * Install a project and let Chunkforge choose the build. This is the call
+     * a one-click button makes; picking a specific file is the exception.
+     */
+    installBest: (
+      id: string,
+      input: { source: PluginSource; projectId: string; name: string; kind?: ContentKind }
+    ) => this.post<AddonInstallResult & { version: PluginVersion }>(
+      `/api/servers/${id}/addons/install`,
+      input
+    ),
     installed: (id: string) => this.get<InstalledPlugin[]>(`/api/servers/${id}/addons`),
     /**
      * `projectId` is the source's own slug, and is what an endpoint profile is

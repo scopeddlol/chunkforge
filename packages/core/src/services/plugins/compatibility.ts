@@ -4,6 +4,9 @@ import type {
   PluginSearchResult,
   ServerType
 } from '../../types/index'
+import { platformsForServer } from '../../types/index'
+
+export { platformsForServer }
 
 /**
  * Deciding whether a piece of content can run on a given server.
@@ -20,28 +23,6 @@ import type {
  * Hence `certain`, and why filtering only ever removes results we are sure
  * about.
  */
-
-/** Everything a server accepts, widest first. */
-const PLATFORMS_BY_SERVER: Record<ServerType, ContentPlatform[]> = {
-  // Bukkit-family servers run each other's plugins: Paper runs Spigot and
-  // Bukkit plugins, Purpur runs Paper's. Listing the ancestry rather than just
-  // the server's own name is what stops a Paper server hiding most of Spigot's
-  // catalogue, which is the bulk of what exists.
-  paper: ['paper', 'spigot', 'bukkit', 'folia'],
-  purpur: ['purpur', 'paper', 'spigot', 'bukkit', 'folia'],
-  spigot: ['spigot', 'bukkit'],
-  fabric: ['fabric', 'quilt'],
-  forge: ['forge'],
-  // NeoForge forked from Forge and still runs a good deal of it, but the split
-  // is real enough that a Forge-only mod is a maybe, not a yes. Treated as
-  // supported here and reported as uncertain below.
-  neoforge: ['neoforge', 'forge'],
-  vanilla: []
-}
-
-export function platformsForServer(serverType: ServerType): ContentPlatform[] {
-  return PLATFORMS_BY_SERVER[serverType] ?? []
-}
 
 /** The server this browser is comparing against. */
 export interface CompatibilityTarget {

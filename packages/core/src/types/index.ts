@@ -451,6 +451,36 @@ export type ContentPlatform =
   | 'neoforge'
   | 'quilt'
 
+/** Everything a server accepts, widest first. */
+const PLATFORMS_BY_SERVER: Record<ServerType, ContentPlatform[]> = {
+  // Bukkit-family servers run each other's plugins: Paper runs Spigot and
+  // Bukkit plugins, Purpur runs Paper's. Listing the ancestry rather than just
+  // the server's own name is what stops a Paper server hiding most of Spigot's
+  // catalogue, which is the bulk of what exists.
+  paper: ['paper', 'spigot', 'bukkit', 'folia'],
+  purpur: ['purpur', 'paper', 'spigot', 'bukkit', 'folia'],
+  spigot: ['spigot', 'bukkit'],
+  fabric: ['fabric', 'quilt'],
+  forge: ['forge'],
+  // NeoForge forked from Forge and still runs a good deal of it, but the split
+  // is real enough that a Forge-only mod is a maybe, not a yes. Treated as
+  // supported here and reported as uncertain below.
+  neoforge: ['neoforge', 'forge'],
+  vanilla: []
+}
+
+/**
+ * Which platforms a server accepts.
+ *
+ * Lives in the types module rather than beside the compatibility rules because
+ * the browser UI needs it too, and the UI bundle cannot import anything that
+ * touches disk or spawns processes. It is a table, not logic.
+ */
+export function platformsForServer(serverType: ServerType): ContentPlatform[] {
+  return PLATFORMS_BY_SERVER[serverType] ?? []
+}
+
+
 /**
  * Whether a result can actually run on the server the browser is attached to,
  * and why not when it cannot.
@@ -494,19 +524,72 @@ export interface PluginSearchResult {
   compatibility?: CompatibilityVerdict
   /** Recency signal for sorting; sources that omit it sort last. */
   updatedAt?: string | null
+  /**
+   * Whether this runs on the client, the server, or both.
+   *
+   * A mod marked `client: required, server: unsupported` is a shader or a
+   * minimap: installing it on a server does nothing at best. Sources that say
+   * nothing leave these `unknown`, which reads as "no information" rather than
+   * as permission to install.
+   */
+  clientSide?: SideSupport
+  serverSide?: SideSupport
 }
+
+/**
+ * Something one file needs, or refuses to sit beside.
+ *
+ * Sources disagree about vocabulary but agree about the shape: a pointer to
+ * another project plus what the relationship is. `embedded` matters as much as
+ * `required` — a mod that bundles its own library must not have that library
+ * installed a second time.
+ */
+export interface ContentDependency {
+  source: PluginSource
+  projectId: string
+  /** Pinned build, when the source names one rather than just the project. */
+  versionId?: string
+  kind: 'required' | 'optional' | 'incompatible' | 'embedded'
+  /** Filled in once resolved, for anything that has to show a name. */
+  name?: string
+}
+
+/**
+ * Which side of a Minecraft connection a piece of content runs on.
+ *
+ * The distinction is the difference between a mod that works and one that does
+ * nothing at all: Sodium installed on a server is a wasted download, and on a
+ * modpack server it is a crash. `unknown` is a real answer — a source that
+ * publishes nothing here must not be guessed at.
+ */
+export type SideSupport = 'required' | 'optional' | 'unsupported' | 'unknown'
 
 export interface PluginVersion {
   id: string
   name: string
   versionNumber: string
   gameVersions: string[]
+  /** Loader ids exactly as the source spelled them. */
   loaders: string[]
+  /**
+   * `loaders` normalised.
+   *
+   * Kept beside the raw list rather than replacing it because an unrecognised
+   * loader must stay visible as "something we do not know about" instead of
+   * silently vanishing — dropping it here is what would let a file with no
+   * recognised platform read as a file with no platform restriction.
+   */
+  platforms?: ContentPlatform[]
   /** Null when the source only links out (e.g. Hangar entries hosted on GitHub). */
   downloadUrl: string | null
   externalUrl: string | null
   filename: string | null
   sha1: string | null
+  releasedAt?: string | null
+  /** What this build needs beside it. */
+  dependencies?: ContentDependency[]
+  /** Set when the caller named a server to judge against. */
+  compatibility?: CompatibilityVerdict
 }
 
 export interface InstalledPlugin {

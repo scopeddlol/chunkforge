@@ -14,12 +14,28 @@ export interface SearchFilters {
   kind?: ContentKind
 }
 
+/**
+ * What the caller already knows about the server a file is destined for.
+ *
+ * Passed down so a provider can narrow at the API rather than downloading a
+ * project's entire history — some have hundreds of builds. Deliberately never
+ * used to filter by *loader*: the whole point of asking is to be able to say
+ * "this project only ships Fabric builds for your version", and a list already
+ * filtered to Paper cannot tell you that.
+ */
+export interface VersionQuery {
+  /** Narrows to builds for one Minecraft version where the API supports it. */
+  gameVersion?: string
+  /** The kind the project was found under, for sources that infer from it. */
+  kind?: ContentKind
+}
+
 export interface PluginProvider {
   readonly source: PluginSource
   /** Whether the provider is usable right now (e.g. CurseForge needs an API key). */
   isAvailable(): boolean
   search(query: string, filters: SearchFilters, limit: number): Promise<PluginSearchResult[]>
-  listVersions(projectId: string): Promise<PluginVersion[]>
+  listVersions(projectId: string, query?: VersionQuery): Promise<PluginVersion[]>
 }
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

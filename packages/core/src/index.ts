@@ -49,6 +49,17 @@ export {
   type AddEndpointRequest
 } from './services/endpoints'
 
+// Content compatibility and selection
+export {
+  judgeVersion,
+  judgeVersions,
+  bestVersion,
+  explainNoMatch,
+  acceptsContent,
+  compareGameVersions,
+  MatchRank,
+  type JudgedVersion
+} from './services/plugins/selection'
 // Ports
 export {
   isPortFree,
@@ -61,6 +72,7 @@ export {
 export {
   searchPlugins,
   listPluginVersions,
+  resolveBestVersion,
   listInstalledPlugins,
   installPlugin,
   setPluginEnabled,
@@ -76,6 +88,7 @@ export {
   platformsForServer,
   toPlatform,
   versionMatches,
+  anyVersionMatches,
   type CompatibilityTarget
 } from './services/plugins/compatibility'
 export { installModpack, readModpackTarget, loaderToServerType } from './services/modpackService'

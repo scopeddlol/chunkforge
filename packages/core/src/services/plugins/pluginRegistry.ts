@@ -2,6 +2,7 @@ import { existsSync } from 'fs'
 import { mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { join } from 'path'
 import type {
+  ContentKind,
   InstalledPlugin,
   PluginSearchQuery,
   PluginSearchResponse,
@@ -13,7 +14,8 @@ import type {
 import { addOnFolder } from '../../types/index'
 import { downloadFile } from '../downloadFile'
 import type { PluginProvider } from './provider'
-import { judgeCompatibility } from './compatibility'
+import { judgeCompatibility, type CompatibilityTarget } from './compatibility'
+import { bestVersion, explainNoMatch, judgeVersion, judgeVersions } from './selection'
 import { modrinthProvider } from './modrinth'
 import { hangarProvider } from './hangar'
 import { spigetProvider } from './spiget'
@@ -164,8 +166,51 @@ function mergeByIdentity(results: PluginSearchResult[]): PluginSearchResult[] {
   return merged.sort((a, b) => b.downloads - a.downloads)
 }
 
-export async function listPluginVersions(source: PluginSource, projectId: string): Promise<PluginVersion[]> {
-  return providers[source].listVersions(projectId)
+/**
+ * A project's builds, judged against the server they are destined for.
+ *
+ * The target is optional because the browser can be used without a server
+ * attached, but supplying it changes the answer in the way that matters: the
+ * list comes back ordered best-match-first, so `versions[0]` is the build to
+ * install rather than merely the newest one. Callers that ignore the ordering
+ * are still caught by the check in `installPlugin`.
+ */
+export async function listPluginVersions(
+  source: PluginSource,
+  projectId: string,
+  options: { target?: CompatibilityTarget; kind?: ContentKind } = {}
+): Promise<PluginVersion[]> {
+  const versions = await providers[source].listVersions(projectId, {
+    gameVersion: options.target?.minecraftVersion,
+    kind: options.kind
+  })
+  return options.target ? judgeVersions(versions, options.target) : versions
+}
+
+/**
+ * The one build to install, with the reason when there is none.
+ *
+ * This is what "one-click install" actually needs: not a list to choose from,
+ * but an answer. Returning the reason alongside means the caller never has to
+ * reconstruct why nothing was suitable.
+ */
+export async function resolveBestVersion(
+  source: PluginSource,
+  projectId: string,
+  target: CompatibilityTarget,
+  kind?: ContentKind
+): Promise<{ version: PluginVersion | null; reason?: string; alternatives: PluginVersion[] }> {
+  const versions = await providers[source].listVersions(projectId, {
+    gameVersion: target.minecraftVersion,
+    kind
+  })
+  const judged = judgeVersions(versions, target)
+  const best = bestVersion(versions, target)
+  return {
+    version: best,
+    reason: best ? undefined : explainNoMatch(versions, target),
+    alternatives: judged
+  }
 }
 
 /** Mods and plugins live in different folders, so callers pass the server type. */
@@ -197,15 +242,51 @@ export async function listInstalledPlugins(
   return plugins.sort((a, b) => a.filename.localeCompare(b.filename))
 }
 
+export interface InstallOptions {
+  onProgress?: (percent: number | null) => void
+  /**
+   * The server this is going onto. Supplying it turns on the compatibility
+   * check; omitting it installs whatever was asked for.
+   */
+  target?: CompatibilityTarget
+  /**
+   * Install anyway when the build is known to be wrong.
+   *
+   * Exists because the metadata is occasionally wrong and someone who knows
+   * that should not be stuck. It is deliberately a separate argument rather
+   * than a default, so nothing can pass it by accident.
+   */
+  force?: boolean
+}
+
 export async function installPlugin(
   instancePath: string,
   serverType: ServerType,
   version: PluginVersion,
   fallbackName: string,
-  onProgress?: (percent: number | null) => void
+  options: InstallOptions = {}
 ): Promise<string> {
   if (!version.downloadUrl) {
     throw new Error('This plugin has to be downloaded from its own site.')
+  }
+
+  /**
+   * The last line of defence.
+   *
+   * Everything upstream — search facets, version ordering, the dialog's
+   * default — is a way of *offering* the right build, and any one of them can
+   * regress without anyone noticing until a server will not start. This is the
+   * one place that can refuse, and it is on the machine that writes the file,
+   * so no caller can skip it by talking to the API differently.
+   */
+  const target = options.target
+  if (target && !options.force) {
+    const verdict = judgeVersion(version, target)
+    if (!verdict.compatible && verdict.certain) {
+      throw new Error(
+        `${version.name} is not compatible with ${target.serverType} ${target.minecraftVersion}: ${verdict.reason}.`
+      )
+    }
   }
 
   const dir = addOnsDir(instancePath, serverType)
@@ -215,7 +296,7 @@ export async function installPlugin(
   const destination = join(dir, filename.endsWith('.jar') ? filename : `${filename}.jar`)
 
   await downloadFile(version.downloadUrl, destination, {
-    onProgress,
+    onProgress: options.onProgress,
     sha1: version.sha1 ?? undefined
   })
 

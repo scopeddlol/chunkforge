@@ -112,6 +112,12 @@ export const hangarProvider: PluginProvider = {
         versionNumber: version.name,
         gameVersions: platform ? (version.platformDependencies?.[platform] ?? []) : [],
         loaders: platforms.map((p) => p.toLowerCase()),
+        // Hangar's platform keys are PAPER/VELOCITY/WATERFALL, so a Paper
+        // build normalises straight through. Bukkit ancestry is not implied
+        // here — that is the compatibility rules' job, not the provider's.
+        platforms: platforms
+          .map((p) => toPlatform(p))
+          .filter((p): p is ContentPlatform => p !== null),
         downloadUrl: download?.downloadUrl ?? hangarDownloadUrl,
         externalUrl: download?.externalUrl ?? null,
         filename: download?.fileInfo?.name ?? null,

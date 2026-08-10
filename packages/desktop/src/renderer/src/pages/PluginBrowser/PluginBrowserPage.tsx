@@ -17,10 +17,12 @@ import {
 } from '@fluentui/react-components'
 import { Search24Regular, ArrowClockwise20Regular } from '@fluentui/react-icons'
 import {
+  platformsForServer,
   pluginSourceLabels,
   type PluginSearchResult,
   type PluginSource,
-  type InstanceSummary
+  type InstanceSummary,
+  type ServerType
 } from '@shared/types'
 import { sourceColors } from '../../components/SourceBadge'
 import type { GameVersionOption } from '@shared/types'
@@ -103,6 +105,18 @@ interface PluginBrowserPageProps {
   scopedInstanceId?: string | null
 }
 
+/**
+ * The loader id a source should be asked about for a given server.
+ *
+ * The first entry of the server's platform list is its own name, which is the
+ * narrowest true answer — a Purpur server asks for `purpur` and gets Purpur,
+ * Paper, Spigot and Bukkit content, because sources tag a project with every
+ * platform it supports rather than only the newest.
+ */
+function primaryPlatform(serverType: ServerType): string | undefined {
+  return platformsForServer(serverType)[0]
+}
+
 export function PluginBrowserPage({
   mode = 'plugins',
   scopedInstanceId = null
@@ -172,10 +186,24 @@ export function PluginBrowserPage({
           sources,
           // An attached server decides both, so the pickers stop mattering.
           gameVersion: attached?.minecraftVersion ?? version ?? undefined,
-          loader: attached ? undefined : loader || undefined,
+          /**
+           * Tell the source what the server runs.
+           *
+           * This used to send nothing when a server was attached, on the
+           * grounds that `serverType` already said it — but the loader is what
+           * sources filter their catalogue by, and without it a Paper server
+           * was searching the whole of Modrinth and judging afterwards. Naming
+           * the platform is what makes a Paper-compatible mod show up at all.
+           */
+          loader: attached ? primaryPlatform(attached.serverType) : loader || undefined,
           serverType: attached?.serverType,
           hideIncompatible: attached ? (options?.hide ?? hideIncompatible) : false,
-          kind: mode === 'mods' ? 'mod' : 'plugin',
+          /**
+           * With a server attached the tabs stop dividing anything useful: a
+           * Paper server wants everything that runs on Paper, and several of
+           * those are typed as mods by their source.
+           */
+          kind: attached ? undefined : mode === 'mods' ? 'mod' : 'plugin',
           offset,
           limit: 20
         })
