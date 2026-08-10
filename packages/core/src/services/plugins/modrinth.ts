@@ -144,6 +144,64 @@ export const modrinthProvider: PluginProvider = {
     )
   },
 
+  async lookupByHash(sha1: string) {
+    try {
+      const version = await fetchJson<ModrinthVersion & { project_id: string }>(
+        `${BASE}/version_file/${sha1}?algorithm=sha1`
+      )
+      const file = version.files.find((f) => f.primary) ?? version.files[0]
+      return {
+        projectId: version.project_id,
+        version: {
+          id: version.id,
+          name: version.name,
+          versionNumber: version.version_number,
+          gameVersions: version.game_versions,
+          loaders: version.loaders,
+          platforms: version.loaders
+            .map(toPlatform)
+            .filter((p): p is ContentPlatform => p !== null),
+          downloadUrl: file?.url ?? null,
+          externalUrl: null,
+          filename: file?.filename ?? null,
+          sha1,
+          releasedAt: version.date_published ?? null
+        }
+      }
+    } catch {
+      // A 404 is the ordinary answer for anything Modrinth does not host.
+      return null
+    }
+  },
+
+  async getProject(projectId) {
+    const project = await fetchJson<ModrinthHit & { title: string; body?: string; loaders?: string[] }>(
+      `${BASE}/project/${projectId}`
+    )
+    return {
+      source: 'modrinth' as const,
+      id: project.slug,
+      name: project.title,
+      summary: project.description,
+      iconUrl: project.icon_url,
+      downloads: project.downloads ?? 0,
+      author: project.author ?? '',
+      sourceUrl: `https://modrinth.com/${project.project_type ?? 'mod'}/${project.slug}`,
+      categories: project.categories ?? [],
+      kind: toKind(project.project_type) ?? 'mod',
+      gameVersions: project.versions,
+      // A project's own `loaders` is the authoritative list; `categories`
+      // mixes them with themes like "adventure" and is only used at search
+      // time because search does not return the loader list.
+      platforms: (project.loaders ?? project.categories ?? [])
+        .map(toPlatform)
+        .filter((p): p is ContentPlatform => p !== null),
+      updatedAt: project.date_modified ?? null,
+      clientSide: toSide(project.client_side),
+      serverSide: toSide(project.server_side)
+    }
+  },
+
   async listVersions(projectId, query?: VersionQuery) {
     /**
      * Narrowed by game version, never by loader.

@@ -223,6 +223,36 @@ export const curseForgeProvider: PluginProvider = {
     )
   },
 
+  async getProject(projectId, kind) {
+    const data = await fetchJson<{ data: CurseForgeMod }>(`${BASE}/mods/${projectId}`, {
+      headers: authHeaders()
+    })
+    const mod = data.data
+    const resolvedKind: ContentKind = kind ?? 'mod'
+    return {
+      source: 'curseforge' as const,
+      id: String(mod.id),
+      name: mod.name,
+      summary: mod.summary,
+      iconUrl: mod.logo?.thumbnailUrl ?? null,
+      downloads: mod.downloadCount ?? 0,
+      author: mod.authors?.[0]?.name ?? 'Unknown',
+      sourceUrl: mod.links?.websiteUrl ?? 'https://www.curseforge.com/minecraft',
+      categories: (mod.categories ?? []).map((c) => c.name),
+      kind: resolvedKind,
+      gameVersions: [
+        ...new Set(
+          (mod.latestFilesIndexes ?? [])
+            .map((f) => f.gameVersion)
+            .filter((v): v is string => Boolean(v))
+        )
+      ],
+      platforms: platformsFor(mod, resolvedKind)
+      // CurseForge publishes no client/server split, so both stay unknown
+      // rather than being guessed at from the category list.
+    }
+  },
+
   async listVersions(projectId, query?: VersionQuery) {
     const params = new URLSearchParams({ pageSize: '50' })
     // A server-side narrow that only ever removes files for other Minecraft

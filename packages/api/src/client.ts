@@ -20,6 +20,7 @@ import type {
   PluginSearchResult,
   PluginSource,
   PluginVersion,
+  AddonAudit,
   ContentKind,
   EndpointProtocol,
   ServerEndpoint,
@@ -401,6 +402,11 @@ export class ChunkforgeClient {
      */
     install: (id: string, version: PluginVersion, name: string, projectId?: string, force?: boolean) =>
       this.post<AddonInstallResult>(`/api/servers/${id}/addons`, { version, name, projectId, force }),
+    /** Identifies every installed jar and flags the ones that do not belong. */
+    audit: (id: string) => this.get<AddonAudit>(`/api/servers/${id}/addons/audit`),
+    /** Removes exactly the files the caller was shown. */
+    clean: (id: string, filenames: string[]) =>
+      this.post<{ removed: string[] }>(`/api/servers/${id}/addons/audit/clean`, { filenames }),
     setEnabled: (id: string, filename: string, enabled: boolean) =>
       this.patch<{ ok: true }>(`/api/servers/${id}/addons/${encodeURIComponent(filename)}`, { enabled }),
     uninstall: (id: string, filename: string) =>

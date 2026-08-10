@@ -20,6 +20,10 @@ import {
   searchPlugins,
   setPluginEnabled,
   uninstallPlugin,
+  auditInstalledAddons,
+  getProvider,
+  planInstall,
+  removeAddons,
   resolveBestVersion,
   type CompatibilityTarget,
   type ContentKind,
@@ -252,7 +256,14 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post<{
     Params: { id: string }
-    Body: { source: PluginSource; projectId: string; name: string; kind?: ContentKind }
+    Body: {
+      source: PluginSource
+      projectId: string
+      name: string
+      kind?: ContentKind
+      /** Proceed despite a blocking warning the caller has been shown. */
+      acknowledge?: boolean
+    }
   }>(
     '/api/servers/:id/addons/install',
     { preHandler: requireRole('member') },
@@ -270,34 +281,120 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const resolved = await resolveBestVersion(
+        const installed = await listInstalledPlugins(metadata.path, metadata.serverType).catch(
+          () => []
+        )
+        const plan = await planInstall(
           request.body.source,
           request.body.projectId,
           target,
-          request.body.kind
+          getProvider,
+          { kind: request.body.kind, installed: installed.map((p) => p.filename) }
         )
-        if (!resolved.version) {
+
+        if (plan.install.length === 0) {
           // 409 rather than 400: the request was well formed, the world just
           // does not contain a build that fits.
+          return reply.code(409).send({ error: plan.reason ?? 'No compatible build found.' })
+        }
+
+        /**
+         * A blocking warning stops the install unless it is acknowledged.
+         *
+         * Client-only mods and known conflicts are the two cases: both produce
+         * a server that either does nothing new or does not start, and finding
+         * that out from a crash log is exactly the afternoon this avoids.
+         */
+        const blocking = plan.warnings.filter((w) => w.blocking)
+        if (blocking.length > 0 && !request.body.acknowledge) {
           return reply.code(409).send({
-            error: resolved.reason ?? 'No compatible build found.',
-            alternatives: resolved.alternatives.slice(0, 8)
+            error: blocking[0].message,
+            warnings: plan.warnings,
+            plan: plan.install.map((entry) => ({ name: entry.name, isDependency: entry.isDependency }))
           })
         }
 
-        const path = await installPlugin(
-          metadata.path,
-          metadata.serverType,
-          resolved.version,
-          request.body.name,
-          { target }
+        // Dependencies first: a server that is restarted mid-install should
+        // find a library without its dependant rather than the reverse.
+        const ordered = [...plan.install].sort(
+          (a, b) => Number(b.isDependency) - Number(a.isDependency)
         )
+        const written: string[] = []
+        for (const entry of ordered) {
+          written.push(
+            await installPlugin(metadata.path, metadata.serverType, entry.version, entry.name, {
+              target,
+              // Already judged by the planner against this same target.
+              force: true
+            })
+          )
+        }
+
         const endpoint = await provisionAddonEndpoint(metadata, request.body.projectId, request.body.name)
+        const root = plan.install.find((entry) => !entry.isDependency)
         return {
-          path,
-          version: resolved.version,
+          path: written[written.length - 1],
+          version: root?.version ?? null,
+          dependencies: plan.install.filter((e) => e.isDependency).map((e) => e.name),
+          warnings: plan.warnings,
           endpoint
         }
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /**
+   * What is installed, and what should not be.
+   *
+   * Every jar is identified by its hash rather than its name — a filename can
+   * be anything, and an audit that guessed from one would eventually delete
+   * the wrong mod. Files nothing can identify are reported as unidentified and
+   * never flagged, which is the honest answer for a plugin from a private
+   * build server.
+   */
+  app.get<{ Params: { id: string } }>(
+    '/api/servers/:id/addons/audit',
+    { preHandler: requireRole('viewer') },
+    async (request, reply) => {
+      try {
+        const metadata = await loadInstanceMetadata(request.params.id)
+        return await auditInstalledAddons(
+          metadata.path,
+          metadata.serverType,
+          {
+            serverType: metadata.serverType,
+            minecraftVersion: metadata.minecraftVersion
+          },
+          getProvider
+        )
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+    }
+  )
+
+  /**
+   * Removes files the audit flagged.
+   *
+   * The caller sends the filenames it was shown rather than asking for "all
+   * problems", so what is deleted is exactly what was on screen — re-deriving
+   * the list here would open a gap between the two, and the thing in that gap
+   * is somebody's mod.
+   */
+  app.post<{ Params: { id: string }; Body: { filenames: string[] } }>(
+    '/api/servers/:id/addons/audit/clean',
+    { preHandler: requireRole('member') },
+    async (request, reply) => {
+      try {
+        const metadata = await loadInstanceMetadata(request.params.id)
+        const removed = await removeAddons(
+          metadata.path,
+          metadata.serverType,
+          Array.isArray(request.body?.filenames) ? request.body.filenames : []
+        )
+        return { removed }
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

@@ -10,10 +10,16 @@ import {
   MessageBarBody
 } from '@fluentui/react-components'
 import { Delete20Regular, AddCircle24Regular, AppsAddIn24Regular } from '@fluentui/react-icons'
-import { serverTypeCategory, type InstalledPlugin, type ServerType } from '@shared/types'
+import {
+  serverTypeCategory,
+  type AddonAudit,
+  type InstalledPlugin,
+  type ServerType
+} from '@shared/types'
 import { api } from '../../api'
 
 const useStyles = makeStyles({
+  problems: { display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' },
   root: { display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: 0 },
   toolbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   hint: { color: tokens.colorNeutralForeground3 },
@@ -64,6 +70,8 @@ export function InstalledPluginsTab({
   const styles = useStyles()
   const [plugins, setPlugins] = useState<InstalledPlugin[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [audit, setAudit] = useState<AddonAudit | null>(null)
+  const [auditing, setAuditing] = useState(false)
 
   const load = useCallback(() => {
     api()
@@ -81,7 +89,41 @@ export function InstalledPluginsTab({
 
   async function remove(plugin: InstalledPlugin): Promise<void> {
     await api().addons.uninstall(instanceId, plugin.filename)
+    setAudit(null)
     load()
+  }
+
+  /**
+   * Identifies every installed jar by its hash and reports the ones that do
+   * not belong — a client-only mod, or a build for another loader. Run on
+   * request rather than on open: it hashes every file and asks a source about
+   * each, which is not something to do every time a tab is looked at.
+   */
+  async function runAudit(): Promise<void> {
+    setAuditing(true)
+    setError(null)
+    try {
+      setAudit(await api().addons.audit(instanceId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check the installed files.')
+    } finally {
+      setAuditing(false)
+    }
+  }
+
+  /** Removes exactly what the audit listed, so nothing unshown is deleted. */
+  async function cleanFlagged(): Promise<void> {
+    if (!audit || audit.problems.length === 0) return
+    setAuditing(true)
+    try {
+      await api().addons.clean(instanceId, audit.problems.map((p) => p.filename))
+      setAudit(null)
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove those files.')
+    } finally {
+      setAuditing(false)
+    }
   }
 
   if (error) {
@@ -102,10 +144,49 @@ export function InstalledPluginsTab({
             ? 'Server is running — changes apply after a restart.'
             : `${plugins.length} ${noun}${plugins.length === 1 ? '' : 's'} installed.`}
         </Text>
+        <Button size="small" disabled={auditing || plugins.length === 0} onClick={() => void runAudit()}>
+          {auditing ? 'Checking…' : 'Check compatibility'}
+        </Button>
         <Button appearance="primary" size="small" icon={<AddCircle24Regular />} onClick={onBrowse}>
           {`Browse ${noun === 'mod' ? 'Mods' : 'Plugins'}`}
         </Button>
       </div>
+
+      {audit && audit.problems.length === 0 && (
+        <MessageBar intent="success">
+          <MessageBarBody>
+            {`Every ${noun} that could be identified belongs on this server.`}
+            {audit.unidentified > 0
+              ? ` ${audit.unidentified} could not be identified — those are left alone.`
+              : ''}
+          </MessageBarBody>
+        </MessageBar>
+      )}
+
+      {/*
+        Removal is offered, never performed. These files are somebody's
+        deliberate choice often enough that deleting them automatically would
+        be worse than the problem — and an unidentified jar is never in here.
+      */}
+      {audit && audit.problems.length > 0 && (
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            <div className={styles.problems}>
+              <Text weight="semibold">
+                {`${audit.problems.length} ${noun}${audit.problems.length === 1 ? ' does' : 's do'} not belong on this server:`}
+              </Text>
+              {audit.problems.map((problem) => (
+                <Text key={problem.filename} size={200}>
+                  {problem.detail ?? problem.filename}
+                </Text>
+              ))}
+              <Button size="small" disabled={auditing} onClick={() => void cleanFlagged()}>
+                {`Remove ${audit.problems.length === 1 ? 'it' : 'them'}`}
+              </Button>
+            </div>
+          </MessageBarBody>
+        </MessageBar>
+      )}
 
       {plugins.length === 0 ? (
         <div className={styles.empty}>

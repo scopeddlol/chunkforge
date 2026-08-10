@@ -49,6 +49,16 @@ export {
   type AddEndpointRequest
 } from './services/endpoints'
 
+export { auditInstalledAddons, removeAddons } from './services/plugins/audit'
+export {
+  planInstall,
+  isClientOnly,
+  clientOnlyInstalled,
+  type InstallPlan,
+  type InstallWarning,
+  type PlannedInstall
+} from './services/plugins/dependencies'
+
 // Content compatibility and selection
 export {
   judgeVersion,

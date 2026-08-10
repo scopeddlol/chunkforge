@@ -36,6 +36,24 @@ export interface PluginProvider {
   isAvailable(): boolean
   search(query: string, filters: SearchFilters, limit: number): Promise<PluginSearchResult[]>
   listVersions(projectId: string, query?: VersionQuery): Promise<PluginVersion[]>
+  /**
+   * One project by id.
+   *
+   * Needed to follow a dependency, which names a project rather than
+   * describing it, and to read the side support that decides whether a mod
+   * belongs on a server at all. Optional because not every source can answer
+   * it — a source that cannot simply contributes no dependency graph.
+   */
+  getProject?(projectId: string, kind?: ContentKind): Promise<PluginSearchResult | null>
+  /**
+   * Identifies an already-installed file by its SHA-1.
+   *
+   * The only trustworthy way to say what a jar on disk actually is — filenames
+   * are renamed, shaded and versioned by hand, and guessing from them is how
+   * an audit ends up deleting the wrong mod. A source that cannot answer
+   * simply leaves the file unidentified, which is reported as such.
+   */
+  lookupByHash?(sha1: string): Promise<{ projectId: string; version: PluginVersion } | null>
 }
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

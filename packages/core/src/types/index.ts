@@ -592,6 +592,27 @@ export interface PluginVersion {
   compatibility?: CompatibilityVerdict
 }
 
+export interface AuditedAddon {
+  filename: string
+  sizeBytes: number
+  enabled: boolean
+  /** Null when no source could identify the file. */
+  projectId: string | null
+  source: PluginSource | null
+  name: string | null
+  /** Why this file is a problem, absent when it is fine. */
+  problem?: 'client-only' | 'wrong-platform' | 'wrong-version'
+  detail?: string
+}
+
+export interface AddonAudit {
+  addons: AuditedAddon[]
+  /** Files that are definitely a problem, in the order they should be removed. */
+  problems: AuditedAddon[]
+  /** Files nothing could identify — reported, never auto-removed. */
+  unidentified: number
+}
+
 export interface InstalledPlugin {
   filename: string
   sizeBytes: number
