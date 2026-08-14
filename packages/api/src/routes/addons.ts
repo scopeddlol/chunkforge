@@ -130,6 +130,27 @@ async function levelNameFor(instancePath: string): Promise<string> {
   }
 }
 
+/**
+ * How a pack disagrees with the server it is going onto, or null when it fits.
+ *
+ * Both halves matter and for different reasons: a loader mismatch means every
+ * mod in the pack is the wrong kind of file, and a version mismatch means they
+ * are the right kind and will still refuse to load. Naming which one it is
+ * saves the guess.
+ */
+function describeModpackMismatch(
+  declared: { serverType: ServerType; minecraftVersion: string },
+  server: { serverType: ServerType; minecraftVersion: string; name: string }
+): string | null {
+  if (declared.serverType !== server.serverType) {
+    return `This is a ${declared.serverType} pack and ${server.name} runs ${server.serverType}. Its mods will not load.`
+  }
+  if (declared.minecraftVersion !== server.minecraftVersion) {
+    return `This pack is built for Minecraft ${declared.minecraftVersion} and ${server.name} runs ${server.minecraftVersion}.`
+  }
+  return null
+}
+
 export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
   // ---- catalogue ----
 
@@ -587,7 +608,13 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post<{
     Params: { id: string }
-    Body: { source: PluginSource; downloadUrl: string; curseForgeApiKey?: string }
+    Body: {
+      source: PluginSource
+      downloadUrl: string
+      curseForgeApiKey?: string
+      /** Install despite a loader or version mismatch the caller has seen. */
+      acknowledge?: boolean
+    }
   }>(
     '/api/servers/:id/modpack',
     { preHandler: requireRole('member') },
@@ -619,9 +646,29 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
 
       try {
         const metadata = await loadInstanceMetadata(instanceId)
+
+        /**
+         * Check the pack against the server before writing anything.
+         *
+         * A Fabric 1.20.1 pack unpacked onto a Paper 1.21.10 server produces
+         * two hundred files that will never load and a server that no longer
+         * starts — and the previous behaviour was to do exactly that and
+         * report success. Reading the pack's own declared loader and version
+         * costs one download and turns a wasted evening into a sentence.
+         */
+        if (!request.body?.acknowledge) {
+          const declared = await readModpackTarget(source, downloadUrl).catch(() => null)
+          if (declared) {
+            const mismatch = describeModpackMismatch(declared, metadata)
+            if (mismatch) {
+              return reply.code(409).send({ error: mismatch, declared })
+            }
+          }
+        }
+
         // Progress goes out on the shared event socket rather than being held
         // open on this request, so any connected client can follow along.
-        await installModpack(
+        const report = await installModpack(
           source,
           downloadUrl,
           metadata.path,
@@ -630,7 +677,7 @@ export async function registerAddonRoutes(app: FastifyInstance): Promise<void> {
           // in settings, but passing it keeps both paths reading the same way.
           request.body?.curseForgeApiKey ?? key
         )
-        return { ok: true }
+        return { ok: true, ...report }
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message })
       }

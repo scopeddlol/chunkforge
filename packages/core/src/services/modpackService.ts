@@ -37,6 +37,24 @@ export interface ModpackTarget {
   minecraftVersion: string
 }
 
+/**
+ * What an install actually did.
+ *
+ * A modpack is dozens of downloads from third parties, and some of them will
+ * not be there. The old installer skipped those silently and reported success,
+ * which meant a pack that had lost four mods looked identical to one that
+ * installed perfectly — until the server started and something was missing.
+ * Reporting is the difference between a pack that "installed" and a pack you
+ * can trust.
+ */
+export interface ModpackInstallReport {
+  installed: number
+  /** Entries the pack itself marks as client-side; skipping them is correct. */
+  skippedClientOnly: string[]
+  /** Entries that should have installed and did not. */
+  failed: Array<{ name: string; reason: string }>
+}
+
 function safeJoin(root: string, relative: string): string {
   // Archive entries are untrusted; refuse anything escaping the server folder.
   const normalized = normalize(relative).replace(/^([/\\])+/, '')
@@ -128,26 +146,42 @@ export async function installModpack(
    * place instead of having to be copied onto every machine.
    */
   curseForgeApiKey?: string
-): Promise<void> {
+): Promise<ModpackInstallReport> {
   onProgress({ stage: 'downloading', message: 'Downloading modpack…', percent: 0 })
   const archivePath = await stageArchive(downloadUrl, 'install')
+  const report: ModpackInstallReport = { installed: 0, skippedClientOnly: [], failed: [] }
 
   try {
     if (source === 'modrinth') {
       const index = readMrpackIndex(archivePath)
       const serverFiles = index.files.filter((f) => f.env?.server !== 'unsupported')
+      report.skippedClientOnly = index.files
+        .filter((f) => f.env?.server === 'unsupported')
+        .map((f) => f.path.split('/').pop() ?? f.path)
 
       for (const [i, file] of serverFiles.entries()) {
+        const name = file.path.split('/').pop() ?? file.path
         const url = file.downloads[0]
-        if (!url) continue
+        if (!url) {
+          report.failed.push({ name, reason: 'the pack lists no download for it' })
+          continue
+        }
         onProgress({
           stage: 'installing',
-          message: `Installing ${file.path.split('/').pop()} (${i + 1}/${serverFiles.length})`,
+          message: `Installing ${name} (${i + 1}/${serverFiles.length})`,
           percent: Math.round((i / serverFiles.length) * 100)
         })
-        const target = safeJoin(destDir, file.path)
-        await mkdir(dirname(target), { recursive: true })
-        await downloadFile(url, target, { sha1: file.hashes?.sha1 })
+        try {
+          const target = safeJoin(destDir, file.path)
+          await mkdir(dirname(target), { recursive: true })
+          await downloadFile(url, target, { sha1: file.hashes?.sha1 })
+          report.installed += 1
+        } catch (err) {
+          // One unavailable mod must not abort a pack of two hundred, but it
+          // must not vanish either — a pack missing a mod is a pack that will
+          // not start, and the name is what makes that findable.
+          report.failed.push({ name, reason: (err as Error).message })
+        }
       }
 
       onProgress({ stage: 'installing', message: 'Applying pack config files…', percent: 100 })
@@ -177,18 +211,35 @@ export async function installModpack(
             { headers: { 'x-api-key': apiKey } }
           )
           const { downloadUrl: modUrl, fileName } = detail.data
-          // Some authors opt out of third-party distribution; skip rather than fail.
-          if (!modUrl) continue
+          if (!modUrl) {
+            // The author opted out of third-party distribution. Nothing to be
+            // done about it, but the pack is incomplete and saying which mod
+            // is the only way anyone can fetch it by hand.
+            report.failed.push({
+              name: fileName || `project ${file.projectID}`,
+              reason: 'its author does not allow third-party downloads'
+            })
+            continue
+          }
           await downloadFile(modUrl, join(modsDir, fileName))
-        } catch {
-          // A single unavailable mod shouldn't abort the whole pack.
+          report.installed += 1
+        } catch (err) {
+          report.failed.push({
+            name: `project ${file.projectID}`,
+            reason: (err as Error).message
+          })
         }
       }
 
       extractOverrides(archivePath, destDir, manifest.overrides ?? 'overrides')
     }
 
-    onProgress({ stage: 'done', message: 'Modpack installed.', percent: 100 })
+    const summary =
+      report.failed.length > 0
+        ? `Installed ${report.installed} mods; ${report.failed.length} could not be fetched.`
+        : `Installed ${report.installed} mods.`
+    onProgress({ stage: 'done', message: summary, percent: 100 })
+    return report
   } finally {
     await rm(archivePath, { force: true })
   }

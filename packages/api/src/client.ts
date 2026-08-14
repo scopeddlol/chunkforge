@@ -52,6 +52,14 @@ export interface ResolvedVersion {
   alternatives: PluginVersion[]
 }
 
+/** What a modpack install did, and what it could not do. */
+export interface ModpackInstallOutcome {
+  ok: true
+  installed: number
+  skippedClientOnly: string[]
+  failed: Array<{ name: string; reason: string }>
+}
+
 /** A server endpoint as the panel sees it: the node's half and Portal's half. */
 export interface EndpointView extends ServerEndpoint {
   mappingId?: string
@@ -472,8 +480,19 @@ export class ChunkforgeClient {
         source,
         downloadUrl
       }),
-    install: (id: string, source: PluginSource, downloadUrl: string) =>
-      this.post<{ ok: true }>(`/api/servers/${id}/modpack`, { source, downloadUrl })
+    /**
+     * Installs a pack. Refused with 409 when the pack's loader or Minecraft
+     * version disagrees with the server; pass `acknowledge` to go ahead
+     * anyway. The result reports what was skipped and what could not be
+     * fetched, because a pack missing four mods is a server that will not
+     * start and "installed" is not a useful thing to have been told.
+     */
+    install: (id: string, source: PluginSource, downloadUrl: string, acknowledge?: boolean) =>
+      this.post<ModpackInstallOutcome>(`/api/servers/${id}/modpack`, {
+        source,
+        downloadUrl,
+        acknowledge
+      })
   }
 
   // ---- players, files, backups ----

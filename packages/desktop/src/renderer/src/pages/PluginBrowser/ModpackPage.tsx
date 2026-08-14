@@ -31,11 +31,13 @@ import {
   type ServerType
 } from '@shared/types'
 import { SourceBadge } from '../../components/SourceBadge'
+import { ApiError, type ModpackInstallOutcome } from '@chunkforge/api/client'
 import { useInstancesStore } from '../../state/instancesStore'
 import { api, onEvent } from '../../api'
 import { native } from '../../native'
 
 const useStyles = makeStyles({
+  mismatch: { display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' },
   root: { flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '28px 36px 0' },
   header: { marginBottom: '18px' },
   subtitle: { color: tokens.colorNeutralForeground3, marginTop: '4px' },
@@ -108,6 +110,16 @@ export function ModpackPage(): JSX.Element {
   )
   const [progress, setProgress] = useState<ModpackInstallProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /**
+   * The server's own refusal, in its words.
+   *
+   * Distinct from the `mismatch` hint below, which is this page comparing the
+   * two itself to grey the button out early. When the two disagree the
+   * server's answer is the one that matters — it is the one that decides
+   * whether files get written.
+   */
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<ModpackInstallOutcome | null>(null)
 
   const search = useCallback(async (query: string) => {
     setLoading(true)
@@ -169,13 +181,29 @@ export function ModpackPage(): JSX.Element {
         packTarget.minecraftVersion !== selectedInstance.minecraftVersion
       : false
 
-  async function install(): Promise<void> {
+  /**
+   * `acknowledge` is only ever sent after the server has already refused once
+   * and said why — a mismatched pack is a wasted evening, and the second click
+   * is the point at which that becomes an informed choice.
+   */
+  async function install(acknowledge = false): Promise<void> {
     if (!target || !selectedVersion?.downloadUrl || !instanceId) return
     setError(null)
+    setRefusal(null)
+    setOutcome(null)
     try {
-      await api().modpacks.install(instanceId, target.source, selectedVersion.downloadUrl)
+      const result = await api().modpacks.install(
+        instanceId,
+        target.source,
+        selectedVersion.downloadUrl,
+        acknowledge
+      )
+      setOutcome(result)
     } catch (err) {
-      setError((err as Error).message)
+      // 409 is the pack disagreeing with the server rather than anything
+      // going wrong, so it gets its own path with an override.
+      if (err instanceof ApiError && err.status === 409) setRefusal(err.message)
+      else setError((err as Error).message)
     }
   }
 
@@ -275,6 +303,49 @@ export function ModpackPage(): JSX.Element {
                 </MessageBar>
               )}
 
+              {/*
+                The pack does not fit this server. Refusing outright would be
+                wrong — people do install packs onto servers the metadata does
+                not describe — but so is doing it silently, which is what
+                unpacked two hundred unusable files onto a Paper server.
+              */}
+              {refusal && (
+                <MessageBar intent="warning">
+                  <MessageBarBody>
+                    <div className={styles.mismatch}>
+                      <Text>{refusal}</Text>
+                      <Button size="small" onClick={() => void install(true)}>
+                        Install anyway
+                      </Button>
+                    </div>
+                  </MessageBarBody>
+                </MessageBar>
+              )}
+
+              {/*
+                A pack missing mods is a server that will not start, and the
+                names are the only way to fetch them by hand.
+              */}
+              {outcome && (
+                <MessageBar intent={outcome.failed.length > 0 ? 'warning' : 'success'}>
+                  <MessageBarBody>
+                    <div className={styles.mismatch}>
+                      <Text>
+                        {`Installed ${outcome.installed} mod${outcome.installed === 1 ? '' : 's'}.`}
+                        {outcome.skippedClientOnly.length > 0
+                          ? ` ${outcome.skippedClientOnly.length} client-only ${outcome.skippedClientOnly.length === 1 ? 'entry was' : 'entries were'} skipped, as they should be.`
+                          : ''}
+                      </Text>
+                      {outcome.failed.map((entry) => (
+                        <Text key={entry.name} size={200}>
+                          {`${entry.name} could not be fetched — ${entry.reason}`}
+                        </Text>
+                      ))}
+                    </div>
+                  </MessageBarBody>
+                </MessageBar>
+              )}
+
               <Field label="Install onto server">
                 <Dropdown
                   value={selectedInstance?.name ?? 'No servers yet'}
@@ -342,7 +413,7 @@ export function ModpackPage(): JSX.Element {
                   !instanceId ||
                   (progress !== null && progress.stage !== 'done')
                 }
-                onClick={install}
+                onClick={() => void install()}
               >
                 {progress && progress.stage !== 'done' ? 'Installing…' : 'Install Modpack'}
               </Button>
